@@ -87,8 +87,8 @@ android {
         applicationId = "app.fen"
         minSdk = 26
         targetSdk = 37
-        versionCode = 16
-        versionName = "0.7.0"
+        versionCode = 17
+        versionName = "0.7.1"
         buildConfigField("String", "FEN_VARIANT", "\"prod\"")
     }
 
@@ -141,6 +141,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     debugImplementation(libs.compose.ui.tooling)
 }
+
 
 
 

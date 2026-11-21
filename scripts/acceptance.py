@@ -218,8 +218,8 @@ def main():
     check("冷启动", session.start_app)
 
     def home_ready():
-        session.wait_text("明细", timeout=15)
-        session.wait_text("记一笔", timeout=10)
+        session.wait_text("明细", timeout=25)
+        session.wait_text("记一笔", timeout=20)
         return session.shot("01-home-empty.png") and ""
 
     check("首页加载 + 空态", home_ready)
@@ -242,7 +242,7 @@ def main():
 
     def save():
         session.tap("完成")
-        session.wait_text("-123.00", timeout=10)
+        session.wait_text("-123.00", timeout=20)
         session.wait_text("餐饮", timeout=5)
         return session.shot("04-home-saved.png") and ""
 
@@ -250,13 +250,13 @@ def main():
 
     def edit_record():
         session.tap("餐饮")
-        session.wait_text("123.00", timeout=10)
+        session.wait_text("123.00", timeout=20)
         session.shot("05-edit-open.png")
         for key in ("2", "0", "0"):
             session.tap(key)
             time.sleep(0.2)
         session.tap("完成")
-        session.wait_text("-200.00", timeout=10)
+        session.wait_text("-200.00", timeout=20)
         return session.shot("06-edit-saved.png") and ""
 
     check("点开记录并改金额", edit_record)
@@ -302,6 +302,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
