@@ -36,6 +36,15 @@ import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material.icons.outlined.Work
 import androidx.compose.ui.graphics.vector.ImageVector
 
+/** 图标选择器里可选的 key（顺序即展示顺序） */
+val CategoryIconKeys = listOf(
+    "food", "meal", "transport", "car", "shopping", "clothes",
+    "digital", "necessity", "beauty", "entertainment", "movie", "music",
+    "housing", "medical", "study", "work", "sport", "pet",
+    "child", "social", "utilities", "network", "salary", "bonus",
+    "invest", "other_income", "saving",
+)
+
 /**
  * 分类 → 线性图标。数据库里存的是 key，不是 emoji，
  * 这样换图标集 / 换风格时只改这一个文件。

@@ -53,6 +53,32 @@ class FenRepository(private val db: FenDb) {
         refresh()
     }
 
+    fun addCategory(name: String, type: TxType, icon: String, color: Long) {
+        db.insertCategory(
+            Category(
+                id = UUID.randomUUID().toString(),
+                name = name.trim(),
+                type = type,
+                icon = icon,
+                color = color,
+                sortOrder = db.nextCategoryOrder(),
+            )
+        )
+        refresh()
+    }
+
+    fun updateCategory(category: Category) {
+        db.updateCategory(category)
+        refresh()
+    }
+
+    fun deleteCategory(id: String) {
+        db.deleteCategory(id)
+        refresh()
+    }
+
+    fun transactionCount(categoryId: String): Int = db.countTransactions(categoryId)
+
     /** 开发/验收用：生成演示数据 */
     fun seedDemoData(count: Int = 400) {
         db.seedDemoData(count)

@@ -58,6 +58,7 @@ import app.fen.BuildConfig
 import app.fen.data.Tx
 import app.fen.ui.screens.AddTransactionScreen
 import app.fen.ui.screens.BillsScreen
+import app.fen.ui.screens.CategoryManagerScreen
 import app.fen.ui.screens.SettingsScreen
 import app.fen.ui.screens.StatsScreen
 import app.fen.ui.theme.Fen
@@ -164,6 +165,7 @@ private fun FenContent(viewModel: FenViewModel) {
                         themeMode = themeMode,
                         onThemeModeChange = viewModel::setThemeMode,
                         onBack = { navController.popBackStack() },
+                        onOpenCategories = { navController.navigate("categories") },
                         showDebug = BuildConfig.DEBUG,
                         onSeedDemo = {
                             scope.launch(Dispatchers.IO) { viewModel.seedDemoData(400) }
@@ -171,6 +173,18 @@ private fun FenContent(viewModel: FenViewModel) {
                         onClearData = {
                             scope.launch(Dispatchers.IO) { viewModel.clearTransactions() }
                         },
+                    )
+                }
+                composable("categories") {
+                    CategoryManagerScreen(
+                        snapshot = snapshot,
+                        onBack = { navController.popBackStack() },
+                        onAdd = { name, type, icon, color ->
+                            viewModel.addCategory(name, type, icon, color)
+                        },
+                        onUpdate = { category -> viewModel.updateCategory(category) },
+                        onDelete = { category -> viewModel.deleteCategory(category) },
+                        countFor = { id -> viewModel.categoryUsage(id) },
                     )
                 }
             }

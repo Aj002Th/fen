@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Info
@@ -46,6 +47,7 @@ fun SettingsScreen(
     themeMode: Int,
     onThemeModeChange: (Int) -> Unit,
     onBack: () -> Unit,
+    onOpenCategories: () -> Unit,
     showDebug: Boolean = false,
     onSeedDemo: () -> Unit = {},
     onClearData: () -> Unit = {},
@@ -75,7 +77,26 @@ fun SettingsScreen(
             }
         }
 
-        item { SectionLabel("外观", modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)) }
+        item { SectionLabel("记账", modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)) }
+        item {
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = Fen.colors.surface,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column {
+                    SettingItem(
+                        title = "分类管理",
+                        subtitle = "新增、编辑图标与颜色",
+                        icon = Icons.Outlined.Category,
+                        tint = Color(0xFFF2A93E),
+                        onClick = onOpenCategories,
+                    )
+                }
+            }
+        }
+
+        item { SectionLabel("外观", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp)) }
         item {
             Surface(
                 shape = RoundedCornerShape(22.dp),
@@ -105,7 +126,7 @@ fun SettingsScreen(
             ) {
                 SettingItem(
                     title = "Fen",
-                    subtitle = "版本 0.3.0 · 开源",
+                    subtitle = "版本 0.4.0 · 开源",
                     icon = Icons.Outlined.Info,
                     tint = Color(0xFFF2583E),
                     onClick = { showAbout = true },
@@ -187,7 +208,7 @@ fun SettingsScreen(
                 Text(
                     "一个开源、克制的 Android 记账应用。\n" +
                         "数据只保存在本机，没有账号、没有网络请求。\n\n" +
-                        "版本 0.3.0"
+                        "版本 0.4.0"
                 )
             },
             confirmButton = {
@@ -263,3 +284,4 @@ private fun SettingItem(
         )
     }
 }
+

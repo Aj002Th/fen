@@ -58,6 +58,15 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
 
     fun delete(tx: Tx) = repository.deleteTransaction(tx.id)
 
+    fun addCategory(name: String, type: TxType, icon: String, color: Long) =
+        repository.addCategory(name, type, icon, color)
+
+    fun updateCategory(category: app.fen.data.Category) = repository.updateCategory(category)
+
+    fun deleteCategory(category: app.fen.data.Category) = repository.deleteCategory(category.id)
+
+    fun categoryUsage(categoryId: String): Int = repository.transactionCount(categoryId)
+
     fun seedDemoData(count: Int = 400) {
         repository.seedDemoData(count)
     }

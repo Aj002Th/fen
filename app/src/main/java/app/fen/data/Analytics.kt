@@ -31,9 +31,7 @@ fun List<Tx>.expenseByCategory(categories: List<Category>): List<CategoryTotal> 
     val totals = linkedMapOf<String, Long>()
     for (tx in this) {
         if (tx.type != TxType.EXPENSE) continue
-        val raw = tx.categoryId?.let { byId[it] } ?: continue
-        // 统计按一级分类聚合，避免叶子分类把图表切得过碎
-        val category = raw.parentId?.let { byId[it] } ?: raw
+        val category = tx.categoryId?.let { byId[it] } ?: continue
         totals[category.id] = (totals[category.id] ?: 0L) + tx.amount
     }
     return totals

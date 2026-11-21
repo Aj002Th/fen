@@ -1,6 +1,7 @@
 package app.fen.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 
 // 现代极简：冷白底 + 纯白卡片 + 近黑文字 + 单一语义强调色
 val Bg = Color(0xFFF4F5F7)
@@ -37,3 +38,7 @@ val CategoryPalette = listOf(
     Color(0xFF21B8C7), // cyan
     Color(0xFF7C8794), // slate
 )
+
+/** 存进数据库的 ARGB 值 */
+val CategoryColorValues = CategoryPalette.map { it.toArgb().toLong() and 0xFFFFFFFFL }
+

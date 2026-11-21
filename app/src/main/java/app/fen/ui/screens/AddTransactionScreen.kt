@@ -24,20 +24,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDefaults
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TimePicker
-import androidx.compose.material3.TimePickerDefaults
-import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,6 +46,7 @@ import app.fen.data.Snapshot
 import app.fen.data.Tx
 import app.fen.data.TxType
 import app.fen.ui.components.AmountKeypad
+import app.fen.ui.components.DateTimePickerSheet
 import app.fen.ui.components.CircleAction
 import app.fen.ui.components.Segmented
 import app.fen.ui.icons.categoryIcon
@@ -63,14 +54,11 @@ import app.fen.ui.theme.Fen
 import app.fen.util.parseAmountToMinor
 import app.fen.util.toAmountInput
 import app.fen.util.toLocalDateTime
-import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddTransactionScreen(
     snapshot: Snapshot,
@@ -95,24 +83,15 @@ fun AddTransactionScreen(
     var dateTime by remember(initial) {
         mutableStateOf(initial?.occurredAt?.toLocalDateTime() ?: LocalDateTime.now())
     }
-    var parentId by remember(initial) { mutableStateOf(initialCategory?.parentId) }
-    var childId by remember(initial) {
-        mutableStateOf(if (initialCategory?.parentId != null) initialCategory.id else null)
-    }
-    var showDatePicker by remember { mutableStateOf(false) }
-    var showTimePicker by remember { mutableStateOf(false) }
+    var categoryId by remember(initial) { mutableStateOf(initialCategory?.id) }
+    var showPicker by remember { mutableStateOf(false) }
 
     val accent = if (type == TxType.EXPENSE) Fen.colors.expense else Fen.colors.income
-    val parents = remember(snapshot.categories, type) {
-        snapshot.categories.filter { it.type == type && it.isParent }.sortedBy { it.sortOrder }
+    val categories = remember(snapshot.categories, type) {
+        snapshot.categories.filter { it.type == type }.sortedBy { it.sortOrder }
     }
-    val effectiveParent = parents.firstOrNull { it.id == parentId } ?: parents.firstOrNull()
-    val children = remember(snapshot.categories, effectiveParent) {
-        snapshot.categories.filter { it.parentId != null && it.parentId == effectiveParent?.id }
-            .sortedBy { it.sortOrder }
-    }
-    val effectiveChild = children.firstOrNull { it.id == childId }
-    val selectedCategoryId = effectiveChild?.id ?: effectiveParent?.id
+    val selectedCategoryId = categories.firstOrNull { it.id == categoryId }?.id
+        ?: categories.firstOrNull()?.id
 
     val amountMinor = parseAmountToMinor(amountText)
     val canSave = amountMinor > 0 && selectedCategoryId != null
@@ -171,8 +150,7 @@ fun AddTransactionScreen(
                     val next = if (index == 0) TxType.EXPENSE else TxType.INCOME
                     if (next != type) {
                         type = next
-                        parentId = null
-                        childId = null
+                        categoryId = null
                     }
                 },
                 accent = accent,
@@ -181,23 +159,22 @@ fun AddTransactionScreen(
 
             Spacer(Modifier.height(6.dp))
 
-            Column(
+            Box(
                 Modifier
                     .weight(1f)
-                    .verticalScroll(rememberScrollState()),
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center,
             ) {
+                Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                    parents.chunked(5).forEach { row ->
+                    categories.chunked(5).forEach { row ->
                         Row(Modifier.fillMaxWidth()) {
                             row.forEach { category ->
                                 Box(Modifier.weight(1f)) {
                                     CategoryTile(
                                         category = category,
-                                        selected = category.id == effectiveParent?.id,
-                                        onClick = {
-                                            parentId = category.id
-                                            childId = null
-                                        },
+                                        selected = category.id == selectedCategoryId,
+                                        onClick = { categoryId = category.id },
                                     )
                                 }
                             }
@@ -205,39 +182,7 @@ fun AddTransactionScreen(
                         }
                     }
                 }
-
-                if (children.isNotEmpty()) {
-                    Surface(
-                        shape = RoundedCornerShape(18.dp),
-                        color = Fen.colors.surfaceMuted,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .horizontalScroll(rememberScrollState())
-                                .padding(horizontal = 10.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            children.forEach { child ->
-                                val active = child.id == selectedCategoryId
-                                Surface(
-                                    onClick = { childId = child.id },
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = if (active) Fen.colors.surface else Color.Transparent,
-                                    shadowElevation = if (active) 1.dp else 0.dp,
-                                ) {
-                                    Text(
-                                        text = child.name,
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                        style = MaterialTheme.typography.labelLarge,
-                                        color = if (active) Fen.colors.ink else Fen.colors.inkSoft,
-                                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+            }
             }
 
             Surface(
@@ -253,7 +198,7 @@ fun AddTransactionScreen(
                             color = Fen.colors.inkSoft,
                             modifier = Modifier.padding(end = 10.dp),
                         )
-                        DateTimeChip(dateTime = dateTime, onClick = { showDatePicker = true })
+                        DateTimeChip(dateTime = dateTime, onClick = { showPicker = true })
                         Spacer(Modifier.weight(1f))
                     }
                     Spacer(Modifier.height(10.dp))
@@ -331,64 +276,18 @@ fun AddTransactionScreen(
         }
     }
 
-    if (showDatePicker) {
-        val dateState = rememberDatePickerState(
-            initialSelectedDateMillis = dateTime.toLocalDate()
-                .atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
-        )
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    dateState.selectedDateMillis?.let { millis ->
-                        val picked = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate()
-                        dateTime = picked.atTime(dateTime.toLocalTime())
-                    }
-                    showDatePicker = false
-                    showTimePicker = true
-                }) { Text("下一步") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("取消") }
-            },
-        ) {
-            DatePicker(
-                state = dateState,
-                title = null,
-                showModeToggle = false,
-                colors = DatePickerDefaults.colors(containerColor = Fen.colors.surface),
-            )
-        }
-    }
-
-    if (showTimePicker) {
-        val timeState = rememberTimePickerState(
-            initialHour = dateTime.hour,
-            initialMinute = dateTime.minute,
-            is24Hour = true,
-        )
-        AlertDialog(
-            onDismissRequest = { showTimePicker = false },
-            containerColor = Fen.colors.surface,
-            title = { Text("时间") },
-            text = {
-                TimePicker(
-                    state = timeState,
-                    colors = TimePickerDefaults.colors(containerColor = Fen.colors.surface),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    dateTime = dateTime.withHour(timeState.hour).withMinute(timeState.minute)
-                    showTimePicker = false
-                }) { Text("确定") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showTimePicker = false }) { Text("取消") }
+    if (showPicker) {
+        DateTimePickerSheet(
+            initial = dateTime,
+            onDismiss = { showPicker = false },
+            onConfirm = { picked ->
+                dateTime = picked
+                showPicker = false
             },
         )
     }
 }
+
 
 @Composable
 private fun CategoryTile(
@@ -465,3 +364,5 @@ private fun formatDateTime(dateTime: LocalDateTime): String {
         "${dateTime.monthValue}月${dateTime.dayOfMonth}日 $time"
     }
 }
+
+
