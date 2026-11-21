@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -49,6 +50,7 @@ fun SettingsScreen(
     onThemeModeChange: (Int) -> Unit,
     onBack: () -> Unit,
     onOpenCategories: () -> Unit,
+    onOpenData: () -> Unit,
     showDebug: Boolean = false,
     onSeedDemo: () -> Unit = {},
     onClearData: () -> Unit = {},
@@ -117,6 +119,23 @@ fun SettingsScreen(
                     icon = Icons.Outlined.DarkMode,
                     tint = Color(0xFF7C8794),
                     onClick = { showThemeDialog = true },
+                )
+            }
+        }
+
+        item { SectionLabel("数据", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp)) }
+        item {
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = Fen.colors.surface,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                SettingItem(
+                    title = "数据与备份",
+                    subtitle = "导出备份、导入 iCost 账单、恢复数据",
+                    icon = Icons.Outlined.Storage,
+                    tint = Color(0xFF21B8C7),
+                    onClick = onOpenData,
                 )
             }
         }

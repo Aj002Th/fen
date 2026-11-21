@@ -1,0 +1,186 @@
+package app.fen.ui.screens
+
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.FileUpload
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Restore
+import androidx.compose.material.icons.outlined.TableChart
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
+import app.fen.ui.components.CircleAction
+import app.fen.ui.components.IconBadge
+import app.fen.ui.components.RowDivider
+import app.fen.ui.components.SectionLabel
+import app.fen.ui.theme.Fen
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+
+@Composable
+fun DataScreen(
+    batchCount: Int,
+    onBack: () -> Unit,
+    onImportFile: (Uri) -> Unit,
+    onExportBackup: (Uri) -> Unit,
+    onExportCsv: (Uri) -> Unit,
+    onOpenHistory: () -> Unit,
+) {
+    val jsonExport = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri -> uri?.let(onExportBackup) }
+    val csvExport = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri -> uri?.let(onExportCsv) }
+    val picker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let(onImportFile) }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 32.dp),
+    ) {
+        item {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircleAction(
+                    icon = Icons.AutoMirrored.Rounded.ArrowBack,
+                    contentDescription = "返回",
+                    onClick = onBack,
+                    tint = Fen.colors.ink,
+                )
+                Spacer(Modifier.size(10.dp))
+                Text("数据", style = MaterialTheme.typography.headlineLarge)
+            }
+        }
+
+        item { SectionLabel("备份与导出", modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)) }
+        item {
+            Surface(shape = RoundedCornerShape(22.dp), color = Fen.colors.surface, modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    DataItem(
+                        title = "完整备份",
+                        subtitle = "JSON · 保留分类、图标与精确时间，可原样恢复",
+                        icon = Icons.Outlined.FileDownload,
+                        tint = Color(0xFF17A467),
+                        onClick = { jsonExport.launch(stamped("fen-backup", "json")) },
+                    )
+                    RowDivider(startInset = 64.dp)
+                    DataItem(
+                        title = "导出表格",
+                        subtitle = "CSV · 用 Excel 打开、编辑或归档",
+                        icon = Icons.Outlined.TableChart,
+                        tint = Color(0xFF3E8BF2),
+                        onClick = { csvExport.launch(stamped("fen", "csv")) },
+                    )
+                }
+            }
+        }
+
+        item { SectionLabel("导入", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp)) }
+        item {
+            Surface(shape = RoundedCornerShape(22.dp), color = Fen.colors.surface, modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    DataItem(
+                        title = "导入账单",
+                        subtitle = "支持 iCost 导出的 xlsx / csv，可预览并调整分类",
+                        icon = Icons.Outlined.FileUpload,
+                        tint = Color(0xFFF2A93E),
+                        onClick = { picker.launch(arrayOf("*/*")) },
+                    )
+                    RowDivider(startInset = 64.dp)
+                    DataItem(
+                        title = "恢复备份",
+                        subtitle = "从 Fen 的 JSON 备份还原（覆盖当前数据）",
+                        icon = Icons.Outlined.Restore,
+                        tint = Color(0xFF8B6CF2),
+                        onClick = { picker.launch(arrayOf("*/*")) },
+                    )
+                }
+            }
+        }
+
+        item { SectionLabel("记录", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp)) }
+        item {
+            Surface(shape = RoundedCornerShape(22.dp), color = Fen.colors.surface, modifier = Modifier.fillMaxWidth()) {
+                DataItem(
+                    title = "导入记录",
+                    subtitle = if (batchCount > 0) "共 $batchCount 次，可整批撤销" else "还没有导入过",
+                    icon = Icons.Outlined.History,
+                    tint = Color(0xFF7C8794),
+                    onClick = onOpenHistory,
+                )
+            }
+        }
+
+        item {
+            Text(
+                "iCost 的「导出账单」与「导入模板」列数不同，Fen 会按表头自动识别；" +
+                    "导入前都能先预览金额、条数和分类映射。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Fen.colors.inkSoft,
+                modifier = Modifier.padding(top = 16.dp, start = 4.dp, end = 4.dp),
+            )
+        }
+    }
+}
+
+private fun stamped(prefix: String, extension: String): String {
+    val now = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmm"))
+    return "$prefix-$now.$extension"
+}
+
+@Composable
+private fun DataItem(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    tint: Color,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconBadge(icon, tint, size = 36.dp, iconSize = 18.dp)
+        Spacer(Modifier.size(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = Fen.colors.inkSoft)
+        }
+        Icon(
+            Icons.Rounded.ChevronRight,
+            contentDescription = null,
+            tint = Fen.colors.inkFaint,
+            modifier = Modifier.size(18.dp),
+        )
+    }
+}

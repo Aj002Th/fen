@@ -38,11 +38,24 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
                 amount INTEGER NOT NULL,
                 category_id TEXT,
                 note TEXT NOT NULL DEFAULT '',
-                occurred_at INTEGER NOT NULL
+                occurred_at INTEGER NOT NULL,
+                import_batch TEXT
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            CREATE TABLE import_batch(
+                id TEXT PRIMARY KEY,
+                source TEXT NOT NULL,
+                label TEXT NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL,
+                rows INTEGER NOT NULL
             )
             """.trimIndent()
         )
         db.execSQL("CREATE INDEX idx_tx_occurred ON tx(occurred_at)")
+        db.execSQL("CREATE INDEX idx_tx_batch ON tx(import_batch)")
         seed(db)
     }
 
@@ -89,6 +102,21 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
             db.execSQL("DROP TABLE category")
             db.execSQL("ALTER TABLE category_new RENAME TO category")
         }
+        if (oldVersion < 6) {
+            db.execSQL("ALTER TABLE tx ADD COLUMN import_batch TEXT")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS import_batch(
+                    id TEXT PRIMARY KEY,
+                    source TEXT NOT NULL,
+                    label TEXT NOT NULL DEFAULT '',
+                    created_at INTEGER NOT NULL,
+                    rows INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_tx_batch ON tx(import_batch)")
+        }
     }
 
     private fun seed(db: SQLiteDatabase) {
@@ -127,7 +155,7 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
 
     fun transactions(): List<Tx> = readableDatabase.query(
         "tx",
-        arrayOf("id", "type", "amount", "category_id", "note", "occurred_at"),
+        arrayOf("id", "type", "amount", "category_id", "note", "occurred_at", "import_batch"),
         null, null, null, null, "occurred_at DESC",
     ).use { c -> c.mapAll { it.toTx() } }
 
@@ -287,7 +315,79 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
     }
 
     fun clearTransactions() {
-        writableDatabase.delete("tx", null, null)
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("tx", null, null)
+            db.delete("import_batch", null, null)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * 单事务写入一次导入：先补分类，再写流水和批次记录。
+     * 任何一行失败都整体回滚，不会留下半批数据。
+     */
+    fun insertImport(newCategories: List<Category>, txs: List<Tx>, batch: ImportBatch) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            newCategories.forEach { db.insertOrThrow("category", null, it.toValues()) }
+            txs.forEach { db.insertOrThrow("tx", null, it.toValues()) }
+            db.insertOrThrow("import_batch", null, ContentValues().apply {
+                put("id", batch.id)
+                put("source", batch.source)
+                put("label", batch.label)
+                put("created_at", batch.createdAt)
+                put("rows", batch.rows)
+            })
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    fun importBatches(): List<ImportBatch> = readableDatabase.query(
+        "import_batch",
+        arrayOf("id", "source", "label", "created_at", "rows"),
+        null, null, null, null, "created_at DESC",
+    ).use { c ->
+        buildList {
+            while (c.moveToNext()) {
+                add(ImportBatch(c.getString(0), c.getString(1), c.getString(2), c.getLong(3), c.getInt(4)))
+            }
+        }
+    }
+
+    /** 删除一次导入以及它写入的全部流水 */
+    fun deleteImportBatch(id: String) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("tx", "import_batch = ?", arrayOf(id))
+            db.delete("import_batch", "id = ?", arrayOf(id))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** 备份恢复：整体替换分类与流水（批次记录一并清空） */
+    fun replaceAll(categories: List<Category>, txs: List<Tx>) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("tx", null, null)
+            db.delete("category", null, null)
+            db.delete("import_batch", null, null)
+            categories.forEach { db.insertOrThrow("category", null, it.toValues()) }
+            txs.forEach { db.insertOrThrow("tx", null, it.toValues()) }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     private fun Tx.toValues() = ContentValues().apply {
@@ -297,6 +397,7 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
         put("category_id", categoryId)
         put("note", note)
         put("occurred_at", occurredAt)
+        put("import_batch", importBatch)
     }
 
     private fun Category.toValues() = ContentValues().apply {
@@ -309,7 +410,7 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
     }
 
     private companion object {
-        const val DB_VERSION = 5
+        const val DB_VERSION = 6
 
         val CategoryPaletteColors = listOf(
             0xFFF2583E, 0xFF3E8BF2, 0xFF17A467, 0xFFF2A93E,
@@ -341,4 +442,5 @@ private fun Cursor.toTx() = Tx(
     categoryId = getString(3),
     note = getString(4),
     occurredAt = getLong(5),
+    importBatch = getString(6),
 )

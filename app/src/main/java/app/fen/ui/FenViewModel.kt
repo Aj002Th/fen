@@ -1,17 +1,33 @@
 package app.fen.ui
 
 import android.app.Application
+import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import app.fen.FenApp
+import app.fen.data.FenBackupCodec
+import app.fen.data.ImportBatch
 import app.fen.data.Snapshot
 import app.fen.data.Tx
 import app.fen.data.TxType
+import app.fen.data.exchange.FenCsv
+import app.fen.data.exchange.FileDecode
+import app.fen.data.exchange.ImportOutcome
+import app.fen.data.exchange.ImportPlanner
+import app.fen.data.exchange.ImportSession
+import app.fen.data.exchange.MappingTarget
+import app.fen.data.exchange.TransferPolicy
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import java.security.MessageDigest
 import java.time.LocalDateTime
 import java.time.YearMonth
 import java.time.ZoneId
+import java.util.UUID
 
 class FenViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -113,4 +129,245 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
     fun clearTransactions() {
         repository.clearTransactions()
     }
+
+    /* ------------------------------- 导入 / 导出 ------------------------------- */
+
+    private val _importState = MutableStateFlow(ImportUiState())
+    val importState: StateFlow<ImportUiState> = _importState.asStateFlow()
+
+    private val _batches = MutableStateFlow<List<ImportBatch>>(emptyList())
+    val importBatches: StateFlow<List<ImportBatch>> = _batches.asStateFlow()
+
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
+
+    @Volatile
+    private var pendingHash: String? = null
+
+    init {
+        refreshBatches()
+    }
+
+    fun refreshBatches() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _batches.value = repository.importBatches()
+        }
+    }
+
+    fun clearMessage() {
+        _message.value = null
+    }
+
+    fun startImport(uri: Uri) {
+        _importState.value = ImportUiState(stage = ImportStage.PARSING)
+        viewModelScope.launch(Dispatchers.IO) {
+            val resolver = getApplication<Application>().contentResolver
+            val name = displayName(uri) ?: "导入文件"
+            _importState.value = _importState.value.copy(fileName = name)
+            try {
+                val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
+                    ?: error("无法读取文件")
+                val hash = sha256(bytes)
+                val parsed = FileDecode.parse(name, bytes)
+                    ?: error("无法识别这个文件，请确认是 iCost 导出的 xlsx / csv，或 Fen 的 JSON 备份。")
+                val session = FileDecode.sessionFrom(name, parsed, snapshot.value.categories)
+                pendingHash = hash
+                _importState.value = ImportUiState(
+                    stage = ImportStage.READY,
+                    fileName = name,
+                    session = session,
+                    hashSeen = prefs.importHashes.contains(hash),
+                )
+            } catch (e: Exception) {
+                _importState.value = ImportUiState(
+                    stage = ImportStage.ERROR,
+                    fileName = name,
+                    error = e.message ?: "导入失败",
+                )
+            }
+        }
+    }
+
+    fun cancelImport() {
+        _importState.value = ImportUiState()
+        pendingHash = null
+    }
+
+    fun setSkipDuplicates(skip: Boolean) {
+        _importState.value = _importState.value.copy(skipDuplicates = skip)
+    }
+
+    fun setTransferPolicy(policy: TransferPolicy) {
+        _importState.value = _importState.value.copy(transferPolicy = policy)
+    }
+
+    fun updateMapping(source: String, type: TxType, target: MappingTarget) {
+        val state = _importState.value
+        val session = state.session ?: return
+        val mappings = session.mappings.map { mapping ->
+            if (mapping.source == source && mapping.type == type) mapping.copy(target = target) else mapping
+        }
+        _importState.value = state.copy(session = session.copy(mappings = mappings))
+    }
+
+    fun confirmImport() {
+        val state = _importState.value
+        val session = state.session ?: return
+        if (session.isBackup) return
+        _importState.value = state.copy(stage = ImportStage.IMPORTING, error = null)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val batchId = UUID.randomUUID().toString()
+                val plan = ImportPlanner.build(
+                    session = session,
+                    existingCategories = snapshot.value.categories,
+                    skipDuplicates = state.skipDuplicates,
+                    transferPolicy = state.transferPolicy,
+                    batchId = batchId,
+                    startSortOrder = repository.nextCategoryOrder(),
+                )
+                if (plan.transactions.isEmpty()) {
+                    _importState.value = state.copy(
+                        stage = ImportStage.DONE,
+                        outcome = ImportOutcome(
+                            batchId = null,
+                            imported = 0,
+                            newCategories = 0,
+                            skipped = session.skipped.size,
+                            skippedDuplicates = plan.skippedDuplicates,
+                        ),
+                    )
+                    return@launch
+                }
+                repository.applyImport(
+                    plan,
+                    ImportBatch(
+                        id = batchId,
+                        source = session.source,
+                        label = session.fileName,
+                        createdAt = System.currentTimeMillis(),
+                        rows = plan.transactions.size,
+                    ),
+                )
+                val hash = pendingHash
+                if (hash != null) prefs.importHashes = prefs.importHashes + hash
+                _batches.value = repository.importBatches()
+                _importState.value = state.copy(
+                    stage = ImportStage.DONE,
+                    outcome = ImportOutcome(
+                        batchId = batchId,
+                        imported = plan.transactions.size,
+                        newCategories = plan.newCategories.size,
+                        skipped = session.skipped.size + plan.skippedTransfers + plan.skippedDuplicates,
+                        skippedDuplicates = plan.skippedDuplicates,
+                    ),
+                )
+            } catch (e: Exception) {
+                _importState.value = state.copy(
+                    stage = ImportStage.ERROR,
+                    error = e.message ?: "写入数据库失败",
+                )
+            }
+        }
+    }
+
+    fun restoreBackup() {
+        val state = _importState.value
+        val backup = state.session?.backup ?: return
+        _importState.value = state.copy(stage = ImportStage.IMPORTING, error = null)
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                repository.restoreBackup(backup)
+                _batches.value = repository.importBatches()
+                _importState.value = ImportUiState(
+                    stage = ImportStage.DONE,
+                    fileName = state.fileName,
+                    restored = backup.transactions.size,
+                )
+            } catch (e: Exception) {
+                _importState.value = state.copy(
+                    stage = ImportStage.ERROR,
+                    error = e.message ?: "恢复失败",
+                )
+            }
+        }
+    }
+
+    fun undoImport() {
+        val batchId = _importState.value.outcome?.batchId ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteImportBatch(batchId)
+            _batches.value = repository.importBatches()
+            _importState.value = ImportUiState(stage = ImportStage.DONE, undone = true)
+            _message.value = "已撤销这次导入"
+        }
+    }
+
+    fun deleteImportBatch(id: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.deleteImportBatch(id)
+            _batches.value = repository.importBatches()
+            _message.value = "已删除这次导入"
+        }
+    }
+
+    fun exportBackup(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val snap = snapshot.value
+                val text = FenBackupCodec.encode(snap.categories, snap.transactions, System.currentTimeMillis())
+                getApplication<Application>().contentResolver.openOutputStream(uri)?.use {
+                    it.write(text.toByteArray(Charsets.UTF_8))
+                } ?: error("无法写入文件")
+            }.onSuccess {
+                _message.value = "备份已导出"
+            }.onFailure {
+                _message.value = "导出失败：${it.message}"
+            }
+        }
+    }
+
+    fun exportCsv(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val snap = snapshot.value
+                val text = FenCsv.encode(snap.categories, snap.transactions)
+                getApplication<Application>().contentResolver.openOutputStream(uri)?.use {
+                    it.write(text.toByteArray(Charsets.UTF_8))
+                } ?: error("无法写入文件")
+            }.onSuccess {
+                _message.value = "CSV 已导出"
+            }.onFailure {
+                _message.value = "导出失败：${it.message}"
+            }
+        }
+    }
+
+    private fun displayName(uri: Uri): String? = runCatching {
+        getApplication<Application>().contentResolver.query(
+            uri,
+            arrayOf(OpenableColumns.DISPLAY_NAME),
+            null, null, null,
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) cursor.getString(0) else null
+        }
+    }.getOrNull()
+
+    private fun sha256(bytes: ByteArray): String =
+        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 }
+
+enum class ImportStage { IDLE, PARSING, READY, IMPORTING, DONE, ERROR }
+
+data class ImportUiState(
+    val stage: ImportStage = ImportStage.IDLE,
+    val fileName: String = "",
+    val session: ImportSession? = null,
+    val skipDuplicates: Boolean = false,
+    val transferPolicy: TransferPolicy = TransferPolicy.SIGN,
+    val hashSeen: Boolean = false,
+    val error: String? = null,
+    val outcome: ImportOutcome? = null,
+    val restored: Int? = null,
+    val undone: Boolean = false,
+)

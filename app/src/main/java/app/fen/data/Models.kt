@@ -23,6 +23,17 @@ data class Tx(
     val categoryId: String?,
     val note: String,
     val occurredAt: Long,
+    /** 导入批次的 id；手工记录为 null。用于整批撤销。 */
+    val importBatch: String? = null,
+)
+
+/** 一次批量导入（iCost / CSV）的记录，用于「导入记录」与整批撤销。 */
+data class ImportBatch(
+    val id: String,
+    val source: String,
+    val label: String,
+    val createdAt: Long,
+    val rows: Int,
 )
 
 data class Snapshot(

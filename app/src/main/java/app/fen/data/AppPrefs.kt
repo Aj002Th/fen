@@ -45,10 +45,16 @@ class AppPrefs(context: Context) {
             .putString(KEY_SEARCH_HISTORY, value.filter { it.isNotBlank() }.take(5).joinToString("\n"))
             .apply()
 
+    /** 最近导入过的文件指纹（SHA-256），用于提示重复导入 */
+    var importHashes: Set<String>
+        get() = sp.getStringSet(KEY_IMPORT_HASHES, emptySet()) ?: emptySet()
+        set(value) = sp.edit().putStringSet(KEY_IMPORT_HASHES, value.toList().takeLast(12).toSet()).apply()
+
     private companion object {
         const val KEY_THEME_MODE = "theme_mode"
         const val KEY_HIDDEN_SUGGESTIONS = "hidden_suggestions"
         const val KEY_PENALTIES = "suggestion_penalties"
         const val KEY_SEARCH_HISTORY = "search_history"
+        const val KEY_IMPORT_HASHES = "import_hashes"
     }
 }

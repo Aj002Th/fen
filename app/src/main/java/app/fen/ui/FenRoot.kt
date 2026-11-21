@@ -1,5 +1,6 @@
 package app.fen.ui
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -36,6 +37,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -46,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -59,6 +62,9 @@ import app.fen.data.Tx
 import app.fen.ui.screens.AddTransactionScreen
 import app.fen.ui.screens.BillsScreen
 import app.fen.ui.screens.CategoryManagerScreen
+import app.fen.ui.screens.DataScreen
+import app.fen.ui.screens.ImportHistoryScreen
+import app.fen.ui.screens.ImportScreen
 import app.fen.ui.screens.SearchScreen
 import app.fen.ui.screens.SettingsScreen
 import app.fen.ui.screens.StatsScreen
@@ -95,6 +101,10 @@ private fun FenContent(viewModel: FenViewModel) {
     val hiddenSuggestions by viewModel.hiddenSuggestions.collectAsStateWithLifecycle()
     val penalties by viewModel.suggestionPenalties.collectAsStateWithLifecycle()
     val searchHistory by viewModel.searchHistory.collectAsStateWithLifecycle()
+    val importState by viewModel.importState.collectAsStateWithLifecycle()
+    val batches by viewModel.importBatches.collectAsStateWithLifecycle()
+    val message by viewModel.message.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -104,6 +114,17 @@ private fun FenContent(viewModel: FenViewModel) {
     val scope = rememberCoroutineScope()
 
     BackHandler(enabled = showAdd) { showAdd = false }
+    BackHandler(enabled = currentRoute == "import") {
+        viewModel.cancelImport()
+        navController.popBackStack()
+    }
+
+    LaunchedEffect(message) {
+        message?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+            viewModel.clearMessage()
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
         Scaffold(
@@ -172,6 +193,7 @@ private fun FenContent(viewModel: FenViewModel) {
                         onThemeModeChange = viewModel::setThemeMode,
                         onBack = { navController.popBackStack() },
                         onOpenCategories = { navController.navigate("categories") },
+                        onOpenData = { navController.navigate("data") },
                         showDebug = BuildConfig.DEBUG,
                         onSeedDemo = {
                             scope.launch(Dispatchers.IO) { viewModel.seedDemoData(400) }
@@ -204,6 +226,46 @@ private fun FenContent(viewModel: FenViewModel) {
                             viewModel.deleteCategoryWithTransactions(category)
                         },
                         countFor = { id -> viewModel.categoryUsage(id) },
+                    )
+                }
+                composable("data") {
+                    DataScreen(
+                        batchCount = batches.size,
+                        onBack = { navController.popBackStack() },
+                        onImportFile = { uri ->
+                            viewModel.startImport(uri)
+                            navController.navigate("import")
+                        },
+                        onExportBackup = viewModel::exportBackup,
+                        onExportCsv = viewModel::exportCsv,
+                        onOpenHistory = { navController.navigate("import-history") },
+                    )
+                }
+                composable("import") {
+                    ImportScreen(
+                        state = importState,
+                        categories = snapshot.categories,
+                        onBack = {
+                            viewModel.cancelImport()
+                            navController.popBackStack()
+                        },
+                        onSetSkipDuplicates = viewModel::setSkipDuplicates,
+                        onSetTransferPolicy = viewModel::setTransferPolicy,
+                        onUpdateMapping = viewModel::updateMapping,
+                        onConfirm = viewModel::confirmImport,
+                        onRestore = viewModel::restoreBackup,
+                        onUndo = viewModel::undoImport,
+                        onDone = {
+                            viewModel.cancelImport()
+                            navController.popBackStack()
+                        },
+                    )
+                }
+                composable("import-history") {
+                    ImportHistoryScreen(
+                        batches = batches,
+                        onBack = { navController.popBackStack() },
+                        onDelete = viewModel::deleteImportBatch,
                     )
                 }
             }
