@@ -28,6 +28,16 @@
 选择手写 SQLite 而不是 Room，是为了避开 AGP 9 + Kotlin 2.4 上 KSP 的版本耦合；
 等数据结构稳定后再评估迁移。
 
+## 版本与并行开发
+
+- **正式版**：`app.fen`，`.\gradlew.bat :app:assembleRelease`
+- **开发版**：`app.fen.dev.<分支>`，`assembleDebug` 自动生成，可与正式版同时安装
+- 开发版名称是 `Fen·<分支>`，图标底色按分支名生成，桌面上一眼区分
+- 新建并行工作区：`.\scripts\new-worktree.ps1 <名字>`
+- `scripts/install.py` / `scripts/acceptance.py` 会自动读取构建产物里的包名
+
+详细流程见本地文档 `docs/06-dev-workflow.md`（未入库）。
+
 ## 构建与运行
 
 本机 Android 环境的完整说明见 `C:\Android\ANDROID-ENV.md`。

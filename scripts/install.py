@@ -25,6 +25,21 @@ PACKAGE = "app.fen"
 APK = os.path.join(ROOT, "app", "build", "outputs", "apk", "debug", "app-debug.apk")
 
 
+def package_of(apk_path):
+    """从 AGP 生成的 output-metadata.json 读取 applicationId（开发版带分支后缀）。"""
+    meta = os.path.join(os.path.dirname(apk_path), "output-metadata.json")
+    if os.path.exists(meta):
+        try:
+            import json
+            with open(meta, encoding="utf-8") as handle:
+                value = json.load(handle).get("applicationId")
+            if value:
+                return value
+        except Exception:
+            pass
+    return "app.fen"
+
+
 def find_sdk():
     for key in ("ANDROID_HOME", "ANDROID_SDK_ROOT"):
         value = os.environ.get(key)
@@ -135,11 +150,15 @@ def main():
     if not os.path.exists(args.apk):
         raise SystemExit(f"找不到 APK: {args.apk}\n先执行 python scripts/install.py --build")
 
+    global PACKAGE
+    PACKAGE = package_of(args.apk)
+
     serial, _ = wait_for_device(args.serial, args.wait, physical_only=args.physical)
     kind = "模拟器" if is_emulator(serial) else "真机"
     _, model, _ = adb("-s", serial, "shell", "getprop", "ro.product.model")
     _, android, _ = adb("-s", serial, "shell", "getprop", "ro.build.version.release")
     print(f"== 目标: {serial}（{kind} / {model.strip()} / Android {android.strip()}）==")
+    print(f"== 包名: {PACKAGE} ==")
 
     size_mb = os.path.getsize(args.apk) / 1024 / 1024
     print(f"== 安装 {os.path.basename(args.apk)}（{size_mb:.1f} MB）==")
@@ -179,3 +198,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

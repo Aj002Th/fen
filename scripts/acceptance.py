@@ -23,6 +23,21 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PACKAGE = "app.fen"
 APK = os.path.join(ROOT, "app", "build", "outputs", "apk", "debug", "app-debug.apk")
 
+
+def package_of(apk_path):
+    """从 AGP 的 output-metadata.json 读取实际 applicationId（开发版带分支后缀）。"""
+    meta = os.path.join(os.path.dirname(apk_path), "output-metadata.json")
+    if os.path.exists(meta):
+        try:
+            import json
+            with open(meta, encoding="utf-8") as handle:
+                value = json.load(handle).get("applicationId")
+            if value:
+                return value
+        except Exception:
+            pass
+    return "app.fen"
+
 results = []
 
 
@@ -180,6 +195,10 @@ def main():
 
     if not os.path.exists(args.apk):
         raise SystemExit(f"找不到 APK: {args.apk}，先执行 gradlew :app:assembleDebug 或加 --build")
+
+    global PACKAGE
+    PACKAGE = package_of(args.apk)
+    print(f"== 包名 {PACKAGE} ==")
 
     serial = pick_device(args.serial)
     session = Session(serial, out_dir)

@@ -45,3 +45,6 @@ artifacts/
 
 # Agent skills (installed locally, not part of the app)
 .agents/skills/
+
+# Release signing config (local only)
+keystore.properties

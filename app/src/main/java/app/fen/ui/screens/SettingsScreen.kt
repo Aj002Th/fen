@@ -36,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import app.fen.BuildConfig
 import app.fen.ui.components.CircleAction
 import app.fen.ui.components.IconBadge
 import app.fen.ui.components.RowDivider
@@ -129,7 +130,7 @@ fun SettingsScreen(
             ) {
                 SettingItem(
                     title = "Fen",
-                    subtitle = "版本 0.6.3 · 开源",
+                    subtitle = "版本 ${BuildConfig.VERSION_NAME} · " + if (BuildConfig.FEN_VARIANT == "prod") "开源" else "开发版",
                     icon = Icons.Outlined.Info,
                     tint = Color(0xFFF2583E),
                     onClick = {
@@ -226,7 +227,7 @@ fun SettingsScreen(
                 Text(
                     "一个开源、克制的 Android 记账应用。\n" +
                         "数据只保存在本机，没有账号、没有网络请求。\n\n" +
-                        "版本 0.4.0"
+                        "版本 ${BuildConfig.VERSION_NAME}"
                 )
             },
             confirmButton = {
@@ -302,6 +303,8 @@ private fun SettingItem(
         )
     }
 }
+
+
 
 
 

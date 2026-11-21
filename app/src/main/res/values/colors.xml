@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 正式版底色；debug 构建会用生成的同名颜色覆盖 -->
+    <color name="ic_launcher_background">#15171B</color>
+</resources>
