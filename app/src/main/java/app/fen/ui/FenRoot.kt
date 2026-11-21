@@ -11,6 +11,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -52,11 +53,14 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import app.fen.data.Tx
 import app.fen.ui.screens.AddTransactionScreen
 import app.fen.ui.screens.BillsScreen
 import app.fen.ui.screens.SettingsScreen
 import app.fen.ui.screens.StatsScreen
 import app.fen.ui.theme.Fen
+import app.fen.ui.theme.FenTheme
+import app.fen.util.atTimeOf
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
@@ -67,14 +71,29 @@ private val tabs = listOf(
 
 @Composable
 fun FenRoot(viewModel: FenViewModel = viewModel()) {
+    val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+    val darkTheme = when (themeMode) {
+        1 -> false
+        2 -> true
+        else -> isSystemInDarkTheme()
+    }
+    FenTheme(darkTheme = darkTheme) {
+        FenContent(viewModel)
+    }
+}
+
+@Composable
+private fun FenContent(viewModel: FenViewModel) {
     val snapshot by viewModel.snapshot.collectAsStateWithLifecycle()
     val month by viewModel.month.collectAsStateWithLifecycle()
+    val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val showBottomBar = currentRoute == "bills" || currentRoute == "stats"
 
     var showAdd by remember { mutableStateOf(false) }
+    var editingTx by remember { mutableStateOf<Tx?>(null) }
 
     BackHandler(enabled = showAdd) { showAdd = false }
 
@@ -94,8 +113,10 @@ fun FenRoot(viewModel: FenViewModel = viewModel()) {
                                 }
                             }
                         },
-                        onAdd = { showAdd = true },
-                    )
+                        onAdd = {
+                            editingTx = null
+                            showAdd = true
+                        },                    )
                 }
             },
         ) { innerPadding ->
@@ -119,6 +140,10 @@ fun FenRoot(viewModel: FenViewModel = viewModel()) {
                         onShiftMonth = viewModel::shiftMonth,
                         onToday = { viewModel.jumpTo(java.time.YearMonth.now()) },
                         onDelete = viewModel::delete,
+                        onEdit = { tx ->
+                            editingTx = tx
+                            showAdd = true
+                        },
                         onOpenSettings = { navController.navigate("settings") },
                     )
                 }
@@ -131,7 +156,11 @@ fun FenRoot(viewModel: FenViewModel = viewModel()) {
                     )
                 }
                 composable("settings") {
-                    SettingsScreen(onBack = { navController.popBackStack() })
+                    SettingsScreen(
+                        themeMode = themeMode,
+                        onThemeModeChange = viewModel::setThemeMode,
+                        onBack = { navController.popBackStack() },
+                    )
                 }
             }
         }
@@ -143,9 +172,23 @@ fun FenRoot(viewModel: FenViewModel = viewModel()) {
         ) {
             AddTransactionScreen(
                 snapshot = snapshot,
+                initial = editingTx,
                 onClose = { showAdd = false },
-                onSave = { type, amountMinor, accountId, categoryId, note, date ->
-                    viewModel.addTransaction(type, amountMinor, accountId, categoryId, note, date)
+                onSave = { type, amountMinor, categoryId, note, date ->
+                    val editing = editingTx
+                    if (editing == null) {
+                        viewModel.addTransaction(type, amountMinor, categoryId, note, date)
+                    } else {
+                        viewModel.updateTransaction(
+                            editing.copy(
+                                type = type,
+                                amount = amountMinor,
+                                categoryId = categoryId,
+                                note = note.trim(),
+                                occurredAt = date.atTimeOf(editing.occurredAt),
+                            )
+                        )
+                    }
                     showAdd = false
                 },
             )

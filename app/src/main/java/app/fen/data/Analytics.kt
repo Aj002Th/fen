@@ -1,30 +1,16 @@
 package app.fen.data
 
+import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
-
-fun Account.balance(transactions: List<Tx>): Long {
-    var total = initialBalance
-    for (tx in transactions) {
-        when (tx.type) {
-            TxType.EXPENSE -> if (tx.accountId == id) total -= tx.amount
-            TxType.INCOME -> if (tx.accountId == id) total += tx.amount
-            TxType.TRANSFER -> {
-                if (tx.accountId == id) total -= tx.amount
-                if (tx.toAccountId == id) total += tx.amount
-            }
-        }
-    }
-    return total
-}
-
-fun List<Tx>.inMonth(month: YearMonth): List<Tx> {
-    return filter { YearMonth.from(it.occurredAt.toDate()) == month }
-}
+import java.time.ZoneId
 
 data class MonthTotals(val expense: Long, val income: Long) {
     val net: Long get() = income - expense
 }
+
+fun List<Tx>.inMonth(month: YearMonth): List<Tx> =
+    filter { YearMonth.from(it.occurredAt.toDate()) == month }
 
 fun List<Tx>.totals(): MonthTotals {
     var expense = 0L
@@ -33,7 +19,6 @@ fun List<Tx>.totals(): MonthTotals {
         when (tx.type) {
             TxType.EXPENSE -> expense += tx.amount
             TxType.INCOME -> income += tx.amount
-            TxType.TRANSFER -> Unit
         }
     }
     return MonthTotals(expense, income)
@@ -69,5 +54,5 @@ fun List<Tx>.dailyExpense(days: List<LocalDate>): List<Long> {
     return days.map { day -> byDay[day]?.sumOf { it.amount } ?: 0L }
 }
 
-fun Long.toDate(): LocalDate = java.time.Instant.ofEpochMilli(this)
-    .atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+fun Long.toDate(): LocalDate = Instant.ofEpochMilli(this)
+    .atZone(ZoneId.systemDefault()).toLocalDate()

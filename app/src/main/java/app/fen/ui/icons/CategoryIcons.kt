@@ -74,11 +74,3 @@ fun categoryIcon(key: String?): ImageVector = when (key) {
     "saving" -> Icons.Outlined.AccountBalanceWallet
     else -> Icons.Outlined.Category
 }
-
-/** 账户类型图标 */
-fun accountIcon(type: String): ImageVector = when (type) {
-    "CASH" -> Icons.Outlined.Payments
-    "DEBIT" -> Icons.Outlined.AccountBalance
-    "CREDIT" -> Icons.Outlined.AccountBalanceWallet
-    else -> Icons.Outlined.AccountBalanceWallet
-}

@@ -213,7 +213,7 @@ fun SearchField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String = "搜索备注、分类、账户或金额",
+    placeholder: String = "搜索备注、分类或金额",
 ) {
     Surface(
         shape = RoundedCornerShape(14.dp),
@@ -337,6 +337,7 @@ fun AmountKeypad(
     onDone: () -> Unit,
     canSave: Boolean,
     modifier: Modifier = Modifier,
+    showRecord: Boolean = true,
     recordLabel: String = "记录",
     doneLabel: String = "完成",
     accent: Color = Fen.colors.expense,
@@ -362,25 +363,27 @@ fun AmountKeypad(
         }
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Surface(
-                onClick = onRecord,
-                enabled = canSave,
-                modifier = Modifier.weight(1f).height(52.dp),
-                shape = RoundedCornerShape(16.dp),
-                color = Fen.colors.surfaceMuted,
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = recordLabel,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = if (canSave) Fen.colors.ink else Fen.colors.inkFaint,
-                    )
+            if (showRecord) {
+                Surface(
+                    onClick = onRecord,
+                    enabled = canSave,
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    color = Fen.colors.surfaceMuted,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = recordLabel,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = if (canSave) Fen.colors.ink else Fen.colors.inkFaint,
+                        )
+                    }
                 }
             }
             Surface(
                 onClick = onDone,
                 enabled = canSave,
-                modifier = Modifier.weight(1.6f).height(52.dp),
+                modifier = Modifier.weight(if (showRecord) 1.6f else 1f).height(52.dp),
                 shape = RoundedCornerShape(16.dp),
                 color = if (canSave) accent else Fen.colors.surfaceMuted,
             ) {

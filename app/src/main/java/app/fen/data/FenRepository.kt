@@ -15,10 +15,8 @@ class FenRepository(private val db: FenDb) {
     val snapshot: StateFlow<Snapshot> = _snapshot.asStateFlow()
 
     private fun load(): Snapshot = Snapshot(
-        accounts = db.accounts(),
         categories = db.categories(),
         transactions = db.transactions(),
-        budgets = db.budgets(),
     )
 
     fun refresh() {
@@ -28,34 +26,30 @@ class FenRepository(private val db: FenDb) {
     fun addTransaction(
         type: TxType,
         amountMinor: Long,
-        accountId: String,
         categoryId: String?,
         note: String,
         occurredAt: Long,
-        toAccountId: String? = null,
     ) {
         db.insertTx(
             Tx(
                 id = UUID.randomUUID().toString(),
                 type = type,
                 amount = amountMinor,
-                accountId = accountId,
-                toAccountId = toAccountId,
                 categoryId = categoryId,
-                note = note,
+                note = note.trim(),
                 occurredAt = occurredAt,
             )
         )
         refresh()
     }
 
-    fun deleteTransaction(id: String) {
-        db.deleteTx(id)
+    fun updateTransaction(tx: Tx) {
+        db.updateTx(tx)
         refresh()
     }
 
-    fun setBudget(period: String, amountMinor: Long) {
-        db.putBudget(period, amountMinor)
+    fun deleteTransaction(id: String) {
+        db.deleteTx(id)
         refresh()
     }
 }

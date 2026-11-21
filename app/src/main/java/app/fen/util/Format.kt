@@ -69,5 +69,26 @@ fun Long.toLocalDateTime(zone: ZoneId = ZoneId.systemDefault()): LocalDateTime =
 fun Long.toMonthKey(zone: ZoneId = ZoneId.systemDefault()): YearMonth =
     YearMonth.from(toLocalDateTime(zone))
 
+/** 分 -> 输入框文本，如 12345 -> "123.45" */
+fun Long.toAmountInput(): String {
+    val yuan = this / 100
+    val cents = kotlin.math.abs(this % 100)
+    return "$yuan.${cents.toString().padStart(2, '0')}"
+}
+
+fun Long.timeLabel(zone: ZoneId = ZoneId.systemDefault()): String =
+    toLocalDateTime(zone).format(DateTimeFormatter.ofPattern("HH:mm", Locale.CHINA))
+
 fun LocalDate.shortDate(): String =
     format(DateTimeFormatter.ofPattern("M月d日", Locale.CHINA))
+
+/** 新记录：今天用当前时刻，其他日期用中午 12:00 */
+fun LocalDate.defaultInstant(zone: ZoneId = ZoneId.systemDefault()): Long =
+    if (this == LocalDate.now(zone)) Instant.now().toEpochMilli()
+    else atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
+
+/** 编辑记录：保留原来的时分，只替换日期 */
+fun LocalDate.atTimeOf(instant: Long, zone: ZoneId = ZoneId.systemDefault()): Long {
+    val time = Instant.ofEpochMilli(instant).atZone(zone).toLocalTime()
+    return atTime(time).atZone(zone).toInstant().toEpochMilli()
+}

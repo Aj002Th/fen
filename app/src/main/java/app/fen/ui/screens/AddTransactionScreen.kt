@@ -12,16 +12,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.Close
@@ -45,7 +45,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.fen.data.Category
 import app.fen.data.Snapshot
+import app.fen.data.Tx
 import app.fen.data.TxType
+import app.fen.data.toDate
 import app.fen.ui.components.AmountKeypad
 import app.fen.ui.components.CircleAction
 import app.fen.ui.components.Segmented
@@ -53,21 +55,28 @@ import app.fen.ui.icons.categoryIcon
 import app.fen.ui.theme.Fen
 import app.fen.util.label
 import app.fen.util.parseAmountToMinor
+import app.fen.util.toAmountInput
 import java.time.LocalDate
 
 @Composable
 fun AddTransactionScreen(
     snapshot: Snapshot,
+    initial: Tx? = null,
     onClose: () -> Unit,
-    onSave: (type: TxType, amountMinor: Long, accountId: String, categoryId: String?, note: String, date: LocalDate) -> Unit,
+    onSave: (type: TxType, amountMinor: Long, categoryId: String?, note: String, date: LocalDate) -> Unit,
 ) {
-    var type by remember { mutableStateOf(TxType.EXPENSE) }
-    var amountText by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf("") }
-    var date by remember { mutableStateOf(LocalDate.now()) }
-    var parentId by remember { mutableStateOf<String?>(null) }
-    var childId by remember { mutableStateOf<String?>(null) }
-    var accountId by remember(snapshot.accounts) { mutableStateOf(snapshot.accounts.firstOrNull()?.id) }
+    val initialCategory = remember(snapshot.categories, initial) {
+        initial?.categoryId?.let { id -> snapshot.categories.firstOrNull { it.id == id } }
+    }
+    var type by remember(initial) { mutableStateOf(initial?.type ?: TxType.EXPENSE) }
+    var amountText by remember(initial) { mutableStateOf(initial?.amount?.toAmountInput() ?: "") }
+    var amountTouched by remember(initial) { mutableStateOf(false) }
+    var note by remember(initial) { mutableStateOf(initial?.note ?: "") }
+    var date by remember(initial) { mutableStateOf(initial?.occurredAt?.toDate() ?: LocalDate.now()) }
+    var parentId by remember(initial) { mutableStateOf(initialCategory?.parentId) }
+    var childId by remember(initial) {
+        mutableStateOf(if (initialCategory?.parentId != null) initialCategory.id else null)
+    }
 
     val accent = if (type == TxType.EXPENSE) Fen.colors.expense else Fen.colors.income
     val parents = remember(snapshot.categories, type) {
@@ -82,9 +91,13 @@ fun AddTransactionScreen(
     val selectedCategoryId = effectiveChild?.id ?: effectiveParent?.id
 
     val amountMinor = parseAmountToMinor(amountText)
-    val canSave = amountMinor > 0 && accountId != null && selectedCategoryId != null
+    val canSave = amountMinor > 0 && selectedCategoryId != null
 
     fun key(input: String) {
+        if (!amountTouched) {
+            amountText = ""
+            amountTouched = true
+        }
         when (input) {
             "." -> if (!amountText.contains(".")) {
                 amountText = if (amountText.isEmpty()) "0." else "$amountText."
@@ -99,9 +112,8 @@ fun AddTransactionScreen(
     }
 
     fun submit() {
-        val account = accountId ?: return
         val category = selectedCategoryId ?: return
-        onSave(type, amountMinor, account, category, note, date)
+        onSave(type, amountMinor, category, note, date)
     }
 
     Surface(color = Fen.colors.bg, modifier = Modifier.fillMaxSize()) {
@@ -120,13 +132,6 @@ fun AddTransactionScreen(
                     contentDescription = "关闭",
                     onClick = onClose,
                     tint = Fen.colors.ink,
-                )
-                Spacer(Modifier.weight(1f))
-                Text(
-                    text = "默认账本",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = Fen.colors.link,
-                    modifier = Modifier.padding(end = 6.dp),
                 )
             }
 
@@ -215,44 +220,13 @@ fun AddTransactionScreen(
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "账户",
+                            text = "日期",
                             style = MaterialTheme.typography.labelMedium,
                             color = Fen.colors.inkSoft,
-                            modifier = Modifier.padding(end = 8.dp),
+                            modifier = Modifier.padding(end = 10.dp),
                         )
-                        Row(
-                            modifier = Modifier
-                                .horizontalScroll(rememberScrollState())
-                                .weight(1f),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            snapshot.accounts.forEach { account ->
-                                val active = account.id == accountId
-                                Surface(
-                                    onClick = { accountId = account.id },
-                                    shape = RoundedCornerShape(9.dp),
-                                    color = if (active) Fen.colors.surfaceMuted else Color.Transparent,
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        Box(
-                                            Modifier.size(6.dp).clip(CircleShape)
-                                                .background(Color(account.color))
-                                        )
-                                        Spacer(Modifier.width(5.dp))
-                                        Text(
-                                            account.name,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = if (active) Fen.colors.ink else Fen.colors.inkSoft,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        Spacer(Modifier.width(8.dp))
                         DateChip(date = date, onPick = { date = it })
+                        Spacer(Modifier.weight(1f))
                     }
                     Spacer(Modifier.height(10.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -314,7 +288,10 @@ fun AddTransactionScreen(
             AmountKeypad(
                 onDigit = ::key,
                 onDot = { key(".") },
-                onBackspace = { amountText = amountText.dropLast(1) },
+                onBackspace = {
+                    amountTouched = true
+                    amountText = amountText.dropLast(1)
+                },
                 onRecord = {
                     submit()
                     amountText = ""
@@ -325,6 +302,7 @@ fun AddTransactionScreen(
                 },
                 canSave = canSave,
                 accent = accent,
+                showRecord = initial == null,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
             Spacer(Modifier.height(18.dp))

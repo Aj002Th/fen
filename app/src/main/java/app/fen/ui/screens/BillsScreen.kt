@@ -56,6 +56,7 @@ import app.fen.ui.icons.categoryIcon
 import app.fen.ui.theme.Fen
 import app.fen.util.formatMoney
 import app.fen.util.label
+import app.fen.util.timeLabel
 import java.time.LocalDate
 import java.time.YearMonth
 
@@ -67,13 +68,13 @@ fun BillsScreen(
     onShiftMonth: (Long) -> Unit,
     onToday: () -> Unit,
     onDelete: (Tx) -> Unit,
+    onEdit: (Tx) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     var pendingDelete by remember { mutableStateOf<Tx?>(null) }
 
     val categories = remember(snapshot.categories) { snapshot.categories.associateBy { it.id } }
-    val accounts = remember(snapshot.accounts) { snapshot.accounts.associateBy { it.id } }
 
     val monthTxs = remember(snapshot.transactions, month) { snapshot.transactions.inMonth(month) }
     val visible = remember(monthTxs, query, categories) {
@@ -83,17 +84,14 @@ fun BillsScreen(
             val q = query.trim().lowercase()
             monthTxs.filter { tx ->
                 val category = tx.categoryId?.let { categories[it] }?.name.orEmpty()
-                val account = accounts[tx.accountId]?.name.orEmpty()
                 tx.note.lowercase().contains(q) ||
                     category.lowercase().contains(q) ||
-                    account.lowercase().contains(q) ||
                     formatMoney(tx.amount).contains(q)
             }
         }
     }
     val totals = remember(visible) { visible.totals() }
     val groups = remember(visible) { visible.groupByDay() }
-    val budget = snapshot.budgets[month.toString()]
 
     Column(Modifier.fillMaxSize()) {
         PageHeader(
@@ -144,7 +142,7 @@ fun BillsScreen(
                     },
                 )
                 Spacer(Modifier.height(14.dp))
-                SummaryPager(totals.expense, totals.income, budget)
+                SummaryPager(totals.expense, totals.income)
                 Spacer(Modifier.height(22.dp))
                 SectionLabel(
                     text = if (query.isBlank()) "明细" else "搜索结果",
@@ -186,9 +184,8 @@ fun BillsScreen(
                                     categoryName = category?.name ?: "未分类",
                                     icon = categoryIcon(category?.icon),
                                     color = Color(category?.color ?: 0xFF7C8794),
-                                    accountName = accounts[tx.accountId]?.name.orEmpty(),
                                     modifier = Modifier.combinedClickable(
-                                        onClick = {},
+                                        onClick = { onEdit(tx) },
                                         onLongClick = { pendingDelete = tx },
                                     ),
                                 )
@@ -223,14 +220,14 @@ fun BillsScreen(
 }
 
 @Composable
-private fun SummaryPager(expense: Long, income: Long, budget: Long?) {
+private fun SummaryPager(expense: Long, income: Long) {
     val pagerState = rememberPagerState(pageCount = { 3 })
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.fillMaxWidth(),
         ) { page ->
-            SummaryCard(page = page, expense = expense, income = income, budget = budget)
+            SummaryCard(page = page, expense = expense, income = income)
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -249,7 +246,7 @@ private fun SummaryPager(expense: Long, income: Long, budget: Long?) {
 }
 
 @Composable
-private fun SummaryCard(page: Int, expense: Long, income: Long, budget: Long?) {
+private fun SummaryCard(page: Int, expense: Long, income: Long) {
     val net = income - expense
     val (label, value) = when (page) {
         0 -> "本月支出" to expense
@@ -346,7 +343,6 @@ private fun TransactionRow(
     categoryName: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     color: Color,
-    accountName: String,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -365,10 +361,7 @@ private fun TransactionRow(
                 maxLines = 1,
             )
             Text(
-                text = listOfNotNull(
-                    tx.note.takeIf { it.isNotBlank() },
-                    accountName.takeIf { it.isNotBlank() },
-                ).joinToString(" · "),
+                text = tx.note.ifBlank { tx.occurredAt.timeLabel() },
                 style = MaterialTheme.typography.bodyMedium,
                 color = Fen.colors.inkSoft,
                 maxLines = 1,
@@ -379,14 +372,13 @@ private fun TransactionRow(
             text = when (tx.type) {
                 TxType.EXPENSE -> "-${formatMoney(tx.amount)}"
                 TxType.INCOME -> "+${formatMoney(tx.amount)}"
-                TxType.TRANSFER -> formatMoney(tx.amount)
             },
             style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
             color = when (tx.type) {
                 TxType.EXPENSE -> Fen.colors.expense
                 TxType.INCOME -> Fen.colors.income
-                TxType.TRANSFER -> Fen.colors.ink
             },
         )
     }
 }
+

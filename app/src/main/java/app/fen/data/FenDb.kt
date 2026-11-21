@@ -20,26 +20,12 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             """
-            CREATE TABLE account(
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                type TEXT NOT NULL,
-                initial_balance INTEGER NOT NULL DEFAULT 0,
-                color INTEGER NOT NULL,
-                sort_order INTEGER NOT NULL DEFAULT 0,
-                archived INTEGER NOT NULL DEFAULT 0
-            )
-            """.trimIndent()
-        )
-        db.execSQL(
-            """
             CREATE TABLE category(
                 id TEXT PRIMARY KEY,
                 parent_id TEXT,
                 name TEXT NOT NULL,
                 type TEXT NOT NULL,
                 icon TEXT NOT NULL DEFAULT 'other',
-                emoji TEXT NOT NULL DEFAULT '',
                 color INTEGER NOT NULL,
                 sort_order INTEGER NOT NULL DEFAULT 0
             )
@@ -51,8 +37,6 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
                 id TEXT PRIMARY KEY,
                 type TEXT NOT NULL,
                 amount INTEGER NOT NULL,
-                account_id TEXT NOT NULL,
-                to_account_id TEXT,
                 category_id TEXT,
                 note TEXT NOT NULL DEFAULT '',
                 occurred_at INTEGER NOT NULL
@@ -60,39 +44,24 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
             """.trimIndent()
         )
         db.execSQL("CREATE INDEX idx_tx_occurred ON tx(occurred_at)")
-        db.execSQL("CREATE INDEX idx_tx_account ON tx(account_id)")
-        db.execSQL("CREATE TABLE budget(period TEXT PRIMARY KEY, amount INTEGER NOT NULL)")
         seed(db)
     }
 
+    /**
+     * v3：移除账户、转账、预算，流水不再关联账户。
+     * 数据结构变化较大，直接重建（原型阶段可接受）。
+     */
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        if (oldVersion < 2) {
-            db.execSQL("ALTER TABLE category ADD COLUMN icon TEXT NOT NULL DEFAULT 'other'")
-            // 老数据按名称回填图标 key
-            nameToIcon.forEach { (name, icon) ->
-                db.execSQL("UPDATE category SET icon = ? WHERE name = ?", arrayOf(icon, name))
-            }
+        if (oldVersion < 3) {
+            db.execSQL("DROP TABLE IF EXISTS tx")
+            db.execSQL("DROP TABLE IF EXISTS category")
+            db.execSQL("DROP TABLE IF EXISTS account")
+            db.execSQL("DROP TABLE IF EXISTS budget")
+            onCreate(db)
         }
     }
 
     private fun seed(db: SQLiteDatabase) {
-        listOf(
-            SeedAccount("现金", AccountType.CASH, 0xFF5F7A61),
-            SeedAccount("招商银行", AccountType.DEBIT, 0xFF35618E),
-            SeedAccount("支付宝", AccountType.VIRTUAL, 0xFF2A8FD8),
-            SeedAccount("信用卡", AccountType.CREDIT, 0xFF8B5E83),
-        ).forEachIndexed { index, a ->
-            db.insert("account", null, ContentValues().apply {
-                put("id", UUID.randomUUID().toString())
-                put("name", a.name)
-                put("type", a.type.name)
-                put("initial_balance", 0L)
-                put("color", a.color)
-                put("sort_order", index)
-                put("archived", 0)
-            })
-        }
-
         var order = 0
         fun addCategory(
             name: String,
@@ -147,12 +116,6 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
         }
     }
 
-    fun accounts(): List<Account> = readableDatabase.query(
-        "account",
-        arrayOf("id", "name", "type", "initial_balance", "color", "sort_order", "archived"),
-        "archived = 0", null, null, null, "sort_order",
-    ).use { c -> c.mapAll { it.toAccount() } }
-
     fun categories(): List<Category> = readableDatabase.query(
         "category",
         arrayOf("id", "parent_id", "name", "type", "icon", "color", "sort_order"),
@@ -161,48 +124,33 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
 
     fun transactions(): List<Tx> = readableDatabase.query(
         "tx",
-        arrayOf("id", "type", "amount", "account_id", "to_account_id", "category_id", "note", "occurred_at"),
+        arrayOf("id", "type", "amount", "category_id", "note", "occurred_at"),
         null, null, null, null, "occurred_at DESC",
     ).use { c -> c.mapAll { it.toTx() } }
 
-    fun budgets(): Map<String, Long> = readableDatabase.query(
-        "budget", null, null, null, null, null, null
-    ).use { c ->
-        buildMap {
-            while (c.moveToNext()) put(c.getString(0), c.getLong(1))
-        }
+    fun insertTx(tx: Tx) {
+        writableDatabase.insertOrThrow("tx", null, tx.toValues())
     }
 
-    fun insertTx(tx: Tx) {
-        writableDatabase.insertOrThrow("tx", null, ContentValues().apply {
-            put("id", tx.id)
-            put("type", tx.type.name)
-            put("amount", tx.amount)
-            put("account_id", tx.accountId)
-            put("to_account_id", tx.toAccountId)
-            put("category_id", tx.categoryId)
-            put("note", tx.note)
-            put("occurred_at", tx.occurredAt)
-        })
+    fun updateTx(tx: Tx) {
+        writableDatabase.update("tx", tx.toValues(), "id = ?", arrayOf(tx.id))
     }
 
     fun deleteTx(id: String) {
         writableDatabase.delete("tx", "id = ?", arrayOf(id))
     }
 
-    fun putBudget(period: String, amount: Long) {
-        writableDatabase.insertWithOnConflict(
-            "budget", null, ContentValues().apply {
-                put("period", period)
-                put("amount", amount)
-            }, SQLiteDatabase.CONFLICT_REPLACE
-        )
+    private fun Tx.toValues() = ContentValues().apply {
+        put("id", id)
+        put("type", type.name)
+        put("amount", amount)
+        put("category_id", categoryId)
+        put("note", note)
+        put("occurred_at", occurredAt)
     }
 
-    private data class SeedAccount(val name: String, val type: AccountType, val color: Long)
-
     private companion object {
-        const val DB_VERSION = 2
+        const val DB_VERSION = 3
 
         val CategoryPaletteColors = listOf(
             0xFFF2583E, 0xFF3E8BF2, 0xFF17A467, 0xFFF2A93E,
@@ -211,34 +159,12 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
         val IncomePaletteColors = listOf(
             0xFF17A467, 0xFF3E8BF2, 0xFF8B6CF2, 0xFFF2A93E,
         )
-
-        val nameToIcon = mapOf(
-            "餐饮" to "food", "交通" to "transport", "购物" to "shopping", "娱乐" to "entertainment",
-            "居住" to "housing", "医疗" to "medical", "学习" to "study", "其他" to "other",
-            "工资" to "salary", "奖金" to "bonus", "理财" to "invest",
-            "早餐" to "meal", "午餐" to "meal", "晚餐" to "meal", "外卖" to "meal", "咖啡" to "meal",
-            "日用品" to "necessity", "服饰" to "clothes", "数码" to "digital", "美妆" to "beauty",
-            "地铁" to "transport", "打车" to "car", "加油" to "fuel", "停车" to "car",
-            "电影" to "movie", "游戏" to "entertainment", "旅行" to "flight",
-            "房租" to "housing", "水电" to "utilities", "物业" to "housing",
-            "门诊" to "medical", "药品" to "medical", "书籍" to "study", "课程" to "study",
-        )
     }
 }
 
 private inline fun <T> Cursor.mapAll(block: (Cursor) -> T): List<T> = buildList {
     while (moveToNext()) add(block(this@mapAll))
 }
-
-private fun Cursor.toAccount() = Account(
-    id = getString(0),
-    name = getString(1),
-    type = AccountType.valueOf(getString(2)),
-    initialBalance = getLong(3),
-    color = getLong(4),
-    sortOrder = getInt(5),
-    archived = getInt(6) != 0,
-)
 
 private fun Cursor.toCategory() = Category(
     id = getString(0),
@@ -254,9 +180,7 @@ private fun Cursor.toTx() = Tx(
     id = getString(0),
     type = TxType.valueOf(getString(1)),
     amount = getLong(2),
-    accountId = getString(3),
-    toAccountId = getString(4),
-    categoryId = getString(5),
-    note = getString(6),
-    occurredAt = getLong(7),
+    categoryId = getString(3),
+    note = getString(4),
+    occurredAt = getLong(5),
 )

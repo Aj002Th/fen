@@ -229,20 +229,33 @@ def main():
 
     check("保存后回到明细并出现记录", save)
 
+    def edit_record():
+        session.tap("餐饮")
+        session.wait_text("123.00", timeout=10)
+        session.shot("05-edit-open.png")
+        for key in ("2", "0", "0"):
+            session.tap(key)
+            time.sleep(0.2)
+        session.tap("完成")
+        session.wait_text("-200.00", timeout=10)
+        return session.shot("06-edit-saved.png") and ""
+
+    check("点开记录并改金额", edit_record)
+
     def stats():
         session.tap("统计")
         session.wait_text("分类排行", timeout=10)
-        session.wait_text("123.00", timeout=5)
+        session.wait_text("200.00", timeout=5)
         session.wait_text("最近 7 天", timeout=5)
-        return session.shot("05-stats.png") and ""
+        return session.shot("07-stats.png") and ""
 
     check("统计页环形图与排行", stats)
 
     def settings():
         session.tap("设置")
-        session.wait_text("分类管理", timeout=10)
-        session.wait_text("备份与恢复", timeout=5)
-        return session.shot("06-settings.png") and ""
+        session.wait_text("深色模式", timeout=10)
+        session.wait_text("关于", timeout=5)
+        return session.shot("08-settings.png") and ""
 
     check("设置页结构（右上角入口）", settings)
 
@@ -270,5 +283,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 

@@ -1,20 +1,12 @@
 package app.fen.data
 
-/** 支出 / 收入 / 转账 */
-enum class TxType { EXPENSE, INCOME, TRANSFER }
+/** 只保留支出 / 收入。转账、退款等不在范围内。 */
+enum class TxType { EXPENSE, INCOME }
 
-enum class AccountType { CASH, DEBIT, CREDIT, VIRTUAL }
-
-data class Account(
-    val id: String,
-    val name: String,
-    val type: AccountType,
-    val initialBalance: Long,
-    val color: Long,
-    val sortOrder: Int,
-    val archived: Boolean,
-)
-
+/**
+ * 分类采用两级结构：parentId == null 为一级分类，其余挂在父类下。
+ * icon / color 只存 key 和 ARGB，换图标集时不用改数据。
+ */
 data class Category(
     val id: String,
     val parentId: String?,
@@ -31,16 +23,12 @@ data class Tx(
     val id: String,
     val type: TxType,
     val amount: Long,
-    val accountId: String,
-    val toAccountId: String?,
     val categoryId: String?,
     val note: String,
     val occurredAt: Long,
 )
 
 data class Snapshot(
-    val accounts: List<Account> = emptyList(),
     val categories: List<Category> = emptyList(),
     val transactions: List<Tx> = emptyList(),
-    val budgets: Map<String, Long> = emptyMap(),
 )

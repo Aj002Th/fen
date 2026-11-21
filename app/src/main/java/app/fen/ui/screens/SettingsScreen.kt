@@ -14,21 +14,20 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.outlined.Book
-import androidx.compose.material.icons.outlined.Category
-import androidx.compose.material.icons.outlined.CloudUpload
-import androidx.compose.material.icons.outlined.ColorLens
-import androidx.compose.material.icons.outlined.CreditCard
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Savings
-import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -40,33 +39,14 @@ import app.fen.ui.components.RowDivider
 import app.fen.ui.components.SectionLabel
 import app.fen.ui.theme.Fen
 
-private data class SettingRow(
-    val title: String,
-    val subtitle: String? = null,
-    val icon: ImageVector,
-    val tint: Color,
-)
-
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
-    val groups = listOf(
-        "记账" to listOf(
-            SettingRow("分类管理", "图标、颜色与排序", Icons.Outlined.Category, Color(0xFFF2A93E)),
-            SettingRow("账户管理", "余额与账户排序", Icons.Outlined.CreditCard, Color(0xFF3E8BF2)),
-            SettingRow("预算", "每月支出上限", Icons.Outlined.Savings, Color(0xFF17A467)),
-        ),
-        "外观" to listOf(
-            SettingRow("主题色", "强调色与图标风格", Icons.Outlined.ColorLens, Color(0xFF8B6CF2)),
-            SettingRow("深色模式", "跟随系统", Icons.Outlined.DarkMode, Color(0xFF7C8794)),
-        ),
-        "数据" to listOf(
-            SettingRow("备份与恢复", "导出 / 导入 JSON", Icons.Outlined.CloudUpload, Color(0xFF21B8C7)),
-            SettingRow("导出 CSV", "用表格打开账单", Icons.Outlined.Book, Color(0xFFE05C9A)),
-        ),
-        "关于" to listOf(
-            SettingRow("Fen", "版本 0.2.1 · 开源", Icons.Outlined.Info, Color(0xFFF2583E)),
-        ),
-    )
+fun SettingsScreen(
+    themeMode: Int,
+    onThemeModeChange: (Int) -> Unit,
+    onBack: () -> Unit,
+) {
+    var showThemeDialog by remember { mutableStateOf(false) }
+    var showAbout by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -87,51 +67,130 @@ fun SettingsScreen(onBack: () -> Unit) {
                 Text("设置", style = MaterialTheme.typography.headlineLarge)
             }
         }
-        groups.forEach { (title, items) ->
-            item { SectionLabel(title, modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)) }
-            item {
-                Surface(
-                    shape = RoundedCornerShape(22.dp),
-                    color = Fen.colors.surface,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(Modifier.padding(vertical = 4.dp)) {
-                        items.forEachIndexed { index, item ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { }
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                IconBadge(item.icon, item.tint, size = 36.dp, iconSize = 18.dp)
-                                Spacer(Modifier.size(14.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(item.title, style = MaterialTheme.typography.titleMedium)
-                                    if (item.subtitle != null) {
-                                        Text(
-                                            item.subtitle,
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = Fen.colors.inkSoft,
-                                        )
-                                    }
+
+        item { SectionLabel("外观", modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)) }
+        item {
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = Fen.colors.surface,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                SettingItem(
+                    title = "深色模式",
+                    subtitle = when (themeMode) {
+                        1 -> "浅色"
+                        2 -> "深色"
+                        else -> "跟随系统"
+                    },
+                    icon = Icons.Outlined.DarkMode,
+                    tint = Color(0xFF7C8794),
+                    onClick = { showThemeDialog = true },
+                )
+            }
+        }
+
+        item { SectionLabel("关于", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp)) }
+        item {
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = Fen.colors.surface,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                SettingItem(
+                    title = "Fen",
+                    subtitle = "版本 0.3.0 · 开源",
+                    icon = Icons.Outlined.Info,
+                    tint = Color(0xFFF2583E),
+                    onClick = { showAbout = true },
+                )
+            }
+        }
+    }
+
+    if (showThemeDialog) {
+        AlertDialog(
+            onDismissRequest = { showThemeDialog = false },
+            title = { Text("深色模式") },
+            text = {
+                Column {
+                    listOf("跟随系统" to 0, "浅色" to 1, "深色" to 2).forEach { (label, mode) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onThemeModeChange(mode)
+                                    showThemeDialog = false
                                 }
-                                Icon(
-                                    Icons.Rounded.ChevronRight,
-                                    contentDescription = null,
-                                    tint = Fen.colors.inkFaint,
-                                    modifier = Modifier.size(18.dp),
-                                )
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = if (themeMode == mode) Fen.colors.ink else Fen.colors.inkSoft,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (themeMode == mode) {
+                                Text("✓", color = Fen.colors.ink)
                             }
-                            if (index != items.lastIndex) RowDivider(startInset = 64.dp)
                         }
                     }
                 }
-            }
-            item { Spacer(Modifier.size(4.dp)) }
-        }
-        item { Spacer(Modifier.height(88.dp)) }
+            },
+            confirmButton = {
+                TextButton(onClick = { showThemeDialog = false }) { Text("关闭") }
+            },
+        )
+    }
+
+    if (showAbout) {
+        AlertDialog(
+            onDismissRequest = { showAbout = false },
+            title = { Text("Fen · 分") },
+            text = {
+                Text(
+                    "一个开源、克制的 Android 记账应用。\n" +
+                        "数据只保存在本机，没有账号、没有网络请求。\n\n" +
+                        "版本 0.3.0"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showAbout = false }) { Text("好的") }
+            },
+        )
     }
 }
 
-
+@Composable
+private fun SettingItem(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    tint: Color,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconBadge(icon, tint, size = 36.dp, iconSize = 18.dp)
+        Spacer(Modifier.size(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Fen.colors.inkSoft,
+            )
+        }
+        Icon(
+            Icons.Rounded.ChevronRight,
+            contentDescription = null,
+            tint = Fen.colors.inkFaint,
+            modifier = Modifier.size(18.dp),
+        )
+    }
+}
