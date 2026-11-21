@@ -208,7 +208,7 @@ def main():
     def open_add():
         session.tap("记一笔")
         session.wait_text("完成")
-        session.wait_text("点击添加备注", exact=False)
+        session.wait_text("点击填写备注", exact=False)
         return session.shot("02-add.png") and ""
 
     check("打开记账页", open_add)
@@ -283,6 +283,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
