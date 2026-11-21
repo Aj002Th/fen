@@ -243,10 +243,12 @@ fun SearchScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 16.dp)
+                .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             FilterChip(
+                icon = Icons.Outlined.CalendarToday,
                 label = "时间",
                 value = timeFilter.label,
                 active = timeFilter != TimeFilter.ALL,
@@ -258,6 +260,7 @@ fun SearchScreen(
                 },
             )
             FilterChip(
+                icon = Icons.Outlined.Payments,
                 label = "金额",
                 value = amountFilter.label,
                 active = amountFilter != AmountFilter.ANY,
@@ -269,6 +272,7 @@ fun SearchScreen(
                 },
             )
             FilterChip(
+                icon = Icons.Outlined.Sort,
                 label = "排序",
                 value = sortFilter.label,
                 active = sortFilter != SortFilter.TIME,
@@ -625,6 +629,7 @@ private fun FilterPill(label: String, selected: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun FilterChip(
+    icon: ImageVector,
     label: String,
     value: String,
     active: Boolean,
@@ -639,11 +644,20 @@ private fun FilterChip(
         Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
         ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
-                color = Fen.colors.inkFaint,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (active || expanded) Fen.colors.inkSoft else Fen.colors.inkFaint,
+                    modifier = Modifier.size(12.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Fen.colors.inkFaint,
+                )
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = value,
