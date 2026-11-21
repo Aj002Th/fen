@@ -39,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +54,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import app.fen.BuildConfig
 import app.fen.data.Tx
 import app.fen.ui.screens.AddTransactionScreen
 import app.fen.ui.screens.BillsScreen
@@ -60,7 +62,8 @@ import app.fen.ui.screens.SettingsScreen
 import app.fen.ui.screens.StatsScreen
 import app.fen.ui.theme.Fen
 import app.fen.ui.theme.FenTheme
-import app.fen.util.atTimeOf
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
@@ -94,6 +97,7 @@ private fun FenContent(viewModel: FenViewModel) {
 
     var showAdd by remember { mutableStateOf(false) }
     var editingTx by remember { mutableStateOf<Tx?>(null) }
+    val scope = rememberCoroutineScope()
 
     BackHandler(enabled = showAdd) { showAdd = false }
 
@@ -160,6 +164,13 @@ private fun FenContent(viewModel: FenViewModel) {
                         themeMode = themeMode,
                         onThemeModeChange = viewModel::setThemeMode,
                         onBack = { navController.popBackStack() },
+                        showDebug = BuildConfig.DEBUG,
+                        onSeedDemo = {
+                            scope.launch(Dispatchers.IO) { viewModel.seedDemoData(400) }
+                        },
+                        onClearData = {
+                            scope.launch(Dispatchers.IO) { viewModel.clearTransactions() }
+                        },
                     )
                 }
             }
@@ -174,10 +185,10 @@ private fun FenContent(viewModel: FenViewModel) {
                 snapshot = snapshot,
                 initial = editingTx,
                 onClose = { showAdd = false },
-                onSave = { type, amountMinor, categoryId, note, date ->
+                onSave = { type, amountMinor, categoryId, note, dateTime, andContinue ->
                     val editing = editingTx
                     if (editing == null) {
-                        viewModel.addTransaction(type, amountMinor, categoryId, note, date)
+                        viewModel.addTransaction(type, amountMinor, categoryId, note, dateTime)
                     } else {
                         viewModel.updateTransaction(
                             editing.copy(
@@ -185,11 +196,14 @@ private fun FenContent(viewModel: FenViewModel) {
                                 amount = amountMinor,
                                 categoryId = categoryId,
                                 note = note.trim(),
-                                occurredAt = date.atTimeOf(editing.occurredAt),
+                                occurredAt = dateTime
+                                    .atZone(java.time.ZoneId.systemDefault())
+                                    .toInstant()
+                                    .toEpochMilli(),
                             )
                         )
                     }
-                    showAdd = false
+                    if (!andContinue) showAdd = false
                 },
             )
         }

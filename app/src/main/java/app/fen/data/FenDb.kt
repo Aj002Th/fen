@@ -58,6 +58,12 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
             db.execSQL("DROP TABLE IF EXISTS account")
             db.execSQL("DROP TABLE IF EXISTS budget")
             onCreate(db)
+            return
+        }
+        if (oldVersion < 4) {
+            // 「其他」分类没有语义，删掉；挂在上面的流水变成未分类
+            db.execSQL("UPDATE tx SET category_id = NULL WHERE category_id IN (SELECT id FROM category WHERE name = '其他')")
+            db.execSQL("DELETE FROM category WHERE name = '其他'")
         }
     }
 
@@ -91,7 +97,6 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
             Triple("居住", "housing", listOf("房租", "水电", "物业")),
             Triple("医疗", "medical", listOf("门诊", "药品")),
             Triple("学习", "study", listOf("书籍", "课程")),
-            Triple("其他", "other", emptyList<String>()),
         )
         expenseTree.forEachIndexed { index, (name, icon, children) ->
             val color = CategoryPaletteColors[index % CategoryPaletteColors.size]
@@ -105,7 +110,6 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
             Triple("工资", "salary", emptyList<String>()),
             Triple("奖金", "bonus", emptyList<String>()),
             Triple("理财", "invest", emptyList<String>()),
-            Triple("其他", "other_income", emptyList<String>()),
         )
         incomeTree.forEachIndexed { index, (name, icon, children) ->
             val color = IncomePaletteColors[index % IncomePaletteColors.size]
@@ -140,6 +144,85 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
         writableDatabase.delete("tx", "id = ?", arrayOf(id))
     }
 
+    /**
+     * 生成演示数据，仅用于开发与验收。
+     * 最近 [daysBack] 天，约 [count] 条，时间分布在 07:00–22:59。
+     */
+    fun seedDemoData(count: Int = 400, daysBack: Int = 180) {
+        val all = categories()
+        val expenseLeaves = all.filter { it.type == TxType.EXPENSE && it.parentId != null }
+        val expenseParents = all.filter { it.type == TxType.EXPENSE && it.isParent }
+        val incomeParents = all.filter { it.type == TxType.INCOME && it.isParent }
+        val expensePool = expenseLeaves.ifEmpty { expenseParents }
+        if (expensePool.isEmpty()) return
+
+        val random = java.util.Random(20261121L)
+        val notesByCategory = mapOf(
+            "早餐" to listOf("豆浆油条", "包子"), "午餐" to listOf("食堂", "简餐"),
+            "晚餐" to listOf("做饭", "外卖"), "外卖" to listOf("美团", "饿了么"), "咖啡" to listOf("瑞幸", "星巴克"),
+            "地铁" to listOf("通勤"), "打车" to listOf("滴滴"), "加油" to listOf("中石化"), "停车" to listOf("停车费"),
+            "日用品" to listOf("超市"), "服饰" to listOf("衣服"), "数码" to listOf("配件"), "美妆" to listOf("护肤"),
+            "电影" to listOf("电影票"), "游戏" to listOf("充值"), "旅行" to listOf("机票"),
+            "房租" to listOf("房租"), "水电" to listOf("水电费"), "物业" to listOf("物业费"),
+            "门诊" to listOf("挂号"), "药品" to listOf("买药"),
+            "书籍" to listOf("买书"), "课程" to listOf("网课"),
+            "工资" to listOf("月薪"), "奖金" to listOf("年终奖"), "理财" to listOf("基金"),
+        )
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            repeat(count) {
+                val isIncome = incomeParents.isNotEmpty() && random.nextInt(100) < 8
+                val category = if (isIncome) {
+                    incomeParents[random.nextInt(incomeParents.size)]
+                } else {
+                    expensePool[random.nextInt(expensePool.size)]
+                }
+                val amount: Long = if (isIncome) {
+                    if (category.name == "工资") {
+                        (8000 + random.nextInt(7000)) * 100L
+                    } else {
+                        (200 + random.nextInt(2800)) * 100L
+                    }
+                } else if (random.nextInt(100) < 3) {
+                    (1000 + random.nextInt(4000)) * 100L
+                } else {
+                    (8 + random.nextInt(313)) * 100L
+                }
+                val dayOffset = random.nextInt(daysBack + 1)
+                val notePool = notesByCategory[category.name] ?: emptyList()
+                val note = if (notePool.isEmpty() || random.nextInt(100) < 25) "" else {
+                    notePool[random.nextInt(notePool.size)]
+                }
+                val calendar = java.util.Calendar.getInstance().apply {
+                    timeInMillis = System.currentTimeMillis()
+                    add(java.util.Calendar.DAY_OF_YEAR, -dayOffset)
+                    set(java.util.Calendar.HOUR_OF_DAY, 7 + random.nextInt(16))
+                    set(java.util.Calendar.MINUTE, random.nextInt(60))
+                    set(java.util.Calendar.SECOND, 0)
+                    set(java.util.Calendar.MILLISECOND, 0)
+                }
+                insertTx(
+                    Tx(
+                        id = UUID.randomUUID().toString(),
+                        type = if (isIncome) TxType.INCOME else TxType.EXPENSE,
+                        amount = amount,
+                        categoryId = category.id,
+                        note = note,
+                        occurredAt = calendar.timeInMillis,
+                    )
+                )
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    fun clearTransactions() {
+        writableDatabase.delete("tx", null, null)
+    }
+
     private fun Tx.toValues() = ContentValues().apply {
         put("id", id)
         put("type", type.name)
@@ -150,7 +233,7 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
     }
 
     private companion object {
-        const val DB_VERSION = 3
+        const val DB_VERSION = 4
 
         val CategoryPaletteColors = listOf(
             0xFFF2583E, 0xFF3E8BF2, 0xFF17A467, 0xFFF2A93E,

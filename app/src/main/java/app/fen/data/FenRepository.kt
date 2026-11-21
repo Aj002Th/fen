@@ -52,4 +52,16 @@ class FenRepository(private val db: FenDb) {
         db.deleteTx(id)
         refresh()
     }
+
+    /** 开发/验收用：生成演示数据 */
+    fun seedDemoData(count: Int = 400) {
+        db.seedDemoData(count)
+        refresh()
+    }
+
+    /** 开发/验收用：清空流水（保留分类） */
+    fun clearTransactions() {
+        db.clearTransactions()
+        refresh()
+    }
 }

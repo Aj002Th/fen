@@ -338,7 +338,7 @@ fun AmountKeypad(
     canSave: Boolean,
     modifier: Modifier = Modifier,
     showRecord: Boolean = true,
-    recordLabel: String = "记录",
+    recordLabel: String = "保存再记",
     doneLabel: String = "完成",
     accent: Color = Fen.colors.expense,
 ) {

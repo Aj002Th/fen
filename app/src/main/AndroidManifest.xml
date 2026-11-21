@@ -16,6 +16,13 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- debug 用：adb shell am start -d "fen://debug/seed?count=400" -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="fen" android:host="debug" />
+            </intent-filter>
         </activity>
     </application>
 

@@ -14,7 +14,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.AlertDialog
@@ -44,9 +46,14 @@ fun SettingsScreen(
     themeMode: Int,
     onThemeModeChange: (Int) -> Unit,
     onBack: () -> Unit,
+    showDebug: Boolean = false,
+    onSeedDemo: () -> Unit = {},
+    onClearData: () -> Unit = {},
 ) {
     var showThemeDialog by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
+    var showSeedConfirm by remember { mutableStateOf(false) }
+    var showClearConfirm by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -105,6 +112,35 @@ fun SettingsScreen(
                 )
             }
         }
+
+        if (showDebug) {
+            item { SectionLabel("开发", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp)) }
+            item {
+                Surface(
+                    shape = RoundedCornerShape(22.dp),
+                    color = Fen.colors.surface,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column {
+                        SettingItem(
+                            title = "生成示例数据",
+                            subtitle = "最近 6 个月 · 400 条",
+                            icon = Icons.Outlined.BugReport,
+                            tint = Color(0xFF21B8C7),
+                            onClick = { showSeedConfirm = true },
+                        )
+                        RowDivider(startInset = 64.dp)
+                        SettingItem(
+                            title = "清空全部记录",
+                            subtitle = "保留分类，仅删除流水",
+                            icon = Icons.Outlined.Delete,
+                            tint = Color(0xFFF2583E),
+                            onClick = { showClearConfirm = true },
+                        )
+                    }
+                }
+            }
+        }
     }
 
     if (showThemeDialog) {
@@ -156,6 +192,39 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showAbout = false }) { Text("好的") }
+            },
+        )
+    }
+    if (showSeedConfirm) {
+        AlertDialog(
+            onDismissRequest = { showSeedConfirm = false },
+            title = { Text("生成示例数据？") },
+            text = { Text("会插入约 400 条最近 6 个月的记录，用于验收界面与统计。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onSeedDemo()
+                    showSeedConfirm = false
+                }) { Text("生成") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSeedConfirm = false }) { Text("取消") }
+            },
+        )
+    }
+
+    if (showClearConfirm) {
+        AlertDialog(
+            onDismissRequest = { showClearConfirm = false },
+            title = { Text("清空全部记录？") },
+            text = { Text("只删除流水，分类会保留。此操作不可恢复。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    onClearData()
+                    showClearConfirm = false
+                }) { Text("清空", color = Fen.colors.expense) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearConfirm = false }) { Text("取消") }
             },
         )
     }

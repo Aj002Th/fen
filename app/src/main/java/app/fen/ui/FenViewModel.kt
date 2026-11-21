@@ -9,17 +9,14 @@ import app.fen.data.TxType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.YearMonth
-
-import app.fen.util.defaultInstant
-import app.fen.util.toEpochMillis
+import java.time.ZoneId
 
 class FenViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repository = (app as FenApp).repository
     private val prefs = (app as FenApp).prefs
-
     val snapshot: StateFlow<Snapshot> = repository.snapshot
 
     private val _month = MutableStateFlow(YearMonth.now())
@@ -46,18 +43,26 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
         amountMinor: Long,
         categoryId: String?,
         note: String,
-        date: LocalDate,
+        dateTime: LocalDateTime,
     ) {
         repository.addTransaction(
             type = type,
             amountMinor = amountMinor,
             categoryId = categoryId,
             note = note,
-            occurredAt = date.defaultInstant(),
+            occurredAt = dateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(),
         )
     }
 
     fun updateTransaction(tx: Tx) = repository.updateTransaction(tx)
 
     fun delete(tx: Tx) = repository.deleteTransaction(tx.id)
+
+    fun seedDemoData(count: Int = 400) {
+        repository.seedDemoData(count)
+    }
+
+    fun clearTransactions() {
+        repository.clearTransactions()
+    }
 }

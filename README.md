@@ -43,6 +43,17 @@ C:\Android\tools\device.ps1 install -Package app.fen
 C:\Android\tools\device.ps1 shot
 ```
 
+## 验收数据（仅 debug）
+
+```powershell
+# 生成最近 6 个月约 400 条演示数据
+adb shell am start -a android.intent.action.VIEW -d "fen://debug/seed?count=400" -p app.fen
+# 清空流水（保留分类）
+adb shell am start -a android.intent.action.VIEW -d "fen://debug/clear" -p app.fen
+```
+
+也可以在「设置 → 开发」里点按钮。
+
 ## 代码结构
 
 ```
@@ -73,11 +84,11 @@ app/src/main/java/app/fen/
 
 ## 已实现
 
-- 记账：支出 / 收入、**两级分类**、日期、备注、自定义数字键盘（记录 / 完成）
-- 编辑：点击明细里的记录即可修改金额 / 分类 / 日期 / 备注
+- 记账：支出 / 收入、**两级分类**、**时间精确到分钟**、备注、自定义数字键盘（保存再记 / 完成）
+- 编辑：点击明细里的记录即可修改金额 / 分类 / 时间 / 备注
 - 主题：跟随系统 / 浅色 / 深色，设置页可切换
 - 明细：**三页汇总轮播**、按月切换、**按天卡片**、日小计、**常驻搜索**、长按删除
-- 统计：月度支出环形图、分类排行、近 7 天柱状图
+- 统计：**按一级分类聚合**的环形图、分类排行、近 7 天柱状图
 - 设置：右上角入口（所有页面可达），深色模式切换与关于
 
 ## Roadmap
