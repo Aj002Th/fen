@@ -216,6 +216,9 @@ fun SearchField(
     modifier: Modifier = Modifier,
     placeholder: String = "搜索备注、分类或金额",
     focusRequester: androidx.compose.ui.focus.FocusRequester? = null,
+    imeAction: androidx.compose.ui.text.input.ImeAction =
+        androidx.compose.ui.text.input.ImeAction.Done,
+    onSearch: () -> Unit = {},
 ) {
     Surface(
         shape = RoundedCornerShape(14.dp),
@@ -239,6 +242,11 @@ fun SearchField(
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = Fen.colors.ink),
                 cursorBrush = SolidColor(Fen.colors.ink),
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = imeAction),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                    onSearch = { onSearch() },
+                    onDone = { onSearch() },
+                ),
                 modifier = Modifier
                     .weight(1f)
                     .then(

@@ -51,7 +51,10 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -66,6 +69,7 @@ import app.fen.ui.components.DateTimePickerSheet
 import app.fen.ui.components.Segmented
 import app.fen.ui.icons.categoryIcon
 import app.fen.ui.theme.Fen
+import android.widget.Toast
 import app.fen.util.formatMoney
 import app.fen.util.parseAmountToMinor
 import app.fen.util.toAmountInput
@@ -80,8 +84,8 @@ import java.util.Locale
 fun AddTransactionScreen(
     snapshot: Snapshot,
     initial: Tx? = null,
-    hiddenSuggestions: Set<String> = emptySet(),
-    onHideSuggestion: (String) -> Unit = {},
+    suggestionPenalties: Map<String, Int> = emptyMap(),
+    onPenalizeSuggestion: (String) -> Unit = {},
     onClose: () -> Unit,
     onManageCategories: () -> Unit,
     onSave: (
@@ -113,11 +117,13 @@ fun AddTransactionScreen(
     }
     val selectedCategoryId = categories.firstOrNull { it.id == categoryId }?.id
         ?: categories.firstOrNull()?.id
-    val suggestions = remember(snapshot.transactions, snapshot.categories, type, hiddenSuggestions) {
-        buildSuggestions(snapshot, type, hiddenSuggestions)
+    val suggestions = remember(snapshot.transactions, snapshot.categories, type, suggestionPenalties) {
+        buildSuggestions(snapshot, type, suggestionPenalties)
     }
     val gridState = rememberLazyGridState()
     val focusManager = LocalFocusManager.current
+    val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
 
     val amountMinor = parseAmountToMinor(amountText)
     val canSave = amountMinor > 0 && selectedCategoryId != null
@@ -252,7 +258,15 @@ fun AddTransactionScreen(
                                             amountText = suggestion.amount.toAmountInput()
                                             amountTouched = true
                                         },
-                                        onLongClick = { onHideSuggestion(suggestion.category.id) },
+                                        onLongClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onPenalizeSuggestion(suggestion.category.id)
+                                            Toast.makeText(
+                                                context,
+                                                "已降低「${suggestion.category.name}」的推荐权重",
+                                                Toast.LENGTH_SHORT,
+                                            ).show()
+                                        },
                                     )
                                     .padding(horizontal = 12.dp, vertical = 7.dp),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -513,24 +527,23 @@ private fun formatDateTime(dateTime: LocalDateTime): String {
 
 private data class Suggestion(val category: Category, val amount: Long)
 
-/** 近 30 天出现次数 >= 3 的分类，按次数排序；不足 3 个时用最近记录补齐 */
+/** 近 30 天出现次数 >= 3 的分类，按「次数 - 3×降权次数」排序；不足 3 个时用最近记录补齐 */
 private fun buildSuggestions(
     snapshot: Snapshot,
     type: TxType,
-    hidden: Set<String>,
+    penalties: Map<String, Int>,
 ): List<Suggestion> {
     val cutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
     val month = snapshot.transactions.filter {
-        it.type == type && it.categoryId != null &&
-            it.occurredAt >= cutoff && it.categoryId !in hidden
+        it.type == type && it.categoryId != null && it.occurredAt >= cutoff
     }
     val frequent = month.groupBy { it.categoryId!! }
-        .filter { it.value.size >= 3 }
-        .entries
-        .sortedByDescending { it.value.size }
-        .mapNotNull { entry ->
-            snapshot.categories.firstOrNull { it.id == entry.key }?.let {
-                Suggestion(it, median(entry.value.map { tx -> tx.amount }))
+        .map { (id, list) -> Triple(id, list.size - 3 * (penalties[id] ?: 0), list) }
+        .filter { it.second >= 3 }
+        .sortedByDescending { it.second }
+        .mapNotNull { (id, _, list) ->
+            snapshot.categories.firstOrNull { it.id == id }?.let {
+                Suggestion(it, median(list.map { tx -> tx.amount }))
             }
         }
         .take(3)
@@ -541,7 +554,7 @@ private fun buildSuggestions(
     val extra = snapshot.transactions
         .filter {
             it.type == type && it.categoryId != null &&
-                it.categoryId !in used && it.categoryId !in hidden
+                it.categoryId !in used && (penalties[it.categoryId] ?: 0) == 0
         }
         .distinctBy { it.categoryId }
         .take(3 - frequent.size)
@@ -557,3 +570,4 @@ private fun median(values: List<Long>): Long {
     val mid = sorted.size / 2
     return if (sorted.size % 2 == 1) sorted[mid] else (sorted[mid - 1] + sorted[mid]) / 2
 }
+

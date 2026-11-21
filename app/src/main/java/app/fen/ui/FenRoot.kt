@@ -93,6 +93,8 @@ private fun FenContent(viewModel: FenViewModel) {
     val month by viewModel.month.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val hiddenSuggestions by viewModel.hiddenSuggestions.collectAsStateWithLifecycle()
+    val penalties by viewModel.suggestionPenalties.collectAsStateWithLifecycle()
+    val searchHistory by viewModel.searchHistory.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -182,6 +184,9 @@ private fun FenContent(viewModel: FenViewModel) {
                 composable("search") {
                     SearchScreen(
                         snapshot = snapshot,
+                        history = searchHistory,
+                        onSaveHistory = viewModel::addSearchHistory,
+                        onClearHistory = viewModel::clearSearchHistory,
                         onBack = { navController.popBackStack() },
                     )
                 }
@@ -212,8 +217,8 @@ private fun FenContent(viewModel: FenViewModel) {
             AddTransactionScreen(
                 snapshot = snapshot,
                 initial = editingTx,
-                hiddenSuggestions = hiddenSuggestions,
-                onHideSuggestion = viewModel::hideSuggestion,
+                suggestionPenalties = penalties,
+                onPenalizeSuggestion = viewModel::penalizeSuggestion,
                 onClose = { showAdd = false },
                 onManageCategories = {
                     showAdd = false

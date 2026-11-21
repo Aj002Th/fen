@@ -28,6 +28,12 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
     private val _hiddenSuggestions = MutableStateFlow(prefs.hiddenSuggestions)
     val hiddenSuggestions: StateFlow<Set<String>> = _hiddenSuggestions.asStateFlow()
 
+    private val _penalties = MutableStateFlow(prefs.suggestionPenalties)
+    val suggestionPenalties: StateFlow<Map<String, Int>> = _penalties.asStateFlow()
+
+    private val _searchHistory = MutableStateFlow(prefs.searchHistory)
+    val searchHistory: StateFlow<List<String>> = _searchHistory.asStateFlow()
+
     fun shiftMonth(months: Long) {
         _month.value = _month.value.plusMonths(months)
     }
@@ -44,6 +50,25 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
     fun hideSuggestion(categoryId: String) {
         prefs.hiddenSuggestions = prefs.hiddenSuggestions + categoryId
         _hiddenSuggestions.value = prefs.hiddenSuggestions
+    }
+
+    /** 长按常用分类：降低它在推荐里的权重 */
+    fun penalizeSuggestion(categoryId: String) {
+        val current = prefs.suggestionPenalties
+        prefs.suggestionPenalties = current + (categoryId to ((current[categoryId] ?: 0) + 1))
+        _penalties.value = prefs.suggestionPenalties
+    }
+
+    fun addSearchHistory(query: String) {
+        val q = query.trim()
+        if (q.isEmpty()) return
+        prefs.searchHistory = (listOf(q) + prefs.searchHistory.filter { it != q }).take(5)
+        _searchHistory.value = prefs.searchHistory
+    }
+
+    fun clearSearchHistory() {
+        prefs.searchHistory = emptyList()
+        _searchHistory.value = emptyList()
     }
 
     fun addTransaction(

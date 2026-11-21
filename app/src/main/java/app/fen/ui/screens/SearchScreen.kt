@@ -5,6 +5,8 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,26 +23,35 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.outlined.Payments
+import androidx.compose.material.icons.outlined.Sort
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import app.fen.data.Category
 import app.fen.data.Snapshot
@@ -59,7 +70,6 @@ import app.fen.util.label
 import app.fen.util.timeLabel
 import java.time.Instant
 import java.time.LocalDate
-import java.time.LocalTime
 import java.time.YearMonth
 import java.time.ZoneId
 
@@ -79,9 +89,15 @@ private enum class SortFilter(val label: String) {
     TIME("时间"), AMOUNT("金额")
 }
 
+private enum class FilterKind { TIME, AMOUNT, SORT }
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SearchScreen(
     snapshot: Snapshot,
+    history: List<String>,
+    onSaveHistory: (String) -> Unit,
+    onClearHistory: () -> Unit,
     onBack: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
@@ -89,13 +105,32 @@ fun SearchScreen(
     var timeFilter by remember { mutableStateOf(TimeFilter.ALL) }
     var amountFilter by remember { mutableStateOf(AmountFilter.ANY) }
     var sortFilter by remember { mutableStateOf(SortFilter.TIME) }
+    var sheetKind by remember { mutableStateOf<FilterKind?>(null) }
 
     val categories = remember(snapshot.categories) { snapshot.categories.associateBy { it.id } }
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val latestQuery by rememberUpdatedState(query)
 
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
+
+    // 关键字清空时回到初始状态（类型/时间/金额/排序全部复位）
+    LaunchedEffect(query) {
+        if (query.isBlank()) {
+            typeFilter = TypeFilter.ALL
+            timeFilter = TimeFilter.ALL
+            amountFilter = AmountFilter.ANY
+            sortFilter = SortFilter.TIME
+        }
+    }
+
+    // 离开搜索页时把最后一次输入记入历史
+    DisposableEffect(Unit) {
+        onDispose {
+            if (latestQuery.isNotBlank()) onSaveHistory(latestQuery)
+        }
+    }
 
     val results = remember(snapshot.transactions, query, typeFilter, timeFilter, amountFilter, sortFilter) {
         val now = System.currentTimeMillis()
@@ -151,6 +186,13 @@ fun SearchScreen(
         timeFilter == TimeFilter.ALL &&
         amountFilter == AmountFilter.ANY
 
+    fun applyKeyword(text: String) {
+        query = text
+        onSaveHistory(text)
+        focusManager.clearFocus()
+        keyboard?.hide()
+    }
+
     Column(
         Modifier
             .fillMaxSize()
@@ -172,6 +214,12 @@ fun SearchScreen(
                 value = query,
                 onValueChange = { query = it },
                 focusRequester = focusRequester,
+                imeAction = ImeAction.Search,
+                onSearch = {
+                    if (query.isNotBlank()) onSaveHistory(query.trim())
+                    focusManager.clearFocus()
+                    keyboard?.hide()
+                },
                 modifier = Modifier.weight(1f),
                 placeholder = "输入关键词",
             )
@@ -180,7 +228,6 @@ fun SearchScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -202,23 +249,23 @@ fun SearchScreen(
                 .padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            FilterDropdown(
-                label = "时间",
-                value = timeFilter.label,
-                options = TimeFilter.entries.map { it.label },
-                onSelect = { index -> timeFilter = TimeFilter.entries[index] },
+            FilterChip(
+                icon = Icons.Outlined.CalendarToday,
+                label = timeFilter.label,
+                active = timeFilter != TimeFilter.ALL,
+                onClick = { sheetKind = FilterKind.TIME },
             )
-            FilterDropdown(
-                label = "金额",
-                value = amountFilter.label,
-                options = AmountFilter.entries.map { it.label },
-                onSelect = { index -> amountFilter = AmountFilter.entries[index] },
+            FilterChip(
+                icon = Icons.Outlined.Payments,
+                label = amountFilter.label,
+                active = amountFilter != AmountFilter.ANY,
+                onClick = { sheetKind = FilterKind.AMOUNT },
             )
-            FilterDropdown(
-                label = "排序",
-                value = sortFilter.label,
-                options = SortFilter.entries.map { it.label },
-                onSelect = { index -> sortFilter = SortFilter.entries[index] },
+            FilterChip(
+                icon = Icons.Outlined.Sort,
+                label = sortFilter.label,
+                active = sortFilter != SortFilter.TIME,
+                onClick = { sheetKind = FilterKind.SORT },
             )
         }
 
@@ -251,13 +298,11 @@ fun SearchScreen(
         }
 
         if (showSuggestions) {
-            SuggestionList(
+            SuggestionSection(
                 snapshot = snapshot,
-                onPick = { name ->
-                    query = name
-                    focusManager.clearFocus()
-                    keyboard?.hide()
-                },
+                history = history,
+                onPick = { applyKeyword(it) },
+                onClearHistory = onClearHistory,
             )
         } else if (results.isEmpty()) {
             EmptyState(
@@ -313,10 +358,29 @@ fun SearchScreen(
             }
         }
     }
+
+    sheetKind?.let { kind ->
+        FilterSheet(
+            kind = kind,
+            timeFilter = timeFilter,
+            amountFilter = amountFilter,
+            sortFilter = sortFilter,
+            onTime = { timeFilter = it },
+            onAmount = { amountFilter = it },
+            onSort = { sortFilter = it },
+            onDismiss = { sheetKind = null },
+        )
+    }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SuggestionList(snapshot: Snapshot, onPick: (String) -> Unit) {
+private fun SuggestionSection(
+    snapshot: Snapshot,
+    history: List<String>,
+    onPick: (String) -> Unit,
+    onClearHistory: () -> Unit,
+) {
     val top = remember(snapshot.transactions, snapshot.categories) {
         val cutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
         snapshot.transactions
@@ -329,6 +393,41 @@ private fun SuggestionList(snapshot: Snapshot, onPick: (String) -> Unit) {
     }
 
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+        if (history.isNotEmpty()) {
+            SectionLabel(
+                text = "搜索历史",
+                modifier = Modifier.padding(bottom = 10.dp),
+                trailing = {
+                    Text(
+                        text = "清空",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Fen.colors.inkSoft,
+                        modifier = Modifier.clickable(onClick = onClearHistory),
+                    )
+                },
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                history.forEach { keyword ->
+                    Surface(
+                        onClick = { onPick(keyword) },
+                        shape = RoundedCornerShape(12.dp),
+                        color = Fen.colors.surface,
+                    ) {
+                        Text(
+                            text = keyword,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Fen.colors.inkSoft,
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(18.dp))
+        }
+
         SectionLabel("搜索建议", modifier = Modifier.padding(bottom = 10.dp))
         if (top.isEmpty()) {
             Text(
@@ -337,32 +436,28 @@ private fun SuggestionList(snapshot: Snapshot, onPick: (String) -> Unit) {
                 color = Fen.colors.inkSoft,
             )
         } else {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                top.chunked(3).forEach { row ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        row.forEach { category ->
-                            Surface(
-                                onClick = { onPick(category.name) },
-                                shape = RoundedCornerShape(12.dp),
-                                color = Fen.colors.surface,
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Icon(
-                                        imageVector = categoryIcon(category.icon),
-                                        contentDescription = null,
-                                        tint = Color(category.color),
-                                        modifier = Modifier.size(14.dp),
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(
-                                        category.name,
-                                        style = MaterialTheme.typography.labelLarge,
-                                    )
-                                }
-                            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                top.forEach { category ->
+                    Surface(
+                        onClick = { onPick(category.name) },
+                        shape = RoundedCornerShape(12.dp),
+                        color = Fen.colors.surface,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                imageVector = categoryIcon(category.icon),
+                                contentDescription = null,
+                                tint = Color(category.color),
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(category.name, style = MaterialTheme.typography.labelLarge)
                         }
                     }
                 }
@@ -374,6 +469,70 @@ private fun SuggestionList(snapshot: Snapshot, onPick: (String) -> Unit) {
             style = MaterialTheme.typography.labelMedium,
             color = Fen.colors.inkFaint,
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FilterSheet(
+    kind: FilterKind,
+    timeFilter: TimeFilter,
+    amountFilter: AmountFilter,
+    sortFilter: SortFilter,
+    onTime: (TimeFilter) -> Unit,
+    onAmount: (AmountFilter) -> Unit,
+    onSort: (SortFilter) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val title = when (kind) {
+        FilterKind.TIME -> "时间范围"
+        FilterKind.AMOUNT -> "金额范围"
+        FilterKind.SORT -> "排序方式"
+    }
+    val options: List<Pair<String, Boolean>> = when (kind) {
+        FilterKind.TIME -> TimeFilter.entries.map { it.label to (timeFilter == it) }
+        FilterKind.AMOUNT -> AmountFilter.entries.map { it.label to (amountFilter == it) }
+        FilterKind.SORT -> SortFilter.entries.map { it.label to (sortFilter == it) }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Fen.colors.surface,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        dragHandle = { BottomSheetDefaults.DragHandle(color = Fen.colors.inkFaint) },
+    ) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+            Text(title, style = MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.height(8.dp))
+            options.forEachIndexed { index, (label, selected) ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            when (kind) {
+                                FilterKind.TIME -> onTime(TimeFilter.entries[index])
+                                FilterKind.AMOUNT -> onAmount(AmountFilter.entries[index])
+                                FilterKind.SORT -> onSort(SortFilter.entries[index])
+                            }
+                            onDismiss()
+                        }
+                        .padding(vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (selected) Fen.colors.ink else Fen.colors.inkSoft,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (selected) {
+                        Text("✓", color = Fen.colors.ink)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -484,51 +643,43 @@ private fun FilterPill(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun FilterDropdown(
+private fun FilterChip(
+    icon: ImageVector,
     label: String,
-    value: String,
-    options: List<String>,
-    onSelect: (Int) -> Unit,
+    active: Boolean,
+    onClick: () -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        Surface(
-            onClick = { expanded = true },
-            shape = RoundedCornerShape(10.dp),
-            color = Fen.colors.surface,
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(10.dp),
+        color = if (active) Fen.colors.surfaceMuted else Fen.colors.surface,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "$label · $value",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = Fen.colors.inkSoft,
-                )
-                Spacer(Modifier.width(2.dp))
-                Icon(
-                    Icons.Outlined.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = Fen.colors.inkFaint,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEachIndexed { index, option ->
-                DropdownMenuItem(
-                    text = { Text(option) },
-                    onClick = {
-                        onSelect(index)
-                        expanded = false
-                    },
-                )
-            }
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (active) Fen.colors.ink else Fen.colors.inkSoft,
+                modifier = Modifier.size(14.dp),
+            )
+            Spacer(Modifier.width(5.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                color = if (active) Fen.colors.ink else Fen.colors.inkSoft,
+            )
+            Spacer(Modifier.width(2.dp))
+            Icon(
+                Icons.Outlined.KeyboardArrowDown,
+                contentDescription = null,
+                tint = Fen.colors.inkFaint,
+                modifier = Modifier.size(16.dp),
+            )
         }
     }
 }
 
 private fun Long.toDate(): LocalDate =
     Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDate()
-

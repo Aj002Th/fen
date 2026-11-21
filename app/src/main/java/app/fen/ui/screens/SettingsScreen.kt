@@ -129,7 +129,7 @@ fun SettingsScreen(
             ) {
                 SettingItem(
                     title = "Fen",
-                    subtitle = "版本 0.6.0 · 开源",
+                    subtitle = "版本 0.6.1 · 开源",
                     icon = Icons.Outlined.Info,
                     tint = Color(0xFFF2583E),
                     onClick = {
@@ -302,6 +302,7 @@ private fun SettingItem(
         )
     }
 }
+
 
 
 
