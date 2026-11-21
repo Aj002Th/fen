@@ -59,6 +59,7 @@ import app.fen.data.Tx
 import app.fen.ui.screens.AddTransactionScreen
 import app.fen.ui.screens.BillsScreen
 import app.fen.ui.screens.CategoryManagerScreen
+import app.fen.ui.screens.SearchScreen
 import app.fen.ui.screens.SettingsScreen
 import app.fen.ui.screens.StatsScreen
 import app.fen.ui.theme.Fen
@@ -96,7 +97,6 @@ private fun FenContent(viewModel: FenViewModel) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val showBottomBar = currentRoute == "bills" || currentRoute == "stats"
-
     var showAdd by remember { mutableStateOf(false) }
     var editingTx by remember { mutableStateOf<Tx?>(null) }
     val scope = rememberCoroutineScope()
@@ -152,6 +152,7 @@ private fun FenContent(viewModel: FenViewModel) {
                             editingTx = tx
                             showAdd = true
                         },
+                        onOpenSearch = { navController.navigate("search") },
                         onOpenSettings = { navController.navigate("settings") },
                     )
                 }
@@ -176,6 +177,12 @@ private fun FenContent(viewModel: FenViewModel) {
                         onClearData = {
                             scope.launch(Dispatchers.IO) { viewModel.clearTransactions() }
                         },
+                    )
+                }
+                composable("search") {
+                    SearchScreen(
+                        snapshot = snapshot,
+                        onBack = { navController.popBackStack() },
                     )
                 }
                 composable("categories") {
@@ -302,3 +309,4 @@ private fun FenBottomBar(currentRoute: String?, onSelect: (String) -> Unit, onAd
         }
     }
 }
+

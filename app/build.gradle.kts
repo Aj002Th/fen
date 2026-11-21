@@ -11,8 +11,8 @@ android {
         applicationId = "app.fen"
         minSdk = 26
         targetSdk = 37
-        versionCode = 11
-        versionName = "0.5.2"
+        versionCode = 12
+        versionName = "0.6.0"
     }
 
     compileOptions {
@@ -50,6 +50,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     debugImplementation(libs.compose.ui.tooling)
 }
+
 
 
 

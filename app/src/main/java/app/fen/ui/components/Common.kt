@@ -31,6 +31,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -214,6 +215,7 @@ fun SearchField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     placeholder: String = "搜索备注、分类或金额",
+    focusRequester: androidx.compose.ui.focus.FocusRequester? = null,
 ) {
     Surface(
         shape = RoundedCornerShape(14.dp),
@@ -237,7 +239,15 @@ fun SearchField(
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = Fen.colors.ink),
                 cursorBrush = SolidColor(Fen.colors.ink),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .then(
+                        if (focusRequester != null) {
+                            Modifier.focusRequester(focusRequester)
+                        } else {
+                            Modifier
+                        }
+                    ),
                 decorationBox = { inner ->
                     if (value.isEmpty()) {
                         Text(

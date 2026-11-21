@@ -20,8 +20,10 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -50,7 +52,6 @@ import app.fen.ui.components.IconBadge
 import app.fen.ui.components.MonthBar
 import app.fen.ui.components.PageHeader
 import app.fen.ui.components.RowDivider
-import app.fen.ui.components.SearchField
 import app.fen.ui.components.SectionLabel
 import app.fen.ui.icons.categoryIcon
 import app.fen.ui.theme.Fen
@@ -69,29 +70,16 @@ fun BillsScreen(
     onToday: () -> Unit,
     onDelete: (Tx) -> Unit,
     onEdit: (Tx) -> Unit,
+    onOpenSearch: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
-    var query by remember { mutableStateOf("") }
     var pendingDelete by remember { mutableStateOf<Tx?>(null) }
 
     val categories = remember(snapshot.categories) { snapshot.categories.associateBy { it.id } }
 
     val monthTxs = remember(snapshot.transactions, month) { snapshot.transactions.inMonth(month) }
-    val visible = remember(monthTxs, query, categories) {
-        if (query.isBlank()) {
-            monthTxs
-        } else {
-            val q = query.trim().lowercase()
-            monthTxs.filter { tx ->
-                val category = tx.categoryId?.let { categories[it] }?.name.orEmpty()
-                tx.note.lowercase().contains(q) ||
-                    category.lowercase().contains(q) ||
-                    formatMoney(tx.amount).contains(q)
-            }
-        }
-    }
-    val totals = remember(visible) { visible.totals() }
-    val groups = remember(visible) { visible.groupByDay() }
+    val totals = remember(monthTxs) { monthTxs.totals() }
+    val groups = remember(monthTxs) { monthTxs.groupByDay() }
 
     Column(Modifier.fillMaxSize()) {
         PageHeader(
@@ -107,11 +95,30 @@ fun BillsScreen(
             },
         )
 
-        SearchField(
-            value = query,
-            onValueChange = { query = it },
-            modifier = Modifier.padding(horizontal = 20.dp),
-        )
+        Surface(
+            onClick = onOpenSearch,
+            shape = RoundedCornerShape(14.dp),
+            color = Fen.colors.surfaceMuted,
+            modifier = Modifier.padding(horizontal = 20.dp).fillMaxWidth().height(44.dp),
+        ) {
+            Row(
+                Modifier.padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Outlined.Search,
+                    contentDescription = null,
+                    tint = Fen.colors.inkSoft,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(Modifier.size(8.dp))
+                Text(
+                    "搜索备注、分类或金额",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Fen.colors.inkFaint,
+                )
+            }
+        }
 
         Spacer(Modifier.height(14.dp))
 
@@ -145,10 +152,10 @@ fun BillsScreen(
                 SummaryPager(totals.expense, totals.income)
                 Spacer(Modifier.height(22.dp))
                 SectionLabel(
-                    text = if (query.isBlank()) "明细" else "搜索结果",
+                    text = "明细",
                     trailing = {
                         Text(
-                            text = "${visible.size} 笔",
+                            text = "${monthTxs.size} 笔",
                             style = MaterialTheme.typography.labelMedium,
                             color = Fen.colors.inkSoft,
                         )
@@ -160,8 +167,8 @@ fun BillsScreen(
             if (groups.isEmpty()) {
                 item {
                     EmptyState(
-                        title = if (query.isBlank()) "这个月还没有记录" else "没有找到相关记录",
-                        subtitle = if (query.isBlank()) "点右下角「+」记下第一笔" else "换个关键词试试",
+                        title = "这个月还没有记录",
+                        subtitle = "点右下角「+」记下第一笔",
                     )
                 }
             }
@@ -381,4 +388,6 @@ private fun TransactionRow(
         )
     }
 }
+
+
 
