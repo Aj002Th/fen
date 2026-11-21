@@ -13,12 +13,15 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.Add
@@ -29,6 +32,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -64,12 +68,14 @@ fun CategoryManagerScreen(
     onAdd: (name: String, type: TxType, icon: String, color: Long) -> Unit,
     onUpdate: (Category) -> Unit,
     onDelete: (Category) -> Unit,
+    onMerge: (Category, Category) -> Unit,
     countFor: (String) -> Int,
 ) {
     var editorTarget by remember { mutableStateOf<Category?>(null) }
     var editorType by remember { mutableStateOf(TxType.EXPENSE) }
     var showEditor by remember { mutableStateOf(false) }
-    var blocked by remember { mutableStateOf<Pair<String, Int>?>(null) }
+    var mergeSource by remember { mutableStateOf<Category?>(null) }
+    var mergeTarget by remember { mutableStateOf<Category?>(null) }
 
     fun openNew(type: TxType) {
         editorTarget = null
@@ -183,7 +189,9 @@ fun CategoryManagerScreen(
                 {
                     val used = countFor(target.id)
                     if (used > 0) {
-                        blocked = target.name to used
+                        mergeSource = target
+                        mergeTarget = null
+                        showEditor = false
                     } else {
                         onDelete(target)
                         showEditor = false
@@ -193,13 +201,76 @@ fun CategoryManagerScreen(
         )
     }
 
-    blocked?.let { (name, count) ->
+    mergeSource?.let { source ->
+        val used = countFor(source.id)
+        val candidates = snapshot.categories
+            .filter { it.type == source.type && it.id != source.id }
+            .sortedBy { it.sortOrder }
         AlertDialog(
-            onDismissRequest = { blocked = null },
-            title = { Text("无法删除「$name」") },
-            text = { Text("这个分类下还有 $count 条记录。请先把这些记录改到其他分类，再删除。") },
+            onDismissRequest = {
+                mergeSource = null
+                mergeTarget = null
+            },
+            title = { Text("「${source.name}」下有 $used 条记录") },
+            text = {
+                if (candidates.isEmpty()) {
+                    Text("还没有同类型的其他分类。请先新建一个分类，再把记录转移过去。")
+                } else {
+                    Column(
+                        Modifier
+                            .heightIn(max = 300.dp)
+                            .verticalScroll(rememberScrollState()),
+                    ) {
+                        Text(
+                            "选择要转移到的分类，转移后会删除「${source.name}」。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Fen.colors.inkSoft,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        candidates.forEach { candidate ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { mergeTarget = candidate }
+                                    .padding(vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                RadioButton(
+                                    selected = mergeTarget?.id == candidate.id,
+                                    onClick = { mergeTarget = candidate },
+                                )
+                                Spacer(Modifier.size(8.dp))
+                                IconBadge(
+                                    icon = categoryIcon(candidate.icon),
+                                    color = Color(candidate.color),
+                                    size = 32.dp,
+                                    iconSize = 16.dp,
+                                )
+                                Spacer(Modifier.size(8.dp))
+                                Text(candidate.name, style = MaterialTheme.typography.titleMedium)
+                            }
+                        }
+                    }
+                }
+            },
             confirmButton = {
-                TextButton(onClick = { blocked = null }) { Text("知道了") }
+                TextButton(
+                    enabled = mergeTarget != null,
+                    onClick = {
+                        val target = mergeTarget
+                        if (target != null) {
+                            onMerge(source, target)
+                            mergeSource = null
+                            mergeTarget = null
+                        }
+                    },
+                ) { Text("转移并删除") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    mergeSource = null
+                    mergeTarget = null
+                }) { Text("取消") }
             },
         )
     }
@@ -404,3 +475,4 @@ private fun CategoryEditorSheet(
         )
     }
 }
+

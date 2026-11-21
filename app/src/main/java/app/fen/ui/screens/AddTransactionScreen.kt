@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -49,8 +49,8 @@ import app.fen.data.Snapshot
 import app.fen.data.Tx
 import app.fen.data.TxType
 import app.fen.ui.components.AmountKeypad
-import app.fen.ui.components.DateTimePickerSheet
 import app.fen.ui.components.CircleAction
+import app.fen.ui.components.DateTimePickerSheet
 import app.fen.ui.components.Segmented
 import app.fen.ui.icons.categoryIcon
 import app.fen.ui.theme.Fen
@@ -97,8 +97,7 @@ fun AddTransactionScreen(
     }
     val selectedCategoryId = categories.firstOrNull { it.id == categoryId }?.id
         ?: categories.firstOrNull()?.id
-    val categoryRows = (categories.size + 1 + 4) / 5
-    val recent = remember(snapshot.transactions, snapshot.categories, type) {
+    val recent = remember(snapshot.transactions, type) {
         snapshot.transactions
             .filter { it.type == type && it.categoryId != null }
             .distinctBy { it.categoryId }
@@ -169,148 +168,161 @@ fun AddTransactionScreen(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             )
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
 
+            // 分类、时间备注、最近记录放在一块可滚动的区域里；
+            // 金额和键盘固定在底部，分类再多也不会把按钮挤出屏幕。
             Box(
                 Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 300.dp)
-                    .verticalScroll(rememberScrollState()),
+                    .weight(1f)
+                    .fillMaxWidth(),
             ) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                    // 末尾追加一个「管理」入口，避免用户找不到分类设置
-                    val cells: List<Category?> = categories + listOf(null)
-                    cells.chunked(5).forEach { row ->
-                        Row(Modifier.fillMaxWidth()) {
-                            row.forEach { category ->
-                                Box(Modifier.weight(1f)) {
-                                    if (category == null) {
-                                        ManageCategoriesTile(onClick = onManageCategories)
-                                    } else {
-                                        CategoryTile(
-                                            category = category,
-                                            selected = category.id == selectedCategoryId,
-                                            onClick = { categoryId = category.id },
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp)) {
+                        val cells: List<Category?> = categories + listOf(null)
+                        cells.chunked(5).forEach { row ->
+                            Row(Modifier.fillMaxWidth()) {
+                                row.forEach { category ->
+                                    Box(Modifier.weight(1f)) {
+                                        if (category == null) {
+                                            ManageCategoriesTile(onClick = onManageCategories)
+                                        } else {
+                                            CategoryTile(
+                                                category = category,
+                                                selected = category.id == selectedCategoryId,
+                                                onClick = { categoryId = category.id },
+                                            )
+                                        }
+                                    }
+                                }
+                                repeat(5 - row.size) { Spacer(Modifier.weight(1f)) }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Surface(
+                        shape = RoundedCornerShape(22.dp),
+                        color = Fen.colors.surface,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    ) {
+                        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().height(40.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "时间",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Fen.colors.inkSoft,
+                                    modifier = Modifier.width(48.dp),
+                                )
+                                DateTimeChip(dateTime = dateTime, onClick = { showPicker = true })
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth().height(40.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    text = "备注",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Fen.colors.inkSoft,
+                                    modifier = Modifier.width(48.dp),
+                                )
+                                BasicTextField(
+                                    value = note,
+                                    onValueChange = { note = it },
+                                    singleLine = true,
+                                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = Fen.colors.ink),
+                                    cursorBrush = SolidColor(accent),
+                                    modifier = Modifier.weight(1f),
+                                    decorationBox = { inner ->
+                                        if (note.isEmpty()) {
+                                            Text(
+                                                "点击添加备注",
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                color = Fen.colors.inkFaint,
+                                            )
+                                        }
+                                        inner()
+                                    },
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    if (recent.isEmpty()) {
+                        Text(
+                            text = "记一笔之后，常用记录会出现在这里",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Fen.colors.inkFaint,
+                            modifier = Modifier.padding(horizontal = 20.dp),
+                        )
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            recent.forEach { tx ->
+                                val cat = snapshot.categories.firstOrNull { it.id == tx.categoryId }
+                                Surface(
+                                    onClick = {
+                                        type = tx.type
+                                        categoryId = tx.categoryId
+                                        amountText = tx.amount.toAmountInput()
+                                        amountTouched = true
+                                        note = tx.note
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = Fen.colors.surface,
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Icon(
+                                            imageVector = categoryIcon(cat?.icon),
+                                            contentDescription = null,
+                                            tint = Color(cat?.color ?: 0xFF7C8794),
+                                            modifier = Modifier.size(14.dp),
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            cat?.name ?: "未分类",
+                                            style = MaterialTheme.typography.labelLarge,
+                                        )
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            formatMoney(tx.amount),
+                                            style = MaterialTheme.typography.labelLarge
+                                                .copy(fontFeatureSettings = "tnum"),
+                                            color = Fen.colors.inkSoft,
                                         )
                                     }
                                 }
                             }
-                            repeat(5 - row.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
+
+                    Spacer(Modifier.height(8.dp))
                 }
             }
-
-            Spacer(Modifier.height(10.dp))
-
-            Surface(
-                shape = RoundedCornerShape(22.dp),
-                color = Fen.colors.surface,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            ) {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "时间",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Fen.colors.inkSoft,
-                            modifier = Modifier.padding(end = 10.dp),
-                        )
-                        DateTimeChip(dateTime = dateTime, onClick = { showPicker = true })
-                        Spacer(Modifier.weight(1f))
-                    }
-                    Spacer(Modifier.height(10.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "备注",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Fen.colors.inkSoft,
-                            modifier = Modifier.padding(end = 10.dp),
-                        )
-                        BasicTextField(
-                            value = note,
-                            onValueChange = { note = it },
-                            singleLine = true,
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(color = Fen.colors.ink),
-                            cursorBrush = SolidColor(accent),
-                            modifier = Modifier.weight(1f),
-                            decorationBox = { inner ->
-                                if (note.isEmpty()) {
-                                    Text(
-                                        "点击添加备注",
-                                        style = MaterialTheme.typography.bodyLarge,
-                                        color = Fen.colors.inkFaint,
-                                    )
-                                }
-                                inner()
-                            },
-                        )
-                    }
-                }
-            }
-
-            if (categoryRows <= 2) {
-                Spacer(Modifier.height(14.dp))
-                if (recent.isEmpty()) {
-                    Text(
-                        text = "记一笔之后，常用记录会出现在这里",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Fen.colors.inkFaint,
-                        modifier = Modifier.padding(horizontal = 4.dp),
-                    )
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        recent.forEach { tx ->
-                            val cat = snapshot.categories.firstOrNull { it.id == tx.categoryId }
-                            Surface(
-                                onClick = {
-                                    type = tx.type
-                                    categoryId = tx.categoryId
-                                    amountText = tx.amount.toAmountInput()
-                                    amountTouched = true
-                                    note = tx.note
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                color = Fen.colors.surface,
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Icon(
-                                        imageVector = categoryIcon(cat?.icon),
-                                        contentDescription = null,
-                                        tint = Color(cat?.color ?: 0xFF7C8794),
-                                        modifier = Modifier.size(14.dp),
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(
-                                        cat?.name ?: "未分类",
-                                        style = MaterialTheme.typography.labelLarge,
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(
-                                        formatMoney(tx.amount),
-                                        style = MaterialTheme.typography.labelLarge
-                                            .copy(fontFeatureSettings = "tnum"),
-                                        color = Fen.colors.inkSoft,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.weight(1f))
 
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.Bottom,
-            ) {                Text(
+            ) {
+                Text(
                     text = "¥",
                     style = MaterialTheme.typography.headlineSmall,
                     color = accent.copy(alpha = 0.6f),
@@ -347,7 +359,7 @@ fun AddTransactionScreen(
                 showRecord = initial == null,
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(16.dp))
         }
     }
 
@@ -363,7 +375,6 @@ fun AddTransactionScreen(
     }
 }
 
-
 @Composable
 private fun CategoryTile(
     category: Category,
@@ -375,7 +386,7 @@ private fun CategoryTile(
         modifier = Modifier
             .clip(RoundedCornerShape(16.dp))
             .clickable(
-                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick,
             )
@@ -423,7 +434,7 @@ private fun ManageCategoriesTile(onClick: () -> Unit) {
         modifier = Modifier
             .clip(RoundedCornerShape(16.dp))
             .clickable(
-                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick,
             )
@@ -491,8 +502,4 @@ private fun formatDateTime(dateTime: LocalDateTime): String {
         "${dateTime.monthValue}月${dateTime.dayOfMonth}日 $time"
     }
 }
-
-
-
-
 

@@ -186,6 +186,7 @@ private fun FenContent(viewModel: FenViewModel) {
                         },
                         onUpdate = { category -> viewModel.updateCategory(category) },
                         onDelete = { category -> viewModel.deleteCategory(category) },
+                        onMerge = { from, into -> viewModel.mergeCategory(from, into) },
                         countFor = { id -> viewModel.categoryUsage(id) },
                     )
                 }

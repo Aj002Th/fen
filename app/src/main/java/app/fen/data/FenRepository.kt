@@ -77,6 +77,13 @@ class FenRepository(private val db: FenDb) {
         refresh()
     }
 
+    /** 转移流水并删除分类 */
+    fun mergeCategory(fromId: String, intoId: String) {
+        db.reassignCategory(fromId, intoId)
+        db.deleteCategory(fromId)
+        refresh()
+    }
+
     fun transactionCount(categoryId: String): Int = db.countTransactions(categoryId)
 
     /** 开发/验收用：生成演示数据 */

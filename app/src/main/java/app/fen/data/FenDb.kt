@@ -155,6 +155,16 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
         writableDatabase.delete("category", "id = ?", arrayOf(id))
     }
 
+    /** 把某个分类下的所有流水转移到另一个分类 */
+    fun reassignCategory(fromId: String, toId: String) {
+        writableDatabase.update(
+            "tx",
+            ContentValues().apply { put("category_id", toId) },
+            "category_id = ?",
+            arrayOf(fromId),
+        )
+    }
+
     fun countTransactions(categoryId: String): Int {
         readableDatabase.rawQuery("SELECT COUNT(*) FROM tx WHERE category_id = ?", arrayOf(categoryId)).use {
             return if (it.moveToFirst()) it.getInt(0) else 0
