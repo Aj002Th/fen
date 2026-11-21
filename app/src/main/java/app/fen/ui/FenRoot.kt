@@ -2,9 +2,12 @@ package app.fen.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -23,11 +26,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.PieChart
 import androidx.compose.material.icons.outlined.ReceiptLong
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -52,7 +53,6 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import app.fen.ui.screens.AddTransactionScreen
-import app.fen.ui.screens.AssetsScreen
 import app.fen.ui.screens.BillsScreen
 import app.fen.ui.screens.SettingsScreen
 import app.fen.ui.screens.StatsScreen
@@ -63,8 +63,6 @@ private data class Tab(val route: String, val label: String, val icon: ImageVect
 private val tabs = listOf(
     Tab("bills", "明细", Icons.Outlined.ReceiptLong),
     Tab("stats", "统计", Icons.Outlined.PieChart),
-    Tab("assets", "资产", Icons.Outlined.AccountBalanceWallet),
-    Tab("settings", "设置", Icons.Outlined.Settings),
 )
 
 @Composable
@@ -74,6 +72,7 @@ fun FenRoot(viewModel: FenViewModel = viewModel()) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+    val showBottomBar = currentRoute == "bills" || currentRoute == "stats"
 
     var showAdd by remember { mutableStateOf(false) }
 
@@ -83,25 +82,35 @@ fun FenRoot(viewModel: FenViewModel = viewModel()) {
         Scaffold(
             containerColor = Fen.colors.bg,
             bottomBar = {
-                FenBottomBar(
-                    currentRoute = currentRoute,
-                    onSelect = { route ->
-                        if (currentRoute != route) {
-                            navController.navigate(route) {
-                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
+                if (showBottomBar) {
+                    FenBottomBar(
+                        currentRoute = currentRoute,
+                        onSelect = { route ->
+                            if (currentRoute != route) {
+                                navController.navigate(route) {
+                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
                             }
-                        }
-                    },
-                    onAdd = { showAdd = true },
-                )
+                        },
+                        onAdd = { showAdd = true },
+                    )
+                }
             },
         ) { innerPadding ->
             NavHost(
                 navController = navController,
                 startDestination = "bills",
                 modifier = Modifier.padding(innerPadding),
+                enterTransition = {
+                    fadeIn(tween(240)) + slideInHorizontally(tween(240)) { it / 18 }
+                },
+                exitTransition = { fadeOut(tween(140)) },
+                popEnterTransition = {
+                    fadeIn(tween(240)) + slideInHorizontally(tween(240)) { -it / 18 }
+                },
+                popExitTransition = { fadeOut(tween(140)) },
             ) {
                 composable("bills") {
                     BillsScreen(
@@ -110,6 +119,7 @@ fun FenRoot(viewModel: FenViewModel = viewModel()) {
                         onShiftMonth = viewModel::shiftMonth,
                         onToday = { viewModel.jumpTo(java.time.YearMonth.now()) },
                         onDelete = viewModel::delete,
+                        onOpenSettings = { navController.navigate("settings") },
                     )
                 }
                 composable("stats") {
@@ -117,21 +127,19 @@ fun FenRoot(viewModel: FenViewModel = viewModel()) {
                         snapshot = snapshot,
                         month = month,
                         onShiftMonth = viewModel::shiftMonth,
+                        onOpenSettings = { navController.navigate("settings") },
                     )
                 }
-                composable("assets") {
-                    AssetsScreen(snapshot = snapshot)
-                }
                 composable("settings") {
-                    SettingsScreen()
+                    SettingsScreen(onBack = { navController.popBackStack() })
                 }
             }
         }
 
         AnimatedVisibility(
             visible = showAdd,
-            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            enter = slideInVertically(tween(280), initialOffsetY = { it }) + fadeIn(tween(200)),
+            exit = slideOutVertically(tween(220), targetOffsetY = { it }) + fadeOut(tween(160)),
         ) {
             AddTransactionScreen(
                 snapshot = snapshot,

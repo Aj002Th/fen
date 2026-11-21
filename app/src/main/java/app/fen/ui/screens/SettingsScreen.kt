@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.outlined.Book
 import androidx.compose.material.icons.outlined.Category
@@ -33,6 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import app.fen.ui.components.CircleAction
 import app.fen.ui.components.IconBadge
 import app.fen.ui.components.RowDivider
 import app.fen.ui.components.SectionLabel
@@ -46,7 +48,7 @@ private data class SettingRow(
 )
 
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(onBack: () -> Unit) {
     val groups = listOf(
         "记账" to listOf(
             SettingRow("分类管理", "图标、颜色与排序", Icons.Outlined.Category, Color(0xFFF2A93E)),
@@ -62,20 +64,28 @@ fun SettingsScreen() {
             SettingRow("导出 CSV", "用表格打开账单", Icons.Outlined.Book, Color(0xFFE05C9A)),
         ),
         "关于" to listOf(
-            SettingRow("Fen", "版本 0.2.0 · 开源", Icons.Outlined.Info, Color(0xFFF2583E)),
+            SettingRow("Fen", "版本 0.2.1 · 开源", Icons.Outlined.Info, Color(0xFFF2583E)),
         ),
     )
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 32.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 32.dp),
     ) {
         item {
-            Text(
-                "设置",
-                style = MaterialTheme.typography.headlineLarge,
-                modifier = Modifier.padding(bottom = 6.dp),
-            )
+            Row(
+                Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircleAction(
+                    icon = Icons.AutoMirrored.Rounded.ArrowBack,
+                    contentDescription = "返回",
+                    onClick = onBack,
+                    tint = Fen.colors.ink,
+                )
+                Spacer(Modifier.size(10.dp))
+                Text("设置", style = MaterialTheme.typography.headlineLarge)
+            }
         }
         groups.forEach { (title, items) ->
             item { SectionLabel(title, modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)) }
@@ -123,4 +133,5 @@ fun SettingsScreen() {
         item { Spacer(Modifier.height(88.dp)) }
     }
 }
+
 

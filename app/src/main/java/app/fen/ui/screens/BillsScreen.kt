@@ -19,14 +19,9 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -39,10 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.fen.data.Snapshot
@@ -55,7 +47,10 @@ import app.fen.ui.components.AmountText
 import app.fen.ui.components.CircleAction
 import app.fen.ui.components.EmptyState
 import app.fen.ui.components.IconBadge
+import app.fen.ui.components.MonthBar
+import app.fen.ui.components.PageHeader
 import app.fen.ui.components.RowDivider
+import app.fen.ui.components.SearchField
 import app.fen.ui.components.SectionLabel
 import app.fen.ui.icons.categoryIcon
 import app.fen.ui.theme.Fen
@@ -72,11 +67,10 @@ fun BillsScreen(
     onShiftMonth: (Long) -> Unit,
     onToday: () -> Unit,
     onDelete: (Tx) -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
-    var searchOpen by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var pendingDelete by remember { mutableStateOf<Tx?>(null) }
-    val focusRequester = remember { FocusRequester() }
 
     val categories = remember(snapshot.categories) { snapshot.categories.associateBy { it.id } }
     val accounts = remember(snapshot.accounts) { snapshot.accounts.associateBy { it.id } }
@@ -101,118 +95,57 @@ fun BillsScreen(
     val groups = remember(visible) { visible.groupByDay() }
     val budget = snapshot.budgets[month.toString()]
 
-    Box(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize()) {
+        PageHeader(
+            title = "明细",
+            modifier = Modifier.padding(horizontal = 20.dp),
+            actions = {
+                CircleAction(
+                    icon = Icons.Outlined.Settings,
+                    contentDescription = "设置",
+                    onClick = onOpenSettings,
+                    tint = Fen.colors.ink,
+                )
+            },
+        )
+
+        SearchField(
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier.padding(horizontal = 20.dp),
+        )
+
+        Spacer(Modifier.height(14.dp))
+
         LazyColumn(
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(0.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 96.dp),
         ) {
             item {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            text = "账本",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Fen.colors.inkSoft,
-                        )
-                        Text(
-                            text = "默认账本",
-                            style = MaterialTheme.typography.headlineLarge,
-                        )
-                    }
-                    CircleAction(
-                        icon = if (searchOpen) Icons.Outlined.Close else Icons.Outlined.Search,
-                        contentDescription = if (searchOpen) "关闭搜索" else "搜索",
-                        onClick = {
-                            searchOpen = !searchOpen
-                            if (!searchOpen) query = ""
-                        },
-                        tint = Fen.colors.ink,
-                    )
-                }
-
-                if (searchOpen) {
-                    Spacer(Modifier.height(12.dp))
-                    Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = Fen.colors.surfaceMuted,
-                        modifier = Modifier.fillMaxWidth().height(44.dp),
-                    ) {
-                        Row(
-                            Modifier.padding(horizontal = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                Icons.Outlined.Search,
-                                contentDescription = null,
-                                tint = Fen.colors.inkSoft,
-                                modifier = Modifier.size(18.dp),
-                            )
-                            Spacer(Modifier.size(8.dp))
-                            BasicTextField(
-                                value = query,
-                                onValueChange = { query = it },
-                                singleLine = true,
-                                textStyle = MaterialTheme.typography.bodyLarge.copy(color = Fen.colors.ink),
-                                cursorBrush = androidx.compose.ui.graphics.SolidColor(Fen.colors.ink),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .focusRequester(focusRequester),
-                                decorationBox = { inner ->
-                                    if (query.isEmpty()) {
-                                        Text(
-                                            "搜索备注、分类、账户或金额",
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            color = Fen.colors.inkFaint,
-                                        )
-                                    }
-                                    inner()
-                                },
-                            )
+                MonthBar(
+                    label = month.label(),
+                    onPrev = { onShiftMonth(-1) },
+                    onNext = { onShiftMonth(1) },
+                    trailing = {
+                        if (month != YearMonth.now()) {
+                            Surface(
+                                onClick = onToday,
+                                shape = RoundedCornerShape(12.dp),
+                                color = Fen.colors.surface,
+                            ) {
+                                Text(
+                                    "今天",
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = Fen.colors.inkSoft,
+                                )
+                            }
                         }
-                    }
-                }
-
-                Spacer(Modifier.height(16.dp))
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    CircleAction(
-                        icon = Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
-                        contentDescription = "上一月",
-                        onClick = { onShiftMonth(-1) },
-                    )
-                    Text(
-                        text = month.label(),
-                        style = MaterialTheme.typography.titleLarge,
-                        modifier = Modifier.padding(horizontal = 14.dp),
-                    )
-                    CircleAction(
-                        icon = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                        contentDescription = "下一月",
-                        onClick = { onShiftMonth(1) },
-                    )
-                    Spacer(Modifier.weight(1f))
-                    if (month != YearMonth.now()) {
-                        Surface(
-                            onClick = onToday,
-                            shape = RoundedCornerShape(12.dp),
-                            color = Fen.colors.surface,
-                        ) {
-                            Text(
-                                "今天",
-                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                                style = MaterialTheme.typography.labelLarge,
-                                color = Fen.colors.inkSoft,
-                            )
-                        }
-                    }
-                }
-
+                    },
+                )
                 Spacer(Modifier.height(14.dp))
-
                 SummaryPager(totals.expense, totals.income, budget)
-
                 Spacer(Modifier.height(22.dp))
-
                 SectionLabel(
                     text = if (query.isBlank()) "明细" else "搜索结果",
                     trailing = {
@@ -318,10 +251,10 @@ private fun SummaryPager(expense: Long, income: Long, budget: Long?) {
 @Composable
 private fun SummaryCard(page: Int, expense: Long, income: Long, budget: Long?) {
     val net = income - expense
-    val (label, value, color) = when (page) {
-        0 -> Triple("本月支出", expense, Fen.colors.expense)
-        1 -> Triple("本月收入", income, Fen.colors.income)
-        else -> Triple("本月结余", net, Fen.colors.ink)
+    val (label, value) = when (page) {
+        0 -> "本月支出" to expense
+        1 -> "本月收入" to income
+        else -> "本月结余" to net
     }
     Surface(
         shape = RoundedCornerShape(24.dp),
@@ -342,19 +275,17 @@ private fun SummaryCard(page: Int, expense: Long, income: Long, budget: Long?) {
                 prefix = "¥",
             )
             Spacer(Modifier.height(10.dp))
-            if (page == 0) {
-                MetricRow(listOf("收入" to income, "结余" to net))
-            } else if (page == 1) {
-                MetricRow(listOf("支出" to expense, "结余" to net))
-            } else {
-                MetricRow(listOf("支出" to expense, "收入" to income))
+            when (page) {
+                0 -> MetricRow(listOf("收入" to income, "结余" to net))
+                1 -> MetricRow(listOf("支出" to expense, "结余" to net))
+                else -> MetricRow(listOf("支出" to expense, "收入" to income))
             }
         }
     }
 }
 
 @Composable
-private fun MetricRow(items: List<Pair<String, Long?>>) {
+private fun MetricRow(items: List<Pair<String, Long>>) {
     Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
         items.forEach { (label, value) ->
             Column {
@@ -364,7 +295,7 @@ private fun MetricRow(items: List<Pair<String, Long?>>) {
                     color = Fen.colors.inkSoft,
                 )
                 Text(
-                    text = value?.let { formatMoney(it) } ?: "未设置",
+                    text = formatMoney(value),
                     style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
                     color = Fen.colors.ink,
                 )

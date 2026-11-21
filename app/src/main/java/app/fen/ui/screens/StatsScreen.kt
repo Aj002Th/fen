@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material3.Icon
@@ -41,6 +42,8 @@ import app.fen.data.inMonth
 import app.fen.data.totals
 import app.fen.ui.components.AmountText
 import app.fen.ui.components.CircleAction
+import app.fen.ui.components.MonthBar
+import app.fen.ui.components.PageHeader
 import app.fen.ui.components.SectionLabel
 import app.fen.ui.theme.Fen
 import app.fen.util.formatMoney
@@ -53,6 +56,7 @@ fun StatsScreen(
     snapshot: Snapshot,
     month: YearMonth,
     onShiftMonth: (Long) -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val monthTxs = remember(snapshot.transactions, month) { snapshot.transactions.inMonth(month) }
     val totals = remember(monthTxs) { monthTxs.totals() }
@@ -65,32 +69,31 @@ fun StatsScreen(
     }
     val trend = remember(monthTxs, days) { monthTxs.dailyExpense(days) }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 32.dp),
-    ) {
-        item {
-            Text("统计", style = MaterialTheme.typography.headlineLarge)
-            Spacer(Modifier.height(12.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+    Column(Modifier.fillMaxSize()) {
+        PageHeader(
+            title = "统计",
+            modifier = Modifier.padding(horizontal = 20.dp),
+            actions = {
                 CircleAction(
-                    icon = Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
-                    contentDescription = "上一月",
-                    onClick = { onShiftMonth(-1) },
+                    icon = Icons.Outlined.Settings,
+                    contentDescription = "设置",
+                    onClick = onOpenSettings,
+                    tint = Fen.colors.ink,
                 )
-                Text(
-                    text = month.label(),
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(horizontal = 14.dp),
+            },
+        )
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 32.dp),
+        ) {
+            item {
+                MonthBar(
+                    label = month.label(),
+                    onPrev = { onShiftMonth(-1) },
+                    onNext = { onShiftMonth(1) },
                 )
-                CircleAction(
-                    icon = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                    contentDescription = "下一月",
-                    onClick = { onShiftMonth(1) },
-                )
+                Spacer(Modifier.height(16.dp))
             }
-            Spacer(Modifier.height(16.dp))
-        }
 
         item {
             Surface(
@@ -175,6 +178,7 @@ fun StatsScreen(
         }
 
         item { TrendBars(days = days, values = trend) }
+    }
     }
 }
 

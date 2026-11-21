@@ -238,21 +238,20 @@ def main():
 
     check("统计页环形图与排行", stats)
 
-    def assets():
-        session.tap("资产")
-        session.wait_text("净资产", timeout=10)
-        session.wait_text("现金", timeout=5)
-        return session.shot("06-assets.png") and ""
-
-    check("资产页余额", assets)
-
     def settings():
         session.tap("设置")
         session.wait_text("分类管理", timeout=10)
         session.wait_text("备份与恢复", timeout=5)
-        return session.shot("07-settings.png") and ""
+        return session.shot("06-settings.png") and ""
 
-    check("设置页结构", settings)
+    check("设置页结构（右上角入口）", settings)
+
+    def back_home():
+        session.tap("返回")
+        session.wait_text("明细", timeout=10)
+        return ""
+
+    check("设置返回明细", back_home)
 
     passed = sum(1 for r in results if r[1])
     total = len(results)
