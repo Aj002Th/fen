@@ -2,6 +2,7 @@ package app.fen.ui.screens
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -133,14 +134,17 @@ fun BillsScreen(
                     onNext = { onShiftMonth(1) },
                     trailing = {
                         if (month != YearMonth.now()) {
-                            Surface(
-                                onClick = onToday,
-                                shape = RoundedCornerShape(12.dp),
-                                color = Fen.colors.surface,
+                            Box(
+                                Modifier
+                                    .height(34.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Fen.colors.surface)
+                                    .clickable(onClick = onToday)
+                                    .padding(horizontal = 14.dp),
+                                contentAlignment = Alignment.Center,
                             ) {
                                 Text(
                                     "今天",
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
                                     style = MaterialTheme.typography.labelLarge,
                                     color = Fen.colors.inkSoft,
                                 )
@@ -388,6 +392,7 @@ private fun TransactionRow(
         )
     }
 }
+
 
 
 

@@ -1,5 +1,6 @@
 package app.fen.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -51,10 +52,9 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -69,7 +69,6 @@ import app.fen.ui.components.DateTimePickerSheet
 import app.fen.ui.components.Segmented
 import app.fen.ui.icons.categoryIcon
 import app.fen.ui.theme.Fen
-import android.widget.Toast
 import app.fen.util.formatMoney
 import app.fen.util.parseAmountToMinor
 import app.fen.util.toAmountInput
@@ -110,6 +109,7 @@ fun AddTransactionScreen(
     var categoryId by remember(initial) { mutableStateOf(initialCategory?.id) }
     var showPicker by remember { mutableStateOf(false) }
     var noteFocused by remember { mutableStateOf(false) }
+    var hint by remember { mutableStateOf<String?>(null) }
 
     val accent = if (type == TxType.EXPENSE) Fen.colors.expense else Fen.colors.income
     val categories = remember(snapshot.categories, type) {
@@ -122,8 +122,22 @@ fun AddTransactionScreen(
     }
     val gridState = rememberLazyGridState()
     val focusManager = LocalFocusManager.current
-    val haptic = LocalHapticFeedback.current
-    val context = LocalContext.current
+    val view = LocalView.current
+
+    LaunchedEffect(hint) {
+        if (hint != null) {
+            kotlinx.coroutines.delay(1800)
+            hint = null
+        }
+    }
+
+    fun buzz() {
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            view.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM)
+        } else {
+            view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+        }
+    }
 
     val amountMinor = parseAmountToMinor(amountText)
     val canSave = amountMinor > 0 && selectedCategoryId != null
@@ -157,6 +171,7 @@ fun AddTransactionScreen(
     }
 
     Surface(color = Fen.colors.bg, modifier = Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize()) {
         Column(
             Modifier
                 .fillMaxSize()
@@ -259,13 +274,9 @@ fun AddTransactionScreen(
                                             amountTouched = true
                                         },
                                         onLongClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            buzz()
                                             onPenalizeSuggestion(suggestion.category.id)
-                                            Toast.makeText(
-                                                context,
-                                                "已降低「${suggestion.category.name}」的推荐权重",
-                                                Toast.LENGTH_SHORT,
-                                            ).show()
+                                            hint = "已降低「${suggestion.category.name}」的推荐权重"
                                         },
                                     )
                                     .padding(horizontal = 12.dp, vertical = 7.dp),
@@ -379,6 +390,29 @@ fun AddTransactionScreen(
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
                 Spacer(Modifier.height(12.dp))
+            }
+        }
+
+            AnimatedVisibility(
+                visible = hint != null,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 110.dp),
+                enter = androidx.compose.animation.fadeIn() +
+                    androidx.compose.animation.slideInVertically { it / 3 },
+                exit = androidx.compose.animation.fadeOut(),
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (Fen.colors.isDark) Color(0xFF2A2D33) else Color(0xFF23262B),
+                ) {
+                    Text(
+                        text = hint.orEmpty(),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Color.White,
+                    )
+                }
             }
         }
     }
@@ -570,4 +604,6 @@ private fun median(values: List<Long>): Long {
     val mid = sorted.size / 2
     return if (sorted.size % 2 == 1) sorted[mid] else (sorted[mid - 1] + sorted[mid]) / 2
 }
+
+
 

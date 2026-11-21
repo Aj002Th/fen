@@ -1,5 +1,6 @@
 package app.fen.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -105,7 +106,7 @@ fun SearchScreen(
     var timeFilter by remember { mutableStateOf(TimeFilter.ALL) }
     var amountFilter by remember { mutableStateOf(AmountFilter.ANY) }
     var sortFilter by remember { mutableStateOf(SortFilter.TIME) }
-    var sheetKind by remember { mutableStateOf<FilterKind?>(null) }
+    var openFilter by remember { mutableStateOf<FilterKind?>(null) }
 
     val categories = remember(snapshot.categories) { snapshot.categories.associateBy { it.id } }
     val focusRequester = remember { FocusRequester() }
@@ -181,10 +182,7 @@ fun SearchScreen(
 
     val expense = results.filter { it.type == TxType.EXPENSE }.sumOf { it.amount }
     val income = results.filter { it.type == TxType.INCOME }.sumOf { it.amount }
-    val showSuggestions = query.isBlank() &&
-        typeFilter == TypeFilter.ALL &&
-        timeFilter == TimeFilter.ALL &&
-        amountFilter == AmountFilter.ANY
+    val showSuggestions = query.isBlank()
 
     fun applyKeyword(text: String) {
         query = text
@@ -245,28 +243,88 @@ fun SearchScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             FilterChip(
-                icon = Icons.Outlined.CalendarToday,
-                label = timeFilter.label,
+                label = "时间",
+                value = timeFilter.label,
                 active = timeFilter != TimeFilter.ALL,
-                onClick = { sheetKind = FilterKind.TIME },
+                expanded = openFilter == FilterKind.TIME,
+                onClick = {
+                    focusManager.clearFocus()
+                    keyboard?.hide()
+                    openFilter = if (openFilter == FilterKind.TIME) null else FilterKind.TIME
+                },
             )
             FilterChip(
-                icon = Icons.Outlined.Payments,
-                label = amountFilter.label,
+                label = "金额",
+                value = amountFilter.label,
                 active = amountFilter != AmountFilter.ANY,
-                onClick = { sheetKind = FilterKind.AMOUNT },
+                expanded = openFilter == FilterKind.AMOUNT,
+                onClick = {
+                    focusManager.clearFocus()
+                    keyboard?.hide()
+                    openFilter = if (openFilter == FilterKind.AMOUNT) null else FilterKind.AMOUNT
+                },
             )
             FilterChip(
-                icon = Icons.Outlined.Sort,
-                label = sortFilter.label,
+                label = "排序",
+                value = sortFilter.label,
                 active = sortFilter != SortFilter.TIME,
-                onClick = { sheetKind = FilterKind.SORT },
+                expanded = openFilter == FilterKind.SORT,
+                onClick = {
+                    focusManager.clearFocus()
+                    keyboard?.hide()
+                    openFilter = if (openFilter == FilterKind.SORT) null else FilterKind.SORT
+                },
             )
+        }
+
+        AnimatedVisibility(visible = openFilter != null) {
+            val kind = openFilter
+            if (kind != null) {
+                FlowRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    when (kind) {
+                        FilterKind.TIME -> TimeFilter.entries.forEach { option ->
+                            OptionPill(
+                                label = option.label,
+                                selected = timeFilter == option,
+                                onClick = {
+                                    timeFilter = option
+                                    openFilter = null
+                                },
+                            )
+                        }
+                        FilterKind.AMOUNT -> AmountFilter.entries.forEach { option ->
+                            OptionPill(
+                                label = option.label,
+                                selected = amountFilter == option,
+                                onClick = {
+                                    amountFilter = option
+                                    openFilter = null
+                                },
+                            )
+                        }
+                        FilterKind.SORT -> SortFilter.entries.forEach { option ->
+                            OptionPill(
+                                label = option.label,
+                                selected = sortFilter == option,
+                                onClick = {
+                                    sortFilter = option
+                                    openFilter = null
+                                },
+                            )
+                        }
+                    }
+                }
+            }
         }
 
         Spacer(Modifier.height(10.dp))
@@ -357,19 +415,6 @@ fun SearchScreen(
                 }
             }
         }
-    }
-
-    sheetKind?.let { kind ->
-        FilterSheet(
-            kind = kind,
-            timeFilter = timeFilter,
-            amountFilter = amountFilter,
-            sortFilter = sortFilter,
-            onTime = { timeFilter = it },
-            onAmount = { amountFilter = it },
-            onSort = { sortFilter = it },
-            onDismiss = { sheetKind = null },
-        )
     }
 }
 
@@ -469,70 +514,6 @@ private fun SuggestionSection(
             style = MaterialTheme.typography.labelMedium,
             color = Fen.colors.inkFaint,
         )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun FilterSheet(
-    kind: FilterKind,
-    timeFilter: TimeFilter,
-    amountFilter: AmountFilter,
-    sortFilter: SortFilter,
-    onTime: (TimeFilter) -> Unit,
-    onAmount: (AmountFilter) -> Unit,
-    onSort: (SortFilter) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val title = when (kind) {
-        FilterKind.TIME -> "时间范围"
-        FilterKind.AMOUNT -> "金额范围"
-        FilterKind.SORT -> "排序方式"
-    }
-    val options: List<Pair<String, Boolean>> = when (kind) {
-        FilterKind.TIME -> TimeFilter.entries.map { it.label to (timeFilter == it) }
-        FilterKind.AMOUNT -> AmountFilter.entries.map { it.label to (amountFilter == it) }
-        FilterKind.SORT -> SortFilter.entries.map { it.label to (sortFilter == it) }
-    }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = Fen.colors.surface,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        dragHandle = { BottomSheetDefaults.DragHandle(color = Fen.colors.inkFaint) },
-    ) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
-            Text(title, style = MaterialTheme.typography.headlineSmall)
-            Spacer(Modifier.height(8.dp))
-            options.forEachIndexed { index, (label, selected) ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            when (kind) {
-                                FilterKind.TIME -> onTime(TimeFilter.entries[index])
-                                FilterKind.AMOUNT -> onAmount(AmountFilter.entries[index])
-                                FilterKind.SORT -> onSort(SortFilter.entries[index])
-                            }
-                            onDismiss()
-                        }
-                        .padding(vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = if (selected) Fen.colors.ink else Fen.colors.inkSoft,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (selected) {
-                        Text("✓", color = Fen.colors.ink)
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -644,42 +625,63 @@ private fun FilterPill(label: String, selected: Boolean, onClick: () -> Unit) {
 
 @Composable
 private fun FilterChip(
-    icon: ImageVector,
     label: String,
+    value: String,
     active: Boolean,
+    expanded: Boolean,
     onClick: () -> Unit,
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(10.dp),
-        color = if (active) Fen.colors.surfaceMuted else Fen.colors.surface,
+        shape = RoundedCornerShape(12.dp),
+        color = if (expanded || active) Fen.colors.surfaceMuted else Fen.colors.surface,
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = if (active) Fen.colors.ink else Fen.colors.inkSoft,
-                modifier = Modifier.size(14.dp),
-            )
-            Spacer(Modifier.width(5.dp))
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelLarge,
-                color = if (active) Fen.colors.ink else Fen.colors.inkSoft,
+                style = MaterialTheme.typography.labelMedium,
+                color = Fen.colors.inkFaint,
             )
-            Spacer(Modifier.width(2.dp))
-            Icon(
-                Icons.Outlined.KeyboardArrowDown,
-                contentDescription = null,
-                tint = Fen.colors.inkFaint,
-                modifier = Modifier.size(16.dp),
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (active || expanded) Fen.colors.ink else Fen.colors.inkSoft,
+                )
+                Spacer(Modifier.width(2.dp))
+                Icon(
+                    Icons.Outlined.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = Fen.colors.inkFaint,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun OptionPill(label: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(10.dp),
+        color = if (selected) Fen.colors.ink else Fen.colors.surface,
+    ) {
+        Text(
+            text = label,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) {
+                if (Fen.colors.isDark) Color(0xFF15171B) else Color.White
+            } else {
+                Fen.colors.inkSoft
+            },
+        )
     }
 }
 
 private fun Long.toDate(): LocalDate =
     Instant.ofEpochMilli(this).atZone(ZoneId.systemDefault()).toLocalDate()
+

@@ -188,7 +188,10 @@ fun MonthBar(
     modifier: Modifier = Modifier,
     trailing: (@Composable RowScope.() -> Unit)? = null,
 ) {
-    Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier = modifier.fillMaxWidth().height(40.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         CircleAction(
             icon = Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
             contentDescription = "上一月",
