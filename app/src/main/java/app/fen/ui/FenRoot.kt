@@ -114,10 +114,6 @@ private fun FenContent(viewModel: FenViewModel) {
     val scope = rememberCoroutineScope()
 
     BackHandler(enabled = showAdd) { showAdd = false }
-    BackHandler(enabled = currentRoute == "import") {
-        viewModel.cancelImport()
-        navController.popBackStack()
-    }
 
     LaunchedEffect(message) {
         message?.let {
@@ -246,12 +242,17 @@ private fun FenContent(viewModel: FenViewModel) {
                         state = importState,
                         categories = snapshot.categories,
                         onBack = {
-                            viewModel.cancelImport()
-                            navController.popBackStack()
+                            if (importState.mapping) {
+                                viewModel.setMappingView(false)
+                            } else {
+                                viewModel.cancelImport()
+                                navController.popBackStack()
+                            }
                         },
                         onSetSkipDuplicates = viewModel::setSkipDuplicates,
                         onSetTransferPolicy = viewModel::setTransferPolicy,
                         onUpdateMapping = viewModel::updateMapping,
+                        onSetMappingView = viewModel::setMappingView,
                         onConfirm = viewModel::confirmImport,
                         onRestore = viewModel::restoreBackup,
                         onUndo = viewModel::undoImport,

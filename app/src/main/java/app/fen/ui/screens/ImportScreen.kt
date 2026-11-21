@@ -1,5 +1,6 @@
 package app.fen.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -36,7 +37,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -76,18 +76,22 @@ fun ImportScreen(
     onSetSkipDuplicates: (Boolean) -> Unit,
     onSetTransferPolicy: (TransferPolicy) -> Unit,
     onUpdateMapping: (String, TxType, MappingTarget) -> Unit,
+    onSetMappingView: (Boolean) -> Unit,
     onConfirm: () -> Unit,
     onRestore: () -> Unit,
     onUndo: () -> Unit,
     onDone: () -> Unit,
 ) {
-    var step by remember(state.fileName) { mutableStateOf(0) }
     var editing by remember { mutableStateOf<CategoryMapping?>(null) }
     var confirmRestore by remember { mutableStateOf(false) }
     var confirmUndo by remember { mutableStateOf(false) }
 
-    LaunchedEffect(state.fileName, state.stage) {
-        if (state.stage == ImportStage.READY) step = 0
+    BackHandler {
+        if (state.stage == ImportStage.READY && state.mapping) {
+            onSetMappingView(false)
+        } else {
+            onBack()
+        }
     }
 
     Column(Modifier.fillMaxSize().navigationBarsPadding()) {
@@ -103,7 +107,7 @@ fun ImportScreen(
             )
             Spacer(Modifier.size(10.dp))
             Text(
-                text = if (state.stage == ImportStage.READY && step == 1) "调整分类" else "导入账单",
+                text = if (state.stage == ImportStage.READY && state.mapping) "调整分类" else "导入账单",
                 style = MaterialTheme.typography.headlineLarge,
             )
         }
@@ -129,10 +133,10 @@ fun ImportScreen(
                         onRestore = { confirmRestore = true },
                         onCancel = onBack,
                     )
-                } else if (step == 0) {
+                } else if (!state.mapping) {
                     Overview(
                         state = state,
-                        onNext = { step = 1 },
+                        onNext = { onSetMappingView(true) },
                         onCancel = onBack,
                         onSetSkipDuplicates = onSetSkipDuplicates,
                         onSetTransferPolicy = onSetTransferPolicy,
@@ -142,7 +146,7 @@ fun ImportScreen(
                         state = state,
                         categories = categories,
                         onEdit = { editing = it },
-                        onBack = { step = 0 },
+                        onBack = { onSetMappingView(false) },
                         onConfirm = onConfirm,
                     )
                 }

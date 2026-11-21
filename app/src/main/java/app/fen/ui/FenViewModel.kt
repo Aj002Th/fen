@@ -201,6 +201,11 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
         _importState.value = _importState.value.copy(transferPolicy = policy)
     }
 
+    /** 概览 ↔ 分类映射 两步之间切换（返回键也走这里） */
+    fun setMappingView(show: Boolean) {
+        _importState.value = _importState.value.copy(mapping = show)
+    }
+
     fun updateMapping(source: String, type: TxType, target: MappingTarget) {
         val state = _importState.value
         val session = state.session ?: return
@@ -370,4 +375,6 @@ data class ImportUiState(
     val outcome: ImportOutcome? = null,
     val restored: Int? = null,
     val undone: Boolean = false,
+    /** true = 正在看分类映射列表；false = 概览 */
+    val mapping: Boolean = false,
 )
