@@ -25,12 +25,30 @@ $scrcpy = (Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Recurse 
     Select-Object -First 1).FullName
 if (-not $scrcpy) { throw "scrcpy not found. Run: winget install Genymobile.scrcpy" }
 
-Write-Host "Mirroring: $Serial"
-Start-Process -FilePath $scrcpy -ArgumentList @(
+# Keep every argument free of spaces: Start-Process does not quote array items.
+# A title like "Fen - 123" would otherwise be split and scrcpy would exit.
+$args = @(
     "-s", $Serial,
-    "--window-title", "Fen - $Serial",
-    "--max-size", "1024",
+    "--window-title=Fen-$Serial",
+    "--max-size=1024",
     "--stay-awake",
     "--no-audio"
 )
-Write-Host "scrcpy window opened. Click/swipe with the mouse; close the window to disconnect."
+
+$log = Join-Path $env:TEMP "fen-mirror.log"
+Remove-Item $log -ErrorAction SilentlyContinue
+
+Start-Process -FilePath $scrcpy -ArgumentList $args `
+    -RedirectStandardOutput $log -RedirectStandardError "$log.err"
+
+Start-Sleep -Seconds 2
+$proc = Get-Process scrcpy -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $proc) {
+    Write-Host "scrcpy exited. Log:"
+    Get-Content $log -ErrorAction SilentlyContinue | Select-Object -Last 20
+    Get-Content "$log.err" -ErrorAction SilentlyContinue | Select-Object -Last 20
+    exit 1
+}
+
+Write-Host "Mirroring $Serial (pid $($proc.Id)). Close the scrcpy window to disconnect."
+Write-Host "Log: $log"

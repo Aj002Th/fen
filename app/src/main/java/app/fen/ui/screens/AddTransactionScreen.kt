@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -53,6 +54,7 @@ import app.fen.ui.components.CircleAction
 import app.fen.ui.components.Segmented
 import app.fen.ui.icons.categoryIcon
 import app.fen.ui.theme.Fen
+import app.fen.util.formatMoney
 import app.fen.util.parseAmountToMinor
 import app.fen.util.toAmountInput
 import app.fen.util.toLocalDateTime
@@ -95,6 +97,13 @@ fun AddTransactionScreen(
     }
     val selectedCategoryId = categories.firstOrNull { it.id == categoryId }?.id
         ?: categories.firstOrNull()?.id
+    val categoryRows = (categories.size + 1 + 4) / 5
+    val recent = remember(snapshot.transactions, snapshot.categories, type) {
+        snapshot.transactions
+            .filter { it.type == type && it.categoryId != null }
+            .distinctBy { it.categoryId }
+            .take(3)
+    }
 
     val amountMinor = parseAmountToMinor(amountText)
     val canSave = amountMinor > 0 && selectedCategoryId != null
@@ -164,11 +173,10 @@ fun AddTransactionScreen(
 
             Box(
                 Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center,
+                    .fillMaxWidth()
+                    .heightIn(max = 300.dp)
+                    .verticalScroll(rememberScrollState()),
             ) {
-                Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
                     // 末尾追加一个「管理」入口，避免用户找不到分类设置
                     val cells: List<Category?> = categories + listOf(null)
@@ -191,7 +199,6 @@ fun AddTransactionScreen(
                         }
                     }
                 }
-            }
             }
 
             Spacer(Modifier.height(10.dp))
@@ -242,11 +249,68 @@ fun AddTransactionScreen(
                 }
             }
 
+            if (categoryRows <= 2) {
+                Spacer(Modifier.height(14.dp))
+                if (recent.isEmpty()) {
+                    Text(
+                        text = "记一笔之后，常用记录会出现在这里",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Fen.colors.inkFaint,
+                        modifier = Modifier.padding(horizontal = 4.dp),
+                    )
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        recent.forEach { tx ->
+                            val cat = snapshot.categories.firstOrNull { it.id == tx.categoryId }
+                            Surface(
+                                onClick = {
+                                    type = tx.type
+                                    categoryId = tx.categoryId
+                                    amountText = tx.amount.toAmountInput()
+                                    amountTouched = true
+                                    note = tx.note
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                color = Fen.colors.surface,
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(
+                                        imageVector = categoryIcon(cat?.icon),
+                                        contentDescription = null,
+                                        tint = Color(cat?.color ?: 0xFF7C8794),
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        cat?.name ?: "未分类",
+                                        style = MaterialTheme.typography.labelLarge,
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        formatMoney(tx.amount),
+                                        style = MaterialTheme.typography.labelLarge
+                                            .copy(fontFeatureSettings = "tnum"),
+                                        color = Fen.colors.inkSoft,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.weight(1f))
+
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.Bottom,
-            ) {
-                Text(
+            ) {                Text(
                     text = "¥",
                     style = MaterialTheme.typography.headlineSmall,
                     color = accent.copy(alpha = 0.6f),
@@ -427,6 +491,8 @@ private fun formatDateTime(dateTime: LocalDateTime): String {
         "${dateTime.monthValue}月${dateTime.dayOfMonth}日 $time"
     }
 }
+
+
 
 
 
