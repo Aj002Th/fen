@@ -165,6 +165,19 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
         )
     }
 
+    /** 删除分类以及它名下的所有流水 */
+    fun deleteCategoryWithTransactions(id: String) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("tx", "category_id = ?", arrayOf(id))
+            db.delete("category", "id = ?", arrayOf(id))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     fun countTransactions(categoryId: String): Int {
         readableDatabase.rawQuery("SELECT COUNT(*) FROM tx WHERE category_id = ?", arrayOf(categoryId)).use {
             return if (it.moveToFirst()) it.getInt(0) else 0

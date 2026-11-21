@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import app.fen.data.Category
 import app.fen.data.Snapshot
 import app.fen.data.TxType
@@ -69,6 +70,7 @@ fun CategoryManagerScreen(
     onUpdate: (Category) -> Unit,
     onDelete: (Category) -> Unit,
     onMerge: (Category, Category) -> Unit,
+    onDeleteWithTransactions: (Category) -> Unit,
     countFor: (String) -> Int,
 ) {
     var editorTarget by remember { mutableStateOf<Category?>(null) }
@@ -206,73 +208,126 @@ fun CategoryManagerScreen(
         val candidates = snapshot.categories
             .filter { it.type == source.type && it.id != source.id }
             .sortedBy { it.sortOrder }
-        AlertDialog(
+        var hardConfirm by remember(source.id) { mutableStateOf(false) }
+
+        Dialog(
             onDismissRequest = {
-                mergeSource = null
-                mergeTarget = null
-            },
-            title = { Text("「${source.name}」下有 $used 条记录") },
-            text = {
-                if (candidates.isEmpty()) {
-                    Text("还没有同类型的其他分类。请先新建一个分类，再把记录转移过去。")
+                if (hardConfirm) {
+                    hardConfirm = false
                 } else {
-                    Column(
-                        Modifier
-                            .heightIn(max = 300.dp)
-                            .verticalScroll(rememberScrollState()),
-                    ) {
+                    mergeSource = null
+                    mergeTarget = null
+                }
+            },
+        ) {
+            Surface(
+                shape = RoundedCornerShape(28.dp),
+                color = Fen.colors.surface,
+                modifier = Modifier.fillMaxWidth(0.92f),
+            ) {
+                Column(Modifier.padding(24.dp)) {
+                    if (!hardConfirm) {
                         Text(
-                            "选择要转移到的分类，转移后会删除「${source.name}」。",
+                            "「${source.name}」下有 $used 条记录",
+                            style = MaterialTheme.typography.headlineSmall,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        if (candidates.isEmpty()) {
+                            Text(
+                                "还没有同类型的其他分类。可以先新建一个分类再转移，或者直接删除这些记录。",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Fen.colors.inkSoft,
+                            )
+                        } else {
+                            Text(
+                                "选择要转移到的分类；转移后会删除「${source.name}」。",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Fen.colors.inkSoft,
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Column(
+                                Modifier
+                                    .heightIn(max = 280.dp)
+                                    .verticalScroll(rememberScrollState()),
+                            ) {
+                                candidates.forEach { candidate ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable { mergeTarget = candidate }
+                                            .padding(vertical = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        RadioButton(
+                                            selected = mergeTarget?.id == candidate.id,
+                                            onClick = { mergeTarget = candidate },
+                                        )
+                                        Spacer(Modifier.size(8.dp))
+                                        IconBadge(
+                                            icon = categoryIcon(candidate.icon),
+                                            color = Color(candidate.color),
+                                            size = 32.dp,
+                                            iconSize = 16.dp,
+                                        )
+                                        Spacer(Modifier.size(8.dp))
+                                        Text(
+                                            candidate.name,
+                                            style = MaterialTheme.typography.titleMedium,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = { hardConfirm = true }) {
+                                Text("直接删除", color = Fen.colors.expense)
+                            }
+                            Spacer(Modifier.weight(1f))
+                            TextButton(onClick = {
+                                mergeSource = null
+                                mergeTarget = null
+                            }) { Text("取消", color = Fen.colors.inkSoft) }
+                            TextButton(
+                                enabled = mergeTarget != null,
+                                onClick = {
+                                    val target = mergeTarget
+                                    if (target != null) {
+                                        onMerge(source, target)
+                                        mergeSource = null
+                                        mergeTarget = null
+                                    }
+                                },
+                            ) { Text("转移并删除") }
+                        }
+                    } else {
+                        Text(
+                            "删除「${source.name}」及 $used 条记录？",
+                            style = MaterialTheme.typography.headlineSmall,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "这些记录会一起删除，且无法恢复。",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Fen.colors.inkSoft,
                         )
-                        Spacer(Modifier.height(8.dp))
-                        candidates.forEach { candidate ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { mergeTarget = candidate }
-                                    .padding(vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                RadioButton(
-                                    selected = mergeTarget?.id == candidate.id,
-                                    onClick = { mergeTarget = candidate },
-                                )
-                                Spacer(Modifier.size(8.dp))
-                                IconBadge(
-                                    icon = categoryIcon(candidate.icon),
-                                    color = Color(candidate.color),
-                                    size = 32.dp,
-                                    iconSize = 16.dp,
-                                )
-                                Spacer(Modifier.size(8.dp))
-                                Text(candidate.name, style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(16.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Spacer(Modifier.weight(1f))
+                            TextButton(onClick = { hardConfirm = false }) {
+                                Text("取消", color = Fen.colors.inkSoft)
                             }
+                            TextButton(onClick = {
+                                onDeleteWithTransactions(source)
+                                mergeSource = null
+                                mergeTarget = null
+                                hardConfirm = false
+                            }) { Text("删除", color = Fen.colors.expense) }
                         }
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = mergeTarget != null,
-                    onClick = {
-                        val target = mergeTarget
-                        if (target != null) {
-                            onMerge(source, target)
-                            mergeSource = null
-                            mergeTarget = null
-                        }
-                    },
-                ) { Text("转移并删除") }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    mergeSource = null
-                    mergeTarget = null
-                }) { Text("取消") }
-            },
-        )
+            }
+        }
     }
 }
 
@@ -475,4 +530,5 @@ private fun CategoryEditorSheet(
         )
     }
 }
+
 

@@ -76,6 +76,9 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
     fun mergeCategory(from: app.fen.data.Category, into: app.fen.data.Category) =
         repository.mergeCategory(from.id, into.id)
 
+    fun deleteCategoryWithTransactions(category: app.fen.data.Category) =
+        repository.deleteCategoryWithTransactions(category.id)
+
     fun categoryUsage(categoryId: String): Int = repository.transactionCount(categoryId)
 
     fun seedDemoData(count: Int = 400) {
