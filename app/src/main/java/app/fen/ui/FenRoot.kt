@@ -91,6 +91,7 @@ private fun FenContent(viewModel: FenViewModel) {
     val snapshot by viewModel.snapshot.collectAsStateWithLifecycle()
     val month by viewModel.month.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
+    val hiddenSuggestions by viewModel.hiddenSuggestions.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -201,6 +202,8 @@ private fun FenContent(viewModel: FenViewModel) {
             AddTransactionScreen(
                 snapshot = snapshot,
                 initial = editingTx,
+                hiddenSuggestions = hiddenSuggestions,
+                onHideSuggestion = viewModel::hideSuggestion,
                 onClose = { showAdd = false },
                 onManageCategories = {
                     showAdd = false

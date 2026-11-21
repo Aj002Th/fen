@@ -1,6 +1,8 @@
 package app.fen.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -73,10 +75,13 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun AddTransactionScreen(
     snapshot: Snapshot,
     initial: Tx? = null,
+    hiddenSuggestions: Set<String> = emptySet(),
+    onHideSuggestion: (String) -> Unit = {},
     onClose: () -> Unit,
     onManageCategories: () -> Unit,
     onSave: (
@@ -108,11 +113,8 @@ fun AddTransactionScreen(
     }
     val selectedCategoryId = categories.firstOrNull { it.id == categoryId }?.id
         ?: categories.firstOrNull()?.id
-    val recent = remember(snapshot.transactions, type) {
-        snapshot.transactions
-            .filter { it.type == type && it.categoryId != null }
-            .distinctBy { it.categoryId }
-            .take(3)
+    val suggestions = remember(snapshot.transactions, snapshot.categories, type, hiddenSuggestions) {
+        buildSuggestions(snapshot, type, hiddenSuggestions)
     }
     val gridState = rememberLazyGridState()
     val focusManager = LocalFocusManager.current
@@ -229,7 +231,7 @@ fun AddTransactionScreen(
                 }
             }
 
-            if (!noteFocused && recent.isNotEmpty()) {
+            if (!noteFocused && amountText.isEmpty() && suggestions.isNotEmpty()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -237,37 +239,38 @@ fun AddTransactionScreen(
                         .padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    recent.forEach { tx ->
-                        val cat = snapshot.categories.firstOrNull { it.id == tx.categoryId }
+                    suggestions.forEach { suggestion ->
                         Surface(
-                            onClick = {
-                                type = tx.type
-                                categoryId = tx.categoryId
-                                amountText = tx.amount.toAmountInput()
-                                amountTouched = true
-                                note = tx.note
-                            },
                             shape = RoundedCornerShape(12.dp),
                             color = Fen.colors.surface,
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                modifier = Modifier
+                                    .combinedClickable(
+                                        onClick = {
+                                            categoryId = suggestion.category.id
+                                            amountText = suggestion.amount.toAmountInput()
+                                            amountTouched = true
+                                        },
+                                        onLongClick = { onHideSuggestion(suggestion.category.id) },
+                                    )
+                                    .padding(horizontal = 12.dp, vertical = 7.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Icon(
-                                    imageVector = categoryIcon(cat?.icon),
+                                    imageVector = categoryIcon(suggestion.category.icon),
                                     contentDescription = null,
-                                    tint = Color(cat?.color ?: 0xFF7C8794),
+                                    tint = Color(suggestion.category.color),
                                     modifier = Modifier.size(14.dp),
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Text(
-                                    cat?.name ?: "未分类",
+                                    suggestion.category.name,
                                     style = MaterialTheme.typography.labelLarge,
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Text(
-                                    formatMoney(tx.amount),
+                                    formatMoney(suggestion.amount),
                                     style = MaterialTheme.typography.labelLarge
                                         .copy(fontFeatureSettings = "tnum"),
                                     color = Fen.colors.inkSoft,
@@ -507,3 +510,50 @@ private fun formatDateTime(dateTime: LocalDateTime): String {
 }
 
 
+
+private data class Suggestion(val category: Category, val amount: Long)
+
+/** 近 30 天出现次数 >= 3 的分类，按次数排序；不足 3 个时用最近记录补齐 */
+private fun buildSuggestions(
+    snapshot: Snapshot,
+    type: TxType,
+    hidden: Set<String>,
+): List<Suggestion> {
+    val cutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000
+    val month = snapshot.transactions.filter {
+        it.type == type && it.categoryId != null &&
+            it.occurredAt >= cutoff && it.categoryId !in hidden
+    }
+    val frequent = month.groupBy { it.categoryId!! }
+        .filter { it.value.size >= 3 }
+        .entries
+        .sortedByDescending { it.value.size }
+        .mapNotNull { entry ->
+            snapshot.categories.firstOrNull { it.id == entry.key }?.let {
+                Suggestion(it, median(entry.value.map { tx -> tx.amount }))
+            }
+        }
+        .take(3)
+
+    if (frequent.size >= 3) return frequent
+
+    val used = frequent.map { it.category.id }.toSet()
+    val extra = snapshot.transactions
+        .filter {
+            it.type == type && it.categoryId != null &&
+                it.categoryId !in used && it.categoryId !in hidden
+        }
+        .distinctBy { it.categoryId }
+        .take(3 - frequent.size)
+        .mapNotNull { tx ->
+            snapshot.categories.firstOrNull { it.id == tx.categoryId }?.let { Suggestion(it, tx.amount) }
+        }
+    return frequent + extra
+}
+
+private fun median(values: List<Long>): Long {
+    if (values.isEmpty()) return 0
+    val sorted = values.sorted()
+    val mid = sorted.size / 2
+    return if (sorted.size % 2 == 1) sorted[mid] else (sorted[mid - 1] + sorted[mid]) / 2
+}

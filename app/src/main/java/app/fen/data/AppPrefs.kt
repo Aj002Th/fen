@@ -12,7 +12,13 @@ class AppPrefs(context: Context) {
         get() = sp.getInt(KEY_THEME_MODE, 0)
         set(value) = sp.edit().putInt(KEY_THEME_MODE, value).apply()
 
+    /** 被用户长按隐藏的「常用」分类 */
+    var hiddenSuggestions: Set<String>
+        get() = sp.getStringSet(KEY_HIDDEN_SUGGESTIONS, emptySet()) ?: emptySet()
+        set(value) = sp.edit().putStringSet(KEY_HIDDEN_SUGGESTIONS, value).apply()
+
     private companion object {
         const val KEY_THEME_MODE = "theme_mode"
+        const val KEY_HIDDEN_SUGGESTIONS = "hidden_suggestions"
     }
 }

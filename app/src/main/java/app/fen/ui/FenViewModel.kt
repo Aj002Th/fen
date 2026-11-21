@@ -25,6 +25,9 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
     private val _themeMode = MutableStateFlow(prefs.themeMode)
     val themeMode: StateFlow<Int> = _themeMode.asStateFlow()
 
+    private val _hiddenSuggestions = MutableStateFlow(prefs.hiddenSuggestions)
+    val hiddenSuggestions: StateFlow<Set<String>> = _hiddenSuggestions.asStateFlow()
+
     fun shiftMonth(months: Long) {
         _month.value = _month.value.plusMonths(months)
     }
@@ -36,6 +39,11 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
     fun setThemeMode(mode: Int) {
         prefs.themeMode = mode
         _themeMode.value = mode
+    }
+
+    fun hideSuggestion(categoryId: String) {
+        prefs.hiddenSuggestions = prefs.hiddenSuggestions + categoryId
+        _hiddenSuggestions.value = prefs.hiddenSuggestions
     }
 
     fun addTransaction(
