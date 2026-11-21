@@ -209,14 +209,17 @@ fun CategoryManagerScreen(
             .filter { it.type == source.type && it.id != source.id }
             .sortedBy { it.sortOrder }
         var hardConfirm by remember(source.id) { mutableStateOf(false) }
+        var mergeConfirm by remember(source.id) { mutableStateOf(false) }
 
         Dialog(
             onDismissRequest = {
-                if (hardConfirm) {
-                    hardConfirm = false
-                } else {
-                    mergeSource = null
-                    mergeTarget = null
+                when {
+                    mergeConfirm -> mergeConfirm = false
+                    hardConfirm -> hardConfirm = false
+                    else -> {
+                        mergeSource = null
+                        mergeTarget = null
+                    }
                 }
             },
         ) {
@@ -226,7 +229,34 @@ fun CategoryManagerScreen(
                 modifier = Modifier.fillMaxWidth(0.92f),
             ) {
                 Column(Modifier.padding(24.dp)) {
-                    if (!hardConfirm) {
+                    if (mergeConfirm) {
+                        Text(
+                            "把 $used 条记录转移到「${mergeTarget?.name}」？",
+                            style = MaterialTheme.typography.headlineSmall,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "「${source.name}」会被删除，记录本身会保留。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Fen.colors.inkSoft,
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Spacer(Modifier.weight(1f))
+                            TextButton(onClick = { mergeConfirm = false }) {
+                                Text("取消", color = Fen.colors.inkSoft)
+                            }
+                            TextButton(onClick = {
+                                val target = mergeTarget
+                                if (target != null) {
+                                    onMerge(source, target)
+                                }
+                                mergeSource = null
+                                mergeTarget = null
+                                mergeConfirm = false
+                            }) { Text("转移并删除") }
+                        }
+                    } else if (!hardConfirm) {
                         Text(
                             "「${source.name}」下有 $used 条记录",
                             style = MaterialTheme.typography.headlineSmall,
@@ -291,11 +321,8 @@ fun CategoryManagerScreen(
                             TextButton(
                                 enabled = mergeTarget != null,
                                 onClick = {
-                                    val target = mergeTarget
-                                    if (target != null) {
-                                        onMerge(source, target)
-                                        mergeSource = null
-                                        mergeTarget = null
+                                    if (mergeTarget != null) {
+                                        mergeConfirm = true
                                     }
                                 },
                             ) { Text("转移并删除") }
@@ -504,7 +531,7 @@ private fun CategoryEditorSheet(
             if (onDelete != null) {
                 Spacer(Modifier.height(8.dp))
                 TextButton(
-                    onClick = { confirmDelete = true },
+                    onClick = { onDelete.invoke() },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("删除分类", color = Fen.colors.expense)
@@ -512,23 +539,7 @@ private fun CategoryEditorSheet(
             }
         }
     }
-
-    if (confirmDelete) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text("删除「${initial?.name}」？") },
-            text = { Text("删除后不可恢复。此操作只会删除分类本身。") },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirmDelete = false
-                    onDelete?.invoke()
-                }) { Text("删除", color = Fen.colors.expense) }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmDelete = false }) { Text("取消") }
-            },
-        )
-    }
 }
+
 
 
