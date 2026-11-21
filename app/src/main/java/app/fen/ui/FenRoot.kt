@@ -128,15 +128,17 @@ private fun FenContent(viewModel: FenViewModel) {
             NavHost(
                 navController = navController,
                 startDestination = "bills",
-                modifier = Modifier.padding(innerPadding),
+                modifier = Modifier.padding(innerPadding).background(Fen.colors.bg),
                 enterTransition = {
-                    fadeIn(tween(240)) + slideInHorizontally(tween(240)) { it / 18 }
+                    slideInHorizontally(tween(260)) { it / 6 } + fadeIn(tween(180))
                 },
-                exitTransition = { fadeOut(tween(140)) },
+                exitTransition = { fadeOut(tween(120)) },
                 popEnterTransition = {
-                    fadeIn(tween(240)) + slideInHorizontally(tween(240)) { -it / 18 }
+                    slideInHorizontally(tween(260)) { -it / 8 } + fadeIn(tween(180))
                 },
-                popExitTransition = { fadeOut(tween(140)) },
+                popExitTransition = {
+                    slideOutHorizontally(tween(260)) { it / 6 } + fadeOut(tween(180))
+                },
             ) {
                 composable("bills") {
                     BillsScreen(
@@ -199,6 +201,10 @@ private fun FenContent(viewModel: FenViewModel) {
                 snapshot = snapshot,
                 initial = editingTx,
                 onClose = { showAdd = false },
+                onManageCategories = {
+                    showAdd = false
+                    navController.navigate("categories")
+                },
                 onSave = { type, amountMinor, categoryId, note, dateTime, andContinue ->
                     val editing = editingTx
                     if (editing == null) {

@@ -1,6 +1,7 @@
 package app.fen.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -22,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Icon
@@ -64,6 +66,7 @@ fun AddTransactionScreen(
     snapshot: Snapshot,
     initial: Tx? = null,
     onClose: () -> Unit,
+    onManageCategories: () -> Unit,
     onSave: (
         type: TxType,
         amountMinor: Long,
@@ -167,15 +170,21 @@ fun AddTransactionScreen(
             ) {
                 Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                    categories.chunked(5).forEach { row ->
+                    // 末尾追加一个「管理」入口，避免用户找不到分类设置
+                    val cells: List<Category?> = categories + listOf(null)
+                    cells.chunked(5).forEach { row ->
                         Row(Modifier.fillMaxWidth()) {
                             row.forEach { category ->
                                 Box(Modifier.weight(1f)) {
-                                    CategoryTile(
-                                        category = category,
-                                        selected = category.id == selectedCategoryId,
-                                        onClick = { categoryId = category.id },
-                                    )
+                                    if (category == null) {
+                                        ManageCategoriesTile(onClick = onManageCategories)
+                                    } else {
+                                        CategoryTile(
+                                            category = category,
+                                            selected = category.id == selectedCategoryId,
+                                            onClick = { categoryId = category.id },
+                                        )
+                                    }
                                 }
                             }
                             repeat(5 - row.size) { Spacer(Modifier.weight(1f)) }
@@ -184,6 +193,8 @@ fun AddTransactionScreen(
                 }
             }
             }
+
+            Spacer(Modifier.height(10.dp))
 
             Surface(
                 shape = RoundedCornerShape(22.dp),
@@ -298,26 +309,39 @@ private fun CategoryTile(
     val color = Color(category.color)
     Column(
         modifier = Modifier
-            .clip(RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .padding(vertical = 6.dp),
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .background(if (selected) color else color.copy(alpha = 0.12f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = categoryIcon(category.icon),
-                contentDescription = null,
-                tint = if (selected) Color.White else color,
-                modifier = Modifier.size(22.dp),
-            )
+        Box(Modifier.size(50.dp), contentAlignment = Alignment.Center) {
+            if (selected) {
+                Box(
+                    Modifier
+                        .size(50.dp)
+                        .border(1.5.dp, color.copy(alpha = 0.28f), CircleShape)
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(if (selected) color else color.copy(alpha = 0.10f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = categoryIcon(category.icon),
+                    contentDescription = null,
+                    tint = if (selected) Color.White else color,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(6.dp))
         Text(
             text = category.name,
             style = MaterialTheme.typography.labelMedium,
@@ -325,6 +349,45 @@ private fun CategoryTile(
             color = if (selected) Fen.colors.ink else Fen.colors.inkSoft,
             textAlign = TextAlign.Center,
             maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun ManageCategoriesTile(onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(
+                interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            )
+            .padding(vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.size(50.dp), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(Fen.colors.surfaceMuted),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Add,
+                    contentDescription = "管理分类",
+                    tint = Fen.colors.inkSoft,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = "管理",
+            style = MaterialTheme.typography.labelMedium,
+            color = Fen.colors.inkSoft,
+            textAlign = TextAlign.Center,
         )
     }
 }
@@ -364,5 +427,6 @@ private fun formatDateTime(dateTime: LocalDateTime): String {
         "${dateTime.monthValue}月${dateTime.dayOfMonth}日 $time"
     }
 }
+
 
 

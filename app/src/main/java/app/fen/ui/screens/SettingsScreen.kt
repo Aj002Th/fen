@@ -56,6 +56,9 @@ fun SettingsScreen(
     var showAbout by remember { mutableStateOf(false) }
     var showSeedConfirm by remember { mutableStateOf(false) }
     var showClearConfirm by remember { mutableStateOf(false) }
+    // 开发选项默认隐藏：在「关于」弹窗里连点标题 10 次才出现；进程退出后重置
+    var devUnlocked by remember { mutableStateOf(false) }
+    var aboutTaps by remember { mutableStateOf(0) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -126,15 +129,18 @@ fun SettingsScreen(
             ) {
                 SettingItem(
                     title = "Fen",
-                    subtitle = "版本 0.4.0 · 开源",
+                    subtitle = "版本 0.4.1 · 开源",
                     icon = Icons.Outlined.Info,
                     tint = Color(0xFFF2583E),
-                    onClick = { showAbout = true },
+                    onClick = {
+                        aboutTaps = 0
+                        showAbout = true
+                    },
                 )
             }
         }
 
-        if (showDebug) {
+        if (showDebug && devUnlocked) {
             item { SectionLabel("开发", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp)) }
             item {
                 Surface(
@@ -203,7 +209,19 @@ fun SettingsScreen(
     if (showAbout) {
         AlertDialog(
             onDismissRequest = { showAbout = false },
-            title = { Text("Fen · 分") },
+            title = {
+                Text(
+                    text = "Fen · 分",
+                    modifier = Modifier.clickable {
+                        aboutTaps += 1
+                        if (aboutTaps >= 10) {
+                            devUnlocked = true
+                            aboutTaps = 0
+                            showAbout = false
+                        }
+                    },
+                )
+            },
             text = {
                 Text(
                     "一个开源、克制的 Android 记账应用。\n" +
@@ -284,4 +302,5 @@ private fun SettingItem(
         )
     }
 }
+
 

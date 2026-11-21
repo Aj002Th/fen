@@ -46,13 +46,14 @@ C:\Android\tools\device.ps1 shot
 ## 验收数据（仅 debug）
 
 ```powershell
-# 生成最近 6 个月约 400 条演示数据
+# 生成最近 6 个月约 400 条演示数据（会顺带创建咖啡/宠物/订阅/健身四个分类）
 adb shell am start -a android.intent.action.VIEW -d "fen://debug/seed?count=400" -p app.fen
 # 清空流水（保留分类）
 adb shell am start -a android.intent.action.VIEW -d "fen://debug/clear" -p app.fen
 ```
 
-也可以在「设置 → 开发」里点按钮。
+开发入口默认隐藏：设置 → 关于 → 连续点标题 10 次才会出现「开发」分组；
+App 完全退出后重新进入会恢复隐藏。
 
 ## 代码结构
 

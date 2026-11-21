@@ -172,6 +172,28 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
      * 最近 [daysBack] 天，约 [count] 条，时间分布在 07:00–22:59。
      */
     fun seedDemoData(count: Int = 400, daysBack: Int = 180) {
+        // 演示数据里额外准备几个"用户自定义"分类，方便验收分类管理后的效果
+        val extras = listOf(
+            Triple("咖啡", "meal", 0xFFF2A93E),
+            Triple("宠物", "pet", 0xFF8B6CF2),
+            Triple("订阅", "digital", 0xFF21B8C7),
+            Triple("健身", "sport", 0xFFE05C9A),
+        )
+        val existing = categories()
+        extras.forEach { (name, icon, color) ->
+            if (existing.none { it.name == name }) {
+                insertCategory(
+                    Category(
+                        id = UUID.randomUUID().toString(),
+                        name = name,
+                        type = TxType.EXPENSE,
+                        icon = icon,
+                        color = color,
+                        sortOrder = nextCategoryOrder(),
+                    )
+                )
+            }
+        }
         val all = categories()
         val expensePool = all.filter { it.type == TxType.EXPENSE }
         val incomePool = all.filter { it.type == TxType.INCOME }
@@ -189,6 +211,10 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
             "工资" to listOf("月薪"),
             "奖金" to listOf("年终奖"),
             "理财" to listOf("基金"),
+            "咖啡" to listOf("瑞幸", "星巴克"),
+            "宠物" to listOf("猫粮", "驱虫"),
+            "订阅" to listOf("会员", "云盘"),
+            "健身" to listOf("私教", "月卡"),
         )
         val db = writableDatabase
         db.beginTransaction()
