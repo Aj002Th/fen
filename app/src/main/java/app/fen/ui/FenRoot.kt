@@ -61,6 +61,7 @@ import app.fen.ui.screens.BillsScreen
 import app.fen.ui.screens.CategoryManagerScreen
 import app.fen.ui.screens.SearchScreen
 import app.fen.ui.screens.SettingsScreen
+import app.fen.ui.screens.StatsBoardSettingsScreen
 import app.fen.ui.screens.StatsScreen
 import app.fen.ui.theme.Fen
 import app.fen.ui.theme.FenTheme
@@ -184,6 +185,7 @@ private fun FenContent(viewModel: FenViewModel) {
                         onThemeModeChange = viewModel::setThemeMode,
                         onBack = { navController.popBackStack() },
                         onOpenCategories = { navController.navigate("categories") },
+                        onOpenStatsBoard = { navController.navigate("stats-board") },
                         showDebug = BuildConfig.DEBUG,
                         onSeedDemo = {
                             scope.launch(Dispatchers.IO) { viewModel.seedDemoData(400) }
@@ -200,6 +202,17 @@ private fun FenContent(viewModel: FenViewModel) {
                         onSaveHistory = viewModel::addSearchHistory,
                         onClearHistory = viewModel::clearSearchHistory,
                         onBack = { navController.popBackStack() },
+                    )
+                }
+                composable("stats-board") {
+                    StatsBoardSettingsScreen(
+                        config = statsBoardConfig,
+                        onBack = { navController.popBackStack() },
+                        onToggle = viewModel::setStatsSectionVisible,
+                        onMove = viewModel::moveStatsSection,
+                        onRankingLimit = viewModel::setStatsRankingLimit,
+                        onSummaryShowEmpty = viewModel::setStatsSummaryShowEmpty,
+                        onReset = viewModel::resetStatsBoard,
                     )
                 }
                 composable("categories") {
