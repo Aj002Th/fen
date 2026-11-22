@@ -34,6 +34,36 @@ class PlannerTest {
     )
 
     @Test
+    fun promoteUncategorizedCreatesSameNameOnlyWhenPossible() {
+        val mappings = listOf(
+            CategoryMapping("宠物", TxType.EXPENSE, 2, 100, MappingTarget(MappingKind.UNCATEGORIZED)),
+            CategoryMapping("餐饮美食", TxType.EXPENSE, 1, 50, MappingTarget(MappingKind.EXISTING, food.id)),
+            CategoryMapping("转账", TxType.EXPENSE, 1, 50, MappingTarget(MappingKind.NEW, newName = "转账")),
+            CategoryMapping("未分类", TxType.EXPENSE, 1, 10, MappingTarget(MappingKind.UNCATEGORIZED)),
+            CategoryMapping("未归类", TxType.EXPENSE, 1, 10, MappingTarget(MappingKind.UNCATEGORIZED)),
+            CategoryMapping("餐饮", TxType.EXPENSE, 1, 10, MappingTarget(MappingKind.UNCATEGORIZED)),
+            CategoryMapping("宠物", TxType.INCOME, 1, 20, MappingTarget(MappingKind.UNCATEGORIZED)),
+            CategoryMapping("   ", TxType.EXPENSE, 1, 1, MappingTarget(MappingKind.UNCATEGORIZED)),
+        )
+
+        val result = ImportPlanner.promoteUncategorizedToNew(mappings, all)
+
+        assertEquals(MappingKind.NEW, result[0].target.kind)
+        assertEquals("宠物", result[0].target.newName)
+        assertEquals(MappingKind.EXISTING, result[1].target.kind)
+        assertEquals(food.id, result[1].target.categoryId)
+        assertEquals(MappingKind.NEW, result[2].target.kind)
+        assertEquals("转账", result[2].target.newName)
+        assertEquals(MappingKind.UNCATEGORIZED, result[3].target.kind)
+        assertEquals(MappingKind.UNCATEGORIZED, result[4].target.kind)
+        assertEquals(MappingKind.UNCATEGORIZED, result[5].target.kind)
+        assertEquals(MappingKind.NEW, result[6].target.kind)
+        assertEquals("宠物", result[6].target.newName)
+        assertEquals(TxType.INCOME, result[6].type)
+        assertEquals(MappingKind.UNCATEGORIZED, result[7].target.kind)
+    }
+
+    @Test
     fun suggestions() {
         assertEquals(MappingKind.EXISTING, CategorySuggest.suggest("餐饮美食", TxType.EXPENSE, all).kind)
         assertEquals(MappingKind.UNCATEGORIZED, CategorySuggest.suggest("商户消费", TxType.EXPENSE, all).kind)

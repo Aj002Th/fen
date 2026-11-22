@@ -77,11 +77,11 @@ import app.fen.data.TxType
 import app.fen.data.exchange.CategoryMapping
 import app.fen.data.exchange.CategorySuggest
 import app.fen.data.exchange.FenTemplate
+import app.fen.data.exchange.ImportPlanner
 import app.fen.data.exchange.ImportSource
 import app.fen.data.exchange.MappingKind
 import app.fen.data.exchange.MappingTarget
 import app.fen.data.exchange.TransferPolicy
-import app.fen.data.exchange.UNBUCKETED_NAME
 import app.fen.data.exchange.UNCATEGORIZED_NAME
 import app.fen.ui.ImportStage
 import app.fen.ui.ImportUiState
@@ -112,6 +112,7 @@ fun ImportScreen(
     onSetSkipDuplicates: (Boolean) -> Unit,
     onSetTransferPolicy: (TransferPolicy) -> Unit,
     onUpdateMapping: (String, TxType, MappingTarget) -> Unit,
+    onCreateUncategorized: () -> Unit,
     onSetMappingView: (Boolean) -> Unit,
     onConfirm: () -> Unit,
     onRestore: () -> Unit,
@@ -219,6 +220,7 @@ fun ImportScreen(
                         state = state,
                         categories = categories,
                         onEdit = { editing = it },
+                        onCreateUncategorized = onCreateUncategorized,
                         onBack = { onSetMappingView(false) },
                         onConfirm = onConfirm,
                     )
@@ -881,10 +883,15 @@ private fun MappingList(
     state: ImportUiState,
     categories: List<Category>,
     onEdit: (CategoryMapping) -> Unit,
+    onCreateUncategorized: () -> Unit,
     onBack: () -> Unit,
     onConfirm: () -> Unit,
 ) {
     val session = state.session ?: return
+    val creatable = session.mappings.count { mapping ->
+        mapping.target.kind == MappingKind.UNCATEGORIZED &&
+            ImportPlanner.canCreateSameName(mapping.source, mapping.type, categories)
+    }
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         Text(
             "共 ${session.mappings.size} 个分类结果。默认已按备注归好，点任意一行可以整体改。",
@@ -892,6 +899,29 @@ private fun MappingList(
             color = Fen.colors.inkSoft,
             modifier = Modifier.padding(bottom = 10.dp),
         )
+        if (creatable > 0) {
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = Fen.colors.surfaceMuted,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+            ) {
+                Column(
+                    Modifier
+                        .clickable(onClick = onCreateUncategorized)
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                ) {
+                    Text(
+                        "把 $creatable 个未分类建成同名分类",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text(
+                        "「未归类」和已经选好的不会改，导入前还可以逐条再改",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Fen.colors.inkSoft,
+                    )
+                }
+            }
+        }
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 16.dp)) {
             items(session.mappings, key = { "${it.type}-${it.source}" }) { mapping ->
                 Surface(
@@ -965,10 +995,7 @@ private fun MappingDialog(
                 ) { onPick(MappingTarget(MappingKind.UNCATEGORIZED)) }
 
                 val sourceName = mapping.source.trim()
-                val canCreate = sourceName.isNotEmpty() &&
-                    sourceName != UNBUCKETED_NAME &&
-                    sourceName != UNCATEGORIZED_NAME &&
-                    categories.none { it.type == mapping.type && it.name == sourceName }
+                val canCreate = ImportPlanner.canCreateSameName(sourceName, mapping.type, categories)
                 if (canCreate) {
                     Spacer(Modifier.height(6.dp))
                     OptionRow(

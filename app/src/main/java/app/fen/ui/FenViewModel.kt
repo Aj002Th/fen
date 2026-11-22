@@ -422,6 +422,17 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
         _importState.value = state.copy(session = session.copy(mappings = mappings))
     }
 
+    /** 把还能建同名分类的「未分类」一次性改成新建。导入前仍可以逐条再改。 */
+    fun createUncategorizedCategories() {
+        val state = _importState.value
+        val session = state.session ?: return
+        val mappings = ImportPlanner.promoteUncategorizedToNew(
+            session.mappings,
+            snapshot.value.categories,
+        )
+        _importState.value = state.copy(session = session.copy(mappings = mappings))
+    }
+
     fun confirmImport() {
         val state = _importState.value
         val session = state.session ?: return
