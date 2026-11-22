@@ -95,6 +95,11 @@ private fun FenContent(viewModel: FenViewModel) {
     val hiddenSuggestions by viewModel.hiddenSuggestions.collectAsStateWithLifecycle()
     val penalties by viewModel.suggestionPenalties.collectAsStateWithLifecycle()
     val searchHistory by viewModel.searchHistory.collectAsStateWithLifecycle()
+    val statsMode by viewModel.statsMode.collectAsStateWithLifecycle()
+    val statsAnchor by viewModel.statsAnchor.collectAsStateWithLifecycle()
+    val statsCustomRange by viewModel.statsCustomRange.collectAsStateWithLifecycle()
+    val statsCategoryType by viewModel.statsCategoryType.collectAsStateWithLifecycle()
+    val statsBoardConfig by viewModel.statsBoardConfig.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -161,8 +166,15 @@ private fun FenContent(viewModel: FenViewModel) {
                 composable("stats") {
                     StatsScreen(
                         snapshot = snapshot,
-                        month = month,
-                        onShiftMonth = viewModel::shiftMonth,
+                        statsMode = statsMode,
+                        statsAnchor = statsAnchor,
+                        customRange = statsCustomRange,
+                        categoryType = statsCategoryType,
+                        boardConfig = statsBoardConfig,
+                        onSetMode = viewModel::setStatsMode,
+                        onShift = viewModel::shiftStatsPeriod,
+                        onSetCustomRange = viewModel::setStatsCustomRange,
+                        onSetCategoryType = viewModel::setStatsCategoryType,
                         onOpenSettings = { navController.navigate("settings") },
                     )
                 }
