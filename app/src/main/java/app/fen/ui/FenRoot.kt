@@ -6,6 +6,7 @@ import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -16,13 +17,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -210,7 +214,13 @@ private fun FenContent(viewModel: FenViewModel) {
                     slideOutHorizontally(fenSlide) { it / 5 } + fadeOut(fenFadeOut)
                 },
             ) {
-                composable("bills") {
+                composable(
+                    "bills",
+                    enterTransition = { EnterTransition.None },
+                    exitTransition = { ExitTransition.None },
+                    popEnterTransition = { EnterTransition.None },
+                    popExitTransition = { ExitTransition.None },
+                ) {
                     FenPage {
                         BillsScreen(
                             snapshot = snapshot,
@@ -227,7 +237,13 @@ private fun FenContent(viewModel: FenViewModel) {
                         )
                     }
                 }
-                composable("stats") {
+                composable(
+                    "stats",
+                    enterTransition = { EnterTransition.None },
+                    exitTransition = { ExitTransition.None },
+                    popEnterTransition = { EnterTransition.None },
+                    popExitTransition = { ExitTransition.None },
+                ) {
                     FenPage {
                         StatsScreen(
                             snapshot = snapshot,
@@ -434,33 +450,47 @@ private fun FenBottomBar(currentRoute: String?, onSelect: (String) -> Unit, onAd
             color = Fen.colors.surface,
             modifier = Modifier.weight(1f),
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                tabs.forEach { tab ->
-                    val selected = currentRoute == tab.route
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(if (selected) Fen.colors.surfaceMuted else Color.Transparent)
-                            .clickable { onSelect(tab.route) }
-                            .padding(vertical = 7.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Icon(
-                            imageVector = tab.icon,
-                            contentDescription = tab.label,
-                            tint = if (selected) Fen.colors.ink else Fen.colors.inkSoft,
-                            modifier = Modifier.size(21.dp),
-                        )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = tab.label,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (selected) Fen.colors.ink else Fen.colors.inkSoft,
-                        )
+            val gap = 2.dp
+            BoxWithConstraints(Modifier.padding(horizontal = 6.dp, vertical = 6.dp)) {
+                val tabWidth = (maxWidth - gap * (tabs.size - 1)) / tabs.size
+                val selectedIndex = tabs.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
+                val slidingIndex by animateFloatAsState(
+                    targetValue = selectedIndex.toFloat(),
+                    animationSpec = tween(FenMotion.durationMillis, easing = FastOutSlowInEasing),
+                    label = "tabIndicator",
+                )
+                Box(
+                    modifier = Modifier
+                        .offset { IntOffset(((tabWidth + gap) * slidingIndex).roundToPx(), 0) }
+                        .width(tabWidth)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Fen.colors.surfaceMuted),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    tabs.forEach { tab ->
+                        val selected = currentRoute == tab.route
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(20.dp))
+                                .clickable { onSelect(tab.route) }
+                                .padding(vertical = 7.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Icon(
+                                imageVector = tab.icon,
+                                contentDescription = tab.label,
+                                tint = if (selected) Fen.colors.ink else Fen.colors.inkSoft,
+                                modifier = Modifier.size(21.dp),
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = tab.label,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (selected) Fen.colors.ink else Fen.colors.inkSoft,
+                            )
+                        }
                     }
                 }
             }
