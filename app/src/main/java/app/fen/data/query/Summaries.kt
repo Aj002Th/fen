@@ -72,7 +72,7 @@ fun summarize(
     )
 }
 
-private fun List<Tx>.totals(): MoneyTotals {
+fun List<Tx>.totals(): MoneyTotals {
     var expense = 0L
     var income = 0L
     for (tx in this) {

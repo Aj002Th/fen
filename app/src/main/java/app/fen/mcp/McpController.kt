@@ -3,8 +3,11 @@ package app.fen.mcp
 import android.content.Context
 import android.util.Log
 import app.fen.BuildConfig
+import app.fen.data.ledger.LedgerReader
 import app.fen.mcp.protocol.ProtocolDispatcher
 import app.fen.mcp.protocol.SessionStore
+import app.fen.mcp.tools.ReadTools
+import app.fen.mcp.tools.ToolRegistry
 import app.fen.mcp.tools.ToolResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -14,10 +17,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import java.net.HttpURLConnection
 import java.net.URL
 
-class McpController(private val context: Context) {
+class McpController(
+    private val context: Context,
+    private val reader: LedgerReader,
+) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _state = MutableStateFlow<McpServerState>(McpServerState.Stopped)
@@ -28,9 +37,16 @@ class McpController(private val context: Context) {
     private val token = "dev-token"
 
     private val sessions = SessionStore(System::currentTimeMillis)
+    private val registry = ToolRegistry(
+        ReadTools(
+            reader = reader,
+            serverVersion = BuildConfig.VERSION_NAME,
+            writeEnabled = { false },
+        )
+    )
     private val dispatcher = ProtocolDispatcher(
-        tools = { emptyList() },
-        callTool = { _, _ -> ToolResult.Error("NOT_IMPLEMENTED", "Tool not implemented yet") },
+        tools = { registry.tools(false) },
+        callTool = { name, args -> registry.call(name, args, false) },
         sessions = sessions,
         serverVersion = BuildConfig.VERSION_NAME,
     )
@@ -86,7 +102,11 @@ class McpController(private val context: Context) {
             SelfTestResult(
                 modernOk = modern.first,
                 legacyOk = legacy.first,
-                toolCount = 0,
+                toolCount = modern.second?.let { text ->
+                    runCatching {
+                        Json.parseToJsonElement(text).jsonObject["result"]!!.jsonObject["tools"]!!.jsonArray.size
+                    }.getOrNull()
+                } ?: 0,
                 latencyMs = System.currentTimeMillis() - started,
                 error = modern.second ?: legacy.second,
             )

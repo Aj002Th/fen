@@ -21,6 +21,6 @@ class FenApp : Application() {
         super.onCreate()
         repository = FenRepository(FenDb(this))
         prefs = AppPrefs(this)
-        mcp = McpController(this)
+        mcp = McpController(this, repository)
     }
 }

@@ -1,5 +1,6 @@
 package app.fen.data
 
+import app.fen.data.ledger.LedgerReader
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -9,10 +10,12 @@ import java.util.UUID
  * 目前数据量很小，整库加载进内存 + 写后刷新即可。
  * 等账单量级上来后再换成增量查询。
  */
-class FenRepository(private val db: FenDb) {
+class FenRepository(private val db: FenDb) : LedgerReader {
 
     private val _snapshot = MutableStateFlow(load())
     val snapshot: StateFlow<Snapshot> = _snapshot.asStateFlow()
+
+    override fun readSnapshot(): Snapshot = snapshot.value
 
     private fun load(): Snapshot = Snapshot(
         categories = db.categories(),
