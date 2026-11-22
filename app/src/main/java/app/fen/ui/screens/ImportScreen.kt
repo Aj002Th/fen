@@ -63,6 +63,7 @@ import app.fen.data.exchange.ImportSource
 import app.fen.data.exchange.MappingKind
 import app.fen.data.exchange.MappingTarget
 import app.fen.data.exchange.TransferPolicy
+import app.fen.data.exchange.UNBUCKETED_NAME
 import app.fen.data.exchange.UNCATEGORIZED_NAME
 import app.fen.ui.ImportStage
 import app.fen.ui.ImportUiState
@@ -903,9 +904,16 @@ private fun MappingDialog(
         title = { Text("「${mapping.source}」归到哪一类？") },
         text = {
             Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                Text(
+                    "${mapping.type.label()} · ${mapping.count} 笔 · ¥${formatMoney(mapping.amount)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Fen.colors.inkSoft,
+                )
+                Spacer(Modifier.height(8.dp))
+
                 OptionRow(
                     title = "未分类",
-                    subtitle = "归到「未分类」分类，可搜索、可编辑、参与统计",
+                    subtitle = "先放入「未分类」，之后可以再改",
                     selected = mapping.target.kind == MappingKind.UNCATEGORIZED,
                 ) { onPick(MappingTarget(MappingKind.UNCATEGORIZED)) }
 
@@ -923,12 +931,19 @@ private fun MappingDialog(
                         ) { onPick(MappingTarget(MappingKind.EXISTING, categoryId = category.id)) }
                     }
 
-                Spacer(Modifier.height(10.dp))
-                OptionRow(
-                    title = "新建分类「${mapping.source.ifBlank { "未分类" }}」",
-                    subtitle = "会创建并保留这个分类",
-                    selected = mapping.target.kind == MappingKind.NEW,
-                ) { onPick(MappingTarget(MappingKind.NEW, newName = mapping.source)) }
+                val sourceName = mapping.source.trim()
+                val canCreate = sourceName.isNotEmpty() &&
+                    sourceName != UNBUCKETED_NAME &&
+                    sourceName != UNCATEGORIZED_NAME &&
+                    categories.none { it.type == mapping.type && it.name == sourceName }
+                if (canCreate) {
+                    Spacer(Modifier.height(10.dp))
+                    OptionRow(
+                        title = "新建「$sourceName」分类",
+                        subtitle = "现有分类都不合适时使用",
+                        selected = mapping.target.kind == MappingKind.NEW,
+                    ) { onPick(MappingTarget(MappingKind.NEW, newName = sourceName)) }
+                }
             }
         },
         confirmButton = {
