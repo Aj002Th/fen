@@ -232,7 +232,7 @@ class McpController(
                     }.getOrNull()
                 } ?: 0,
                 latencyMs = System.currentTimeMillis() - started,
-                error = modern.second ?: legacy.second,
+                error = if (modern.first && legacy.first) null else (modern.second ?: legacy.second),
             )
         } catch (e: Exception) {
             SelfTestResult(false, false, 0, System.currentTimeMillis() - started, e.message)
