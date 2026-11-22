@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -27,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import app.fen.autobook.classify.DuplicateDetector
 import app.fen.autobook.model.ParsedBill
 import app.fen.data.Category
 import app.fen.data.Tx
@@ -51,6 +53,7 @@ fun ConfirmBillSheet(
     var categoryId by remember(bill) { mutableStateOf(bill.categoryId) }
     var note by remember(bill) { mutableStateOf(bill.merchant) }
     var occurredAt by remember(bill) { mutableStateOf(bill.occurredAt) }
+    var showDuplicateConfirm by remember(bill) { mutableStateOf(false) }
 
     val options = categories.filter { it.type == type }
     LaunchedEffect(options, categoryId) {
@@ -61,6 +64,13 @@ fun ConfirmBillSheet(
 
     val amount = parseAmountToMinor(amountText)
     val canSave = amount > 0 && categoryId != null
+    val candidate = bill.copy(
+        amountMinor = amount,
+        type = type,
+        merchant = note.trim(),
+        occurredAt = occurredAt,
+    )
+    val save = { onSave(type, amount, categoryId, note.trim(), occurredAt) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -136,7 +146,13 @@ fun ConfirmBillSheet(
                 ) { Text("忽略") }
 
                 Button(
-                    onClick = { onSave(type, amount, categoryId, note.trim(), occurredAt) },
+                    onClick = {
+                        if (DuplicateDetector.find(candidate, existing) != null) {
+                            showDuplicateConfirm = true
+                        } else {
+                            save()
+                        }
+                    },
                     enabled = canSave,
                     modifier = Modifier.weight(1f),
                 ) { Text("保存") }
@@ -151,5 +167,24 @@ fun ConfirmBillSheet(
                 )
             }
         }
+    }
+
+    if (showDuplicateConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDuplicateConfirm = false },
+            title = { Text("可能重复") },
+            text = { Text("已有一笔金额和时间相近的记录，仍要保存吗？") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDuplicateConfirm = false
+                        save()
+                    }
+                ) { Text("继续保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDuplicateConfirm = false }) { Text("取消") }
+            },
+        )
     }
 }
