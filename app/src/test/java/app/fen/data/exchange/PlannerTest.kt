@@ -16,7 +16,15 @@ class PlannerTest {
     private val food = Category("c-food", "餐饮", TxType.EXPENSE, "food", 0xFFF2583E, 0)
     private val transport = Category("c-trans", "交通", TxType.EXPENSE, "transport", 0xFF3E8BF2, 1)
     private val bonus = Category("c-bonus", "奖金", TxType.INCOME, "bonus", 0xFF17A467, 2)
+    private val expenseTransfer = Category("c-out", "转账", TxType.EXPENSE, "saving", 0xFF5C6B8A, 3)
+    private val incomeTransfer = Category("c-in", "转账", TxType.INCOME, "saving", 0xFF5C6B8A, 4)
+    private val refund = Category("c-refund", "退款", TxType.INCOME, "other_income", 0xFFE07A3E, 5)
     private val all = listOf(food, transport, bonus)
+    private val withNew = all + listOf(expenseTransfer, incomeTransfer, refund)
+
+    private val transferSources = listOf(
+        "转账", "群收款", "微信红包", "微信红包（群红包）", "转账红包", "二维码收款",
+    )
 
     private fun record(
         category: String,
@@ -75,6 +83,84 @@ class PlannerTest {
             MappingKind.EXISTING,
             CategorySuggest.suggest("未分类", TxType.EXPENSE, withUncategorized).kind,
         )
+    }
+
+    @Test
+    fun transferSourcesMapToTransferOfTheSameDirection() {
+        for (source in transferSources) {
+            val expense = CategorySuggest.suggest(source, TxType.EXPENSE, withNew)
+            assertEquals(source, MappingKind.EXISTING, expense.kind)
+            assertEquals(source, expenseTransfer.id, expense.categoryId)
+
+            val income = CategorySuggest.suggest(source, TxType.INCOME, withNew)
+            assertEquals(source, MappingKind.EXISTING, income.kind)
+            assertEquals(source, incomeTransfer.id, income.categoryId)
+        }
+    }
+
+    @Test
+    fun refundsMapToIncomeRefundButPlainRedPacketsStayBonus() {
+        val refunded = CategorySuggest.suggest("退款", TxType.INCOME, withNew)
+        assertEquals(MappingKind.EXISTING, refunded.kind)
+        assertEquals(refund.id, refunded.categoryId)
+
+        val merchant = CategorySuggest.suggest("AA巴士-退款", TxType.INCOME, withNew)
+        assertEquals(MappingKind.EXISTING, merchant.kind)
+        assertEquals(refund.id, merchant.categoryId)
+
+        val redPacket = CategorySuggest.suggest("红包", TxType.INCOME, withNew)
+        assertEquals(MappingKind.EXISTING, redPacket.kind)
+        assertEquals(bonus.id, redPacket.categoryId)
+    }
+
+    @Test
+    fun transferAndRefundStayUncategorizedWhenThoseCategoriesWereDeleted() {
+        assertEquals(MappingKind.UNCATEGORIZED, CategorySuggest.suggest("微信红包", TxType.INCOME, all).kind)
+        assertEquals(MappingKind.UNCATEGORIZED, CategorySuggest.suggest("群收款", TxType.INCOME, all).kind)
+        assertEquals(MappingKind.UNCATEGORIZED, CategorySuggest.suggest("AA巴士-退款", TxType.INCOME, all).kind)
+
+        val redPacket = CategorySuggest.suggest("红包", TxType.INCOME, all)
+        assertEquals(MappingKind.EXISTING, redPacket.kind)
+        assertEquals(bonus.id, redPacket.categoryId)
+    }
+
+    @Test
+    fun expenseRefundsAndCreditAreNotPulledIntoTheNewCategories() {
+        assertEquals(MappingKind.UNCATEGORIZED, CategorySuggest.suggest("AA巴士-退款", TxType.EXPENSE, withNew).kind)
+        assertEquals(MappingKind.UNCATEGORIZED, CategorySuggest.suggest("信用借还", TxType.EXPENSE, withNew).kind)
+    }
+
+    @Test
+    fun qrPaymentsFallBackToTransferButMerchantSpendingStaysUnbucketed() {
+        val records = listOf(
+            record("扫二维码付款", amount = 1000, note = "美团"),
+            record("扫二维码付款", amount = 2000, note = "未知商户"),
+            record("商户消费", amount = 3000, note = "未知商户"),
+            record("群收款", type = TxType.EXPENSE, amount = 4000, note = "地铁"),
+        )
+        val bucketed = CategorySuggest.bucketize(records, withNew)
+
+        assertEquals("餐饮", bucketed[0].sourceCategory)
+        assertEquals("扫二维码付款", bucketed[0].rawCategory)
+        assertEquals("转账", bucketed[1].sourceCategory)
+        assertEquals("未归类", bucketed[2].sourceCategory)
+        assertEquals("群收款", bucketed[3].sourceCategory)
+        assertEquals("", bucketed[3].rawCategory)
+
+        // 收了一笔扫码付款，备注认不出是什么：方向是收入，也该归到收入转账
+        val received = CategorySuggest.bucketize(
+            listOf(record("扫二维码付款", type = TxType.INCOME, amount = 5000, note = "张三")),
+            withNew,
+        ).single()
+        assertEquals("转账", received.sourceCategory)
+        assertEquals("扫二维码付款", received.rawCategory)
+    }
+
+    @Test
+    fun transferAndRefundGetTheirIcons() {
+        assertEquals("saving", CategorySuggest.iconFor("转账", TxType.EXPENSE))
+        assertEquals("saving", CategorySuggest.iconFor("转账", TxType.INCOME))
+        assertEquals("other_income", CategorySuggest.iconFor("退款", TxType.INCOME))
     }
 
     @Test

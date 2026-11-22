@@ -46,20 +46,24 @@ object CategorySuggest {
         // 明确归到「其他」的，只有用户自己建了「其他」分类才会生效
         "其他" to "其他", "商业服务" to "其他", "信用借还" to "其他",
         "美容美发" to "其他", "理发" to "其他",
+        // 人与人之间的收付款，不按备注拆开
+        "转账" to "转账", "群收款" to "转账", "微信红包" to "转账", "微信红包（群红包）" to "转账",
+        "转账红包" to "转账", "二维码收款" to "转账",
     )
 
     private val incomeAliases: Map<String, String> = mapOf(
         "工资" to "工资", "薪资" to "工资", "月薪" to "工资", "薪水" to "工资",
-        "奖金" to "奖金", "红包" to "奖金", "微信红包" to "奖金", "微信红包（群红包）" to "奖金",
-        "转账红包" to "奖金", "群收款" to "奖金", "收入" to "奖金",
+        "奖金" to "奖金", "红包" to "奖金", "收入" to "奖金",
         "理财" to "理财", "基金" to "理财", "利息" to "理财", "投资收益" to "理财",
         "其他" to "其他",
+        "转账" to "转账", "群收款" to "转账", "微信红包" to "转账", "微信红包（群红包）" to "转账",
+        "转账红包" to "转账", "二维码收款" to "转账",
+        "退款" to "退款",
     )
 
     /** 这些来源分类本身没有语义（是微信的交易类型），建议按备注自动归类。 */
     private val genericCategories: Set<String> = setOf(
-        "商户消费", "扫二维码付款", "群收款", "二维码收款",
-        "微信红包", "微信红包（群红包）", "转账红包", "其他", "",
+        "商户消费", "扫二维码付款", "其他", "",
     )
 
     private data class Rule(val category: String, val keywords: List<String>)
@@ -99,14 +103,15 @@ object CategorySuggest {
     fun isGeneric(source: String): Boolean = source.trim() in genericCategories
 
     /**
-     * 解析阶段先把「商户消费 / 扫二维码付款 / 群收款」这类没有语义的来源，
-     * 按备注关键词归到具体分类；命中不了就归到「未分类」。
+     * 解析阶段先把「商户消费 / 扫二维码付款」这类没有语义的来源，
+     * 按备注关键词归到具体分类。扫码付款认不出来就当转账；
+     * 商户消费认不出来仍留在「未归类」。
      */
     fun bucketize(records: List<ParsedRecord>, categories: List<Category>): List<ParsedRecord> =
         records.map { record ->
-            if (record.type == TxType.EXPENSE && isGeneric(record.sourceCategory)) {
-                val inferred = keywordCategory(record.note, record.type, categories)?.name
-                    ?: UNBUCKETED_NAME
+            if (isGeneric(record.sourceCategory)) {
+                val fallback = if (record.sourceCategory.trim() == "扫二维码付款") "转账" else UNBUCKETED_NAME
+                val inferred = keywordCategory(record.note, record.type, categories)?.name ?: fallback
                 record.copy(sourceCategory = inferred, rawCategory = record.sourceCategory)
             } else {
                 record
@@ -126,8 +131,11 @@ object CategorySuggest {
             existing.firstOrNull { it.name == alias }
                 ?.let { return MappingTarget(MappingKind.EXISTING, it.id) }
         }
-        // 退款在 iCost 里以「商户名-退款」当分类，没有可用语义
-        if (name.endsWith("-退款")) return MappingTarget(MappingKind.UNCATEGORIZED)
+        // iCost 把退款记成「商户名-退款」。只有收入方向有「退款」分类可归。
+        if (type == TxType.INCOME && name.endsWith("-退款")) {
+            existing.firstOrNull { it.name == "退款" }
+                ?.let { return MappingTarget(MappingKind.EXISTING, it.id) }
+        }
         return MappingTarget(MappingKind.UNCATEGORIZED)
     }
 
@@ -159,10 +167,11 @@ object CategorySuggest {
         )
         val income = listOf(
             "salary" to listOf("工资", "薪"),
+            "saving" to listOf("转账"),
             "bonus" to listOf("奖金", "红包", "礼"),
             "invest" to listOf("理财", "基金", "利息", "投资"),
         )
-        val rules = if (type == TxType.INCOME) income else expense
+        val rules = if (type == TxType.INCOME) income else expense + ("saving" to listOf("转账"))
         for ((icon, keywords) in rules) {
             if (keywords.any { text.contains(it) }) return icon
         }
