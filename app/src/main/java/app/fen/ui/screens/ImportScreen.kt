@@ -34,8 +34,8 @@ import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.ErrorOutline
-import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Forest
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.HelpOutline
@@ -374,7 +374,7 @@ private fun SetupContent(
                             QuickAction(
                                 title = "下载模板文件",
                                 badge = null,
-                                icon = Icons.Outlined.FileDownload,
+                                icon = Icons.Outlined.Download,
                                 onClick = onDownloadTemplate,
                                 modifier = Modifier.weight(1f),
                             )

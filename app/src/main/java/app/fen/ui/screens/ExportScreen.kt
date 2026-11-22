@@ -15,7 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.outlined.FileDownload
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -82,7 +82,7 @@ fun ExportScreen(
                     DataRow(
                         title = "下载导入模板",
                         subtitle = "CSV · 日期 / 类型 / 金额 / 分类 / 备注",
-                        icon = Icons.Outlined.FileDownload,
+                        icon = Icons.Outlined.Download,
                         tint = Color(0xFF17A467),
                         onClick = { templateSaver.launch(FenTemplate.fileName()) },
                     )
