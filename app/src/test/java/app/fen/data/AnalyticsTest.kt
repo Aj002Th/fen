@@ -93,6 +93,21 @@ class AnalyticsTest {
     }
 
     @Test
+    fun `custom range clamps future end to today`() {
+        val today = LocalDate.of(2026, 11, 22)
+        val period = statsPeriod(
+            StatsMode.RANGE,
+            today,
+            LocalDate.of(2026, 11, 1),
+            LocalDate.of(2027, 1, 1),
+            today,
+        )
+
+        assertEquals(LocalDate.of(2026, 11, 1), period.start)
+        assertEquals(today, period.end)
+    }
+
+    @Test
     fun `previous month clamps to previous month end`() {
         val today = LocalDate.of(2026, 10, 31)
         val period = statsPeriod(StatsMode.MONTH, LocalDate.of(2026, 10, 15), null, null, today)
@@ -308,6 +323,42 @@ class AnalyticsTest {
         assertEquals(0L, stats.cumulative.first())
         assertEquals(150L, stats.cumulative.last())
         assertEquals(4, stats.cumulative.size)
+    }
+
+    @Test
+    fun `short all range uses daily buckets`() {
+        val today = LocalDate.of(2026, 11, 22)
+        val period = statsPeriod(
+            StatsMode.ALL,
+            today,
+            null,
+            null,
+            today,
+            LocalDate.of(2026, 11, 1),
+        )
+
+        assertEquals(BucketUnit.DAY, period.bucketUnit())
+        assertEquals(BucketUnit.DAY, period.trendBucketUnit())
+    }
+
+    @Test
+    fun `all range uses monthly trend and yearly summary`() {
+        val period = statsPeriod(
+            StatsMode.ALL,
+            LocalDate.of(2026, 11, 22),
+            null,
+            null,
+            LocalDate.of(2026, 11, 22),
+            LocalDate.of(2024, 1, 5),
+        )
+
+        val stats = buildStats(emptyList(), emptyList(), period)
+
+        assertEquals(BucketUnit.YEAR, stats.unit)
+        assertEquals(BucketUnit.MONTH, stats.trendUnit)
+        assertEquals(3, stats.buckets.size)
+        assertEquals(35, stats.trendBuckets.size)
+        assertEquals(stats.trendBuckets.size + 1, stats.cumulative.size)
     }
 
     @Test

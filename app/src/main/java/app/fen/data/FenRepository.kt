@@ -93,8 +93,8 @@ class FenRepository(private val db: FenDb) {
     fun transactionCount(categoryId: String): Int = db.countTransactions(categoryId)
 
     /** 开发/验收用：生成演示数据 */
-    fun seedDemoData(count: Int = 400) {
-        db.seedDemoData(count)
+    fun seedDemoData(count: Int = 400, daysBack: Int = 180) {
+        db.seedDemoData(count, daysBack)
         refresh()
     }
 

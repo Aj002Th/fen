@@ -38,7 +38,8 @@ class MainActivity : ComponentActivity() {
         when (uri.path?.trimEnd('/')) {
             "/seed" -> {
                 val count = uri.getQueryParameter("count")?.toIntOrNull() ?: 400
-                CoroutineScope(Dispatchers.IO).launch { repository.seedDemoData(count) }
+                val days = uri.getQueryParameter("days")?.toIntOrNull() ?: 180
+                CoroutineScope(Dispatchers.IO).launch { repository.seedDemoData(count, days) }
             }
             "/clear" -> CoroutineScope(Dispatchers.IO).launch { repository.clearTransactions() }
         }

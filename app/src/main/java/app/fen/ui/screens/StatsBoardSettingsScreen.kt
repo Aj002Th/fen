@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.outlined.DragHandle
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
@@ -98,6 +97,7 @@ fun StatsBoardSettingsScreen(
                 Column {
                     config.order.forEachIndexed { index, section ->
                         SectionSettingRow(
+                            index = index,
                             section = section,
                             visible = section !in config.hidden,
                             canUp = index > 0,
@@ -205,6 +205,7 @@ fun StatsBoardSettingsScreen(
 
 @Composable
 private fun SectionSettingRow(
+    index: Int,
     section: StatsSection,
     visible: Boolean,
     canUp: Boolean,
@@ -217,11 +218,12 @@ private fun SectionSettingRow(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            imageVector = Icons.Outlined.DragHandle,
-            contentDescription = null,
-            tint = Fen.colors.inkFaint,
-            modifier = Modifier.size(20.dp),
+        Text(
+            text = "${index + 1}",
+            style = MaterialTheme.typography.labelMedium,
+            color = Fen.colors.inkFaint,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            modifier = Modifier.width(20.dp),
         )
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {

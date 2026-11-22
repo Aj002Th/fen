@@ -229,6 +229,9 @@ private fun labelIndices(count: Int): List<Int> = when {
     else -> listOf(0, count / 4, count / 2, count * 3 / 4, count - 1).distinct()
 }
 
+private fun sharePercent(share: Double): String =
+    if (share > 0 && share < 0.01) "<1%" else "${(share * 100).roundToInt()}%"
+
 /* ------------------------------- 累计结余折线 ------------------------------ */
 
 @Composable
@@ -355,6 +358,7 @@ data class DonutEntry(
 fun CategoryDonut(
     entries: List<DonutEntry>,
     total: Long,
+    categoryCount: Int,
     selectedKey: String?,
     onSelect: (String?) -> Unit,
     centerLabel: String,
@@ -434,7 +438,7 @@ fun CategoryDonut(
                 modifier = Modifier.padding(horizontal = 30.dp),
             )
             Text(
-                text = formatMoney(selected?.amount ?: total),
+                text = "¥${formatMoney(selected?.amount ?: total)}",
                 style = MaterialTheme.typography.titleLarge.copy(fontFeatureSettings = "tnum"),
                 color = Fen.colors.ink,
                 maxLines = 1,
@@ -443,9 +447,9 @@ fun CategoryDonut(
             )
             Text(
                 text = if (selected != null) {
-                    "${(selected.amount * 100.0 / total).roundToInt()}%"
+                    sharePercent(selected.amount.toDouble() / total)
                 } else {
-                    "${entries.size} 类"
+                    "$categoryCount 类"
                 },
                 style = MaterialTheme.typography.labelMedium,
                 color = Fen.colors.inkSoft,
@@ -489,7 +493,7 @@ fun DonutLegend(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "${(entry.amount * 100.0 / total).roundToInt()}%",
+                    text = sharePercent(entry.amount.toDouble() / total),
                     style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
                     color = Fen.colors.inkSoft,
                 )

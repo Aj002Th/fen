@@ -124,8 +124,12 @@ fun StatsScreen(
     val typeTotal = if (categoryType == TxType.EXPENSE) stats.totals.expense else stats.totals.income
     val typeLabel = if (categoryType == TxType.EXPENSE) "支出" else "收入"
 
-    val sections = boardConfig.visibleSections.filterNot {
-        it == StatsSection.COMPARISON && stats.previousTotals == null
+    val previousTotals = stats.previousTotals
+    val sections = boardConfig.visibleSections.filterNot { section ->
+        section == StatsSection.COMPARISON && (
+            previousTotals == null ||
+                (stats.totals.count == 0 && previousTotals.count == 0)
+            )
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -267,10 +271,24 @@ fun StatsScreen(
 }
 
 private fun periodLabel(start: LocalDate, end: LocalDate, mode: StatsMode): String = when (mode) {
-    StatsMode.WEEK -> "${start.shortDate()} – ${end.shortDate()}"
     StatsMode.MONTH -> "${start.year}年${start.monthValue}月"
     StatsMode.YEAR -> "${start.year}年"
-    StatsMode.ALL, StatsMode.RANGE -> "${start.shortDate()} – ${end.shortDate()}"
+    StatsMode.WEEK, StatsMode.ALL, StatsMode.RANGE -> rangeLabel(start, end)
+}
+
+private fun rangeLabel(start: LocalDate, end: LocalDate): String {
+    val sameYear = start.year == end.year
+    val startText = if (sameYear) {
+        "${start.monthValue}月${start.dayOfMonth}日"
+    } else {
+        "${start.year}年${start.monthValue}月${start.dayOfMonth}日"
+    }
+    val endText = if (sameYear) {
+        "${end.monthValue}月${end.dayOfMonth}日"
+    } else {
+        "${end.year}年${end.monthValue}月${end.dayOfMonth}日"
+    }
+    return "$startText – $endText"
 }
 
 @Composable
@@ -391,7 +409,7 @@ private fun OverviewCard(stats: StatsBundle) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             MetricTile(
                 label = stats.averageLabel,
-                value = formatMoney(stats.averageExpense),
+                value = "¥${formatMoney(stats.averageExpense)}",
                 modifier = Modifier.weight(1f),
             )
             MetricTile(
@@ -403,22 +421,28 @@ private fun OverviewCard(stats: StatsBundle) {
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             MetricTile(
-                label = "平均每笔",
+                label = "平均每笔支出",
                 value = if (stats.totals.expenseCount > 0) {
-                    formatMoney(stats.totals.expense / stats.totals.expenseCount)
+                    "¥${formatMoney(stats.totals.expense / stats.totals.expenseCount)}"
                 } else {
                     "—"
                 },
                 modifier = Modifier.weight(1f),
             )
             MetricTile(
-                label = "最高单日",
+                label = "最高单日支出",
                 value = if (stats.maxExpenseDayDate != null) {
-                    formatMoney(stats.maxExpenseDayAmount)
+                    "¥${formatMoney(stats.maxExpenseDayAmount)}"
                 } else {
                     "—"
                 },
-                sub = stats.maxExpenseDayDate?.shortDate(),
+                sub = stats.maxExpenseDayDate?.let { day ->
+                    if (stats.period.start.year != stats.period.end.year) {
+                        "${day.year}年${day.monthValue}月${day.dayOfMonth}日"
+                    } else {
+                        day.shortDate()
+                    }
+                },
                 modifier = Modifier.weight(1f),
             )
         }
@@ -454,6 +478,7 @@ private fun CategoryMixCard(
                 CategoryDonut(
                     entries = entries,
                     total = typeTotal,
+                    categoryCount = categoryStats.size,
                     selectedKey = selectedKey,
                     onSelect = onSelect,
                     centerLabel = "总$typeLabel",
@@ -595,7 +620,11 @@ private fun RankingRow(
             }
             Spacer(Modifier.width(10.dp))
             Text(
-                text = "${(share * 100).roundToInt()}%",
+                text = if (share > 0f && share < 0.01f) {
+                    "<1%"
+                } else {
+                    "${(share * 100).roundToInt()}%"
+                },
                 style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
                 color = Fen.colors.inkSoft,
                 maxLines = 1,
@@ -633,10 +662,10 @@ private fun TrendCard(stats: StatsBundle, selectedIndex: Int?, onSelect: (Int?) 
             LegendDot(Fen.colors.income, "收入")
         },
     ) {
-        val selected = selectedIndex?.let { stats.buckets.getOrNull(it) }
+        val selected = selectedIndex?.let { stats.trendBuckets.getOrNull(it) }
         Text(
             text = if (selected != null) {
-                "${selected.tableLabel} · 支出 ${formatMoney(selected.expense)} · 收入 ${formatMoney(selected.income)}"
+                "${selected.tableLabel} · 支出 ¥${formatMoney(selected.expense)} · 收入 ¥${formatMoney(selected.income)}"
             } else {
                 "点按柱子查看明细"
             },
@@ -646,7 +675,7 @@ private fun TrendCard(stats: StatsBundle, selectedIndex: Int?, onSelect: (Int?) 
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(8.dp))
-        DualBarChart(stats.buckets, selectedIndex, onSelect)
+        DualBarChart(stats.trendBuckets, selectedIndex, onSelect)
     }
 }
 
@@ -661,11 +690,13 @@ private fun BalanceCard(stats: StatsBundle, selectedIndex: Int?, onSelect: (Int?
                 text = "期末 ${formatSignedMoney(stats.cumulative.lastOrNull() ?: 0L)}",
                 style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum"),
                 color = netColor(stats.cumulative.lastOrNull() ?: 0L),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         },
     ) {
         val detail = if (selectedIndex != null && selectedIndex > 0) {
-            val bucket = stats.buckets.getOrNull(selectedIndex - 1)
+            val bucket = stats.trendBuckets.getOrNull(selectedIndex - 1)
             val value = stats.cumulative.getOrNull(selectedIndex) ?: 0L
             "${bucket?.tableLabel ?: "区间起点"} · 累计 ${formatSignedMoney(value)}"
         } else {
@@ -679,7 +710,7 @@ private fun BalanceCard(stats: StatsBundle, selectedIndex: Int?, onSelect: (Int?
             overflow = TextOverflow.Ellipsis,
         )
         Spacer(Modifier.height(8.dp))
-        CumulativeChart(stats.buckets, stats.cumulative, selectedIndex, onSelect)
+        CumulativeChart(stats.trendBuckets, stats.cumulative, selectedIndex, onSelect)
     }
 }
 
@@ -719,6 +750,12 @@ private fun ComparisonCard(stats: StatsBundle) {
             isExpense = false,
             signed = true,
         )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = "上期按同长度区间对比",
+            style = MaterialTheme.typography.labelMedium,
+            color = Fen.colors.inkFaint,
+        )
     }
 }
 
@@ -739,13 +776,13 @@ private fun ComparisonRow(
         )
         Column(horizontalAlignment = Alignment.End) {
             Text(
-                text = if (signed) formatSignedMoney(current) else formatMoney(current),
+                text = if (signed) formatSignedMoney(current) else "¥${formatMoney(current)}",
                 style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum"),
                 color = if (signed) netColor(current) else Fen.colors.ink,
                 maxLines = 1,
             )
             Text(
-                text = "上期 ${if (signed) formatSignedMoney(previous) else formatMoney(previous)}",
+                text = "上期 ${if (signed) formatSignedMoney(previous) else "¥${formatMoney(previous)}"}",
                 style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
                 color = Fen.colors.inkSoft,
                 maxLines = 1,
@@ -775,17 +812,22 @@ private fun DeltaBadge(current: Long, previous: Long, isExpense: Boolean) {
         }
         else -> {
             val delta = current - previous
-            text = if (!isExpense && previous < 0) {
-                formatSignedMoney(delta)
+            val percent = delta.toDouble() / previous * 100
+            if (kotlin.math.abs(percent) < 0.05) {
+                text = "持平"
+                color = Fen.colors.inkSoft
             } else {
-                String.format(Locale.CHINA, "%+.1f%%", delta.toDouble() / previous * 100)
-            }
-            color = when {
-                delta == 0L -> Fen.colors.inkSoft
-                isExpense && delta > 0 -> Fen.colors.expense
-                isExpense && delta < 0 -> Fen.colors.income
-                !isExpense && delta > 0 -> Fen.colors.income
-                else -> Fen.colors.expense
+                text = if (!isExpense && previous < 0) {
+                    formatSignedMoney(delta)
+                } else {
+                    String.format(Locale.CHINA, "%+.1f%%", percent)
+                }
+                color = when {
+                    isExpense && delta > 0 -> Fen.colors.expense
+                    isExpense && delta < 0 -> Fen.colors.income
+                    !isExpense && delta > 0 -> Fen.colors.income
+                    else -> Fen.colors.expense
+                }
             }
         }
     }
@@ -825,7 +867,7 @@ private fun WeekdayCard(stats: StatsBundle) {
         Spacer(Modifier.height(8.dp))
         Text(
             text = if (maxValue > 0) {
-                "$maxLabel 支出 ${formatMoney(maxValue)}，占 ${(maxValue * 100.0 / stats.totals.expense.coerceAtLeast(1L)).roundToInt()}%"
+                "$maxLabel 支出 ¥${formatMoney(maxValue)}，占 ${(maxValue * 100.0 / stats.totals.expense.coerceAtLeast(1L)).roundToInt()}%"
             } else {
                 "这个区间还没有支出记录"
             },

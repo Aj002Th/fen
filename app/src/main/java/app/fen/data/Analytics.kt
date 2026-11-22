@@ -110,8 +110,8 @@ fun statsPeriod(
             end = maxDate(today, start)
         }
         StatsMode.RANGE -> {
-            val a = customStart ?: today.minusDays(29)
-            val b = customEnd ?: today
+            val a = minDate(customStart ?: today.minusDays(29), today)
+            val b = minDate(customEnd ?: today, today)
             start = minDate(a, b)
             end = maxDate(a, b)
         }
@@ -122,7 +122,7 @@ fun statsPeriod(
 
 private fun previousPeriod(mode: StatsMode, start: LocalDate, end: LocalDate): Pair<LocalDate, LocalDate>? {
     if (mode == StatsMode.ALL) return null
-    val length = ChronoUnit.DAYS.between(start, end).toLong() + 1
+    val length = ChronoUnit.DAYS.between(start, end) + 1
     val prevStart = when (mode) {
         StatsMode.WEEK -> start.minusWeeks(1)
         StatsMode.MONTH -> start.minusMonths(1)
@@ -179,10 +179,30 @@ fun List<Tx>.statsTotals(): StatsTotals {
 fun StatsPeriod.bucketUnit(): BucketUnit = when (mode) {
     StatsMode.WEEK, StatsMode.MONTH -> BucketUnit.DAY
     StatsMode.YEAR -> BucketUnit.MONTH
-    StatsMode.ALL -> if (months <= 24) BucketUnit.MONTH else BucketUnit.YEAR
+    StatsMode.ALL -> when {
+        days <= 62 -> BucketUnit.DAY
+        months <= 24 -> BucketUnit.MONTH
+        else -> BucketUnit.YEAR
+    }
     StatsMode.RANGE -> when {
         days <= 62 -> BucketUnit.DAY
         months <= 24 -> BucketUnit.MONTH
+        else -> BucketUnit.YEAR
+    }
+}
+
+/** 趋势图比汇总表更细：全部/长范围优先按月，避免只有两三根柱子。 */
+fun StatsPeriod.trendBucketUnit(): BucketUnit = when (mode) {
+    StatsMode.WEEK, StatsMode.MONTH -> BucketUnit.DAY
+    StatsMode.YEAR -> BucketUnit.MONTH
+    StatsMode.ALL -> when {
+        days <= 62 -> BucketUnit.DAY
+        months <= 36 -> BucketUnit.MONTH
+        else -> BucketUnit.YEAR
+    }
+    StatsMode.RANGE -> when {
+        days <= 62 -> BucketUnit.DAY
+        months <= 36 -> BucketUnit.MONTH
         else -> BucketUnit.YEAR
     }
 }
@@ -257,7 +277,11 @@ fun List<Tx>.statsBuckets(period: StatsPeriod, unit: BucketUnit): List<StatsBuck
                 result += StatsBucket(
                     start = from,
                     end = to,
-                    label = "${month.monthValue}月",
+                    label = if (period.start.year != period.end.year) {
+                        "${month.year % 100}/${month.monthValue}"
+                    } else {
+                        "${month.monthValue}月"
+                    },
                     tableLabel = "${month.year}年${month.monthValue}月",
                     expense = expense,
                     income = income,
@@ -374,6 +398,8 @@ data class StatsBundle(
     val previousTotals: StatsTotals?,
     val unit: BucketUnit,
     val buckets: List<StatsBucket>,
+    val trendUnit: BucketUnit,
+    val trendBuckets: List<StatsBucket>,
     val expenseCategories: List<CategoryStat>,
     val incomeCategories: List<CategoryStat>,
     val weekdayExpense: List<Long>,
@@ -408,6 +434,8 @@ fun buildStats(
     val previousTotals = if (period.previousStart != null) previous.statsTotals() else null
     val unit = period.bucketUnit()
     val buckets = current.statsBuckets(period, unit)
+    val trendUnit = period.trendBucketUnit()
+    val trendBuckets = if (trendUnit == unit) buckets else current.statsBuckets(period, trendUnit)
     val expenseCategories = current.categoryStats(TxType.EXPENSE, categories, previous)
     val incomeCategories = current.categoryStats(TxType.INCOME, categories, previous)
 
@@ -461,10 +489,10 @@ fun buildStats(
         isAverage = true,
     )
 
-    val cumulative = ArrayList<Long>(buckets.size + 1)
+    val cumulative = ArrayList<Long>(trendBuckets.size + 1)
     cumulative += 0L
     var running = 0L
-    buckets.forEach { bucket ->
+    trendBuckets.forEach { bucket ->
         running += bucket.net
         cumulative += running
     }
@@ -478,6 +506,8 @@ fun buildStats(
         previousTotals = previousTotals,
         unit = unit,
         buckets = buckets,
+        trendUnit = trendUnit,
+        trendBuckets = trendBuckets,
         expenseCategories = expenseCategories,
         incomeCategories = incomeCategories,
         weekdayExpense = weekdayExpense.toList(),

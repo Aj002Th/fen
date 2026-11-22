@@ -84,7 +84,7 @@ fun StatsRangePickerSheet(
                     modifier = Modifier.weight(1f),
                 )
                 Text(
-                    text = "${start.shortDate()} – ${end.shortDate()}",
+                    text = rangeText(start, end),
                     style = MaterialTheme.typography.titleMedium,
                     color = Fen.colors.inkSoft,
                 )
@@ -214,6 +214,15 @@ fun StatsRangePickerSheet(
     }
 }
 
+private fun rangeText(start: LocalDate, end: LocalDate): String {
+    return if (start.year == end.year) {
+        "${start.shortDate()} – ${end.shortDate()}"
+    } else {
+        "${start.year}/${start.monthValue}/${start.dayOfMonth} – " +
+            "${end.year}/${end.monthValue}/${end.dayOfMonth}"
+    }
+}
+
 @Composable
 private fun QuickRange(label: String, onClick: () -> Unit) {
     Surface(
@@ -255,6 +264,7 @@ private fun RangeCalendarGrid(
                     Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                         if (dayNumber in 1..days) {
                             val date = month.atDay(dayNumber)
+                            val future = date > today
                             val inRange = date >= start && date <= end
                             val isEdge = date == start || date == end
                             Box(
@@ -265,11 +275,11 @@ private fun RangeCalendarGrid(
                                     .background(
                                         when {
                                             isEdge -> Fen.colors.ink
-                                            inRange -> Fen.colors.surfaceMuted
+                                            inRange && !future -> Fen.colors.surfaceMuted
                                             else -> Color.Transparent
                                         }
                                     )
-                                    .clickable { onSelect(date) },
+                                    .clickable(enabled = !future) { onSelect(date) },
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Text(
@@ -277,6 +287,7 @@ private fun RangeCalendarGrid(
                                     style = MaterialTheme.typography.titleMedium,
                                     fontWeight = if (isEdge || date == today) FontWeight.SemiBold else FontWeight.Normal,
                                     color = when {
+                                        future -> Fen.colors.inkFaint
                                         isEdge -> activeText
                                         date == today -> Fen.colors.ink
                                         inRange -> Fen.colors.ink
