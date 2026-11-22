@@ -4,6 +4,10 @@ import android.content.Context
 import android.util.Log
 import app.fen.BuildConfig
 import app.fen.data.ledger.LedgerReader
+import app.fen.mcp.audit.CallLogger
+import app.fen.mcp.audit.CallRecord
+import app.fen.mcp.audit.McpAuditDb
+import app.fen.mcp.auth.TokenAuth
 import app.fen.mcp.protocol.ProtocolDispatcher
 import app.fen.mcp.protocol.SessionStore
 import app.fen.mcp.tools.ReadTools
@@ -37,6 +41,12 @@ class McpController(
     private val token = "dev-token"
 
     private val sessions = SessionStore(System::currentTimeMillis)
+    private val auditDb = McpAuditDb(context)
+    private val callLogger = CallLogger(
+        store = auditDb,
+        clock = System::currentTimeMillis,
+        tokenFingerprint = TokenAuth.fingerprint(token),
+    )
     private val registry = ToolRegistry(
         ReadTools(
             reader = reader,
@@ -50,13 +60,18 @@ class McpController(
         sessions = sessions,
         serverVersion = BuildConfig.VERSION_NAME,
     )
-    private val handler = dispatcher
+    private val handler = RpcHandler { call, requestContext ->
+        callLogger.around(requestContext, call) { dispatcher.handle(call, requestContext) }
+    }
 
     fun start() {
         val current = _state.value
         if (current is McpServerState.Running || current is McpServerState.Starting) return
         _state.value = McpServerState.Starting
         Log.i("FenMcp", "start requested on $port")
+        scope.launch {
+            runCatching { auditDb.prune() }
+        }
         scope.launch {
             try {
                 val instance = McpServer(
@@ -82,6 +97,14 @@ class McpController(
         server?.stop()
         server = null
         _state.value = McpServerState.Stopped
+    }
+
+    suspend fun recentCalls(limit: Int): List<CallRecord> = withContext(Dispatchers.IO) {
+        auditDb.recent(limit)
+    }
+
+    fun clearCallLog() {
+        auditDb.clear()
     }
 
     suspend fun selfTest(): SelfTestResult = withContext(Dispatchers.IO) {
