@@ -15,8 +15,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Restore
+import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -70,7 +70,7 @@ fun BackupScreen(
                     DataRow(
                         title = "导出完整备份",
                         subtitle = "保留分类图标、颜色、id 与精确时间",
-                        icon = Icons.Outlined.FileDownload,
+                        icon = Icons.Outlined.Upload,
                         tint = Color(0xFF17A467),
                         onClick = { jsonExport.launch(stamped("fen-backup", "json")) },
                     )
