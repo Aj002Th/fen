@@ -129,15 +129,18 @@ fun StatsBoardSettingsScreen(
                                 onDrag = { amount ->
                                     dragOffset += amount
                                     val currentIndex = config.order.indexOf(section)
+                                    var movedToIndex = currentIndex
                                     if (dragOffset > rowHeightPx / 2f && currentIndex < config.order.lastIndex) {
                                         onMove(section, 1)
                                         dragOffset -= rowHeightPx
+                                        movedToIndex = currentIndex + 1
                                     } else if (dragOffset < -rowHeightPx / 2f && currentIndex > 0) {
                                         onMove(section, -1)
                                         dragOffset += rowHeightPx
+                                        movedToIndex = currentIndex - 1
                                     }
-                                    if (currentIndex <= 0 && dragOffset < 0f) dragOffset = 0f
-                                    if (currentIndex >= config.order.lastIndex && dragOffset > 0f) {
+                                    if (movedToIndex <= 0 && dragOffset < 0f) dragOffset = 0f
+                                    if (movedToIndex >= config.order.lastIndex && dragOffset > 0f) {
                                         dragOffset = 0f
                                     }
                                 },
@@ -269,6 +272,7 @@ private fun DraggableSectionRow(
                 if (dragging) {
                     Modifier
                         .shadow(12.dp, RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(12.dp))
                         .background(Fen.colors.surface)
                         .border(1.dp, Fen.colors.divider, RoundedCornerShape(12.dp))
                 } else {
