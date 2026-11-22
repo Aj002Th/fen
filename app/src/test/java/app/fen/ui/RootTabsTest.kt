@@ -32,6 +32,24 @@ class RootTabsTest {
     }
 
     @Test
+    fun `returning from a pushed page slides the root back in`() {
+        assertTrue(RootTabs.slidesWhenEntering("settings", "bills", isPop = true))
+        assertTrue(RootTabs.slidesWhenEntering("settings", "stats", isPop = true))
+    }
+
+    @Test
+    fun `switching root tabs does not slide`() {
+        assertFalse(RootTabs.slidesWhenEntering("bills", "stats", isPop = false))
+        assertFalse(RootTabs.slidesWhenEntering("stats", "bills", isPop = false))
+    }
+
+    @Test
+    fun `pushing a page slides it in`() {
+        assertTrue(RootTabs.slidesWhenEntering("bills", "settings", isPop = false))
+        assertTrue(RootTabs.slidesWhenEntering("settings", "categories", isPop = false))
+    }
+
+    @Test
     fun `navigation motion is a short slide with a faster fade out`() {
         assertEquals(260, FenMotion.navSlideMillis)
         assertEquals(180, FenMotion.navFadeInMillis)

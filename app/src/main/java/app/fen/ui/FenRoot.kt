@@ -2,6 +2,7 @@ package app.fen.ui
 
 import android.widget.Toast
 import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateColorAsState
@@ -99,6 +100,22 @@ private fun tabForward(initial: NavBackStackEntry, target: NavBackStackEntry): B
     val to = tabIndex(target)
     return if (from != null && to != null) to > from else true
 }
+
+/** 返回 null 时交给 NavHost 的横滑；根页互切仍然瞬间切换。 */
+private fun AnimatedContentTransitionScope<NavBackStackEntry>.rootEnterOrNone(
+    isPop: Boolean,
+): EnterTransition? =
+    if (
+        RootTabs.slidesWhenEntering(
+            initialState.destination.route,
+            targetState.destination.route,
+            isPop,
+        )
+    ) {
+        null
+    } else {
+        EnterTransition.None
+    }
 
 private val tabs = listOf(
     Tab("bills", "明细", Icons.Outlined.ReceiptLong),
@@ -218,9 +235,9 @@ private fun FenContent(viewModel: FenViewModel) {
             ) {
                 composable(
                     "bills",
-                    enterTransition = { EnterTransition.None },
+                    enterTransition = { rootEnterOrNone(isPop = false) },
                     exitTransition = { ExitTransition.None },
-                    popEnterTransition = { EnterTransition.None },
+                    popEnterTransition = { rootEnterOrNone(isPop = true) },
                     popExitTransition = { ExitTransition.None },
                 ) {
                     FenPage {
@@ -241,9 +258,9 @@ private fun FenContent(viewModel: FenViewModel) {
                 }
                 composable(
                     "stats",
-                    enterTransition = { EnterTransition.None },
+                    enterTransition = { rootEnterOrNone(isPop = false) },
                     exitTransition = { ExitTransition.None },
-                    popEnterTransition = { EnterTransition.None },
+                    popEnterTransition = { rootEnterOrNone(isPop = true) },
                     popExitTransition = { ExitTransition.None },
                 ) {
                     FenPage {
