@@ -52,7 +52,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -137,9 +136,13 @@ private fun FenContent(viewModel: FenViewModel) {
                     FenBottomBar(
                         currentRoute = currentRoute,
                         onSelect = { route ->
-                            if (currentRoute != route) {
+                            val current = backStackEntry
+                            if (currentRoute != route && RootTabs.isRoot(currentRoute) && current != null) {
                                 navController.navigate(route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    popUpTo(current.destination.id) {
+                                        inclusive = true
+                                        saveState = true
+                                    }
                                     launchSingleTop = true
                                     restoreState = true
                                 }
