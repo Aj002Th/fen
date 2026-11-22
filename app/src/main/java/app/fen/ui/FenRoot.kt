@@ -15,6 +15,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -489,7 +490,10 @@ private fun FenBottomBar(currentRoute: String?, onSelect: (String) -> Unit, onAd
                             modifier = Modifier
                                 .weight(1f)
                                 .clip(RoundedCornerShape(20.dp))
-                                .clickable { onSelect(tab.route) }
+                                .clickable(
+                                    interactionSource = remember(tab.route) { MutableInteractionSource() },
+                                    indication = null,
+                                ) { onSelect(tab.route) }
                                 .padding(vertical = 7.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
