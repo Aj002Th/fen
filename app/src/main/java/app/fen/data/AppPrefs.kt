@@ -1,8 +1,9 @@
 package app.fen.data
 
 import android.content.Context
+import java.time.LocalDate
 
-/** 轻量偏好设置：目前只有主题模式。 */
+/** 轻量偏好设置：主题、搜索历史、统计看板。 */
 class AppPrefs(context: Context) {
 
     private val sp = context.getSharedPreferences("fen_prefs", Context.MODE_PRIVATE)
@@ -45,10 +46,87 @@ class AppPrefs(context: Context) {
             .putString(KEY_SEARCH_HISTORY, value.filter { it.isNotBlank() }.take(5).joinToString("\n"))
             .apply()
 
+    /* ------------------------------ 统计看板 ------------------------------ */
+
+    /** 看板顺序（含隐藏项），逗号分隔的 StatsSection.key */
+    var statsSectionOrder: List<String>
+        get() = (sp.getString(KEY_STATS_SECTION_ORDER, "") ?: "")
+            .split(",")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+        set(value) = sp.edit()
+            .putString(KEY_STATS_SECTION_ORDER, value.joinToString(","))
+            .apply()
+
+    /** 被隐藏的看板 key */
+    var statsHiddenSections: Set<String>
+        get() = (sp.getString(KEY_STATS_HIDDEN, "") ?: "")
+            .split(",")
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+        set(value) = sp.edit()
+            .putString(KEY_STATS_HIDDEN, value.joinToString(","))
+            .apply()
+
+    /** 分类排行显示数量：5 / 10 / 0（全部） */
+    var statsRankingLimit: Int
+        get() = sp.getInt(KEY_STATS_RANKING_LIMIT, 5)
+        set(value) = sp.edit().putInt(KEY_STATS_RANKING_LIMIT, value).apply()
+
+    var statsSummaryShowEmpty: Boolean
+        get() = sp.getBoolean(KEY_STATS_SUMMARY_EMPTY, false)
+        set(value) = sp.edit().putBoolean(KEY_STATS_SUMMARY_EMPTY, value).apply()
+
+    /** 最后一次统计范围 */
+    var statsMode: String
+        get() = sp.getString(KEY_STATS_MODE, StatsMode.MONTH.name) ?: StatsMode.MONTH.name
+        set(value) = sp.edit().putString(KEY_STATS_MODE, value).apply()
+
+    var statsAnchorEpochDay: Long
+        get() = sp.getLong(KEY_STATS_ANCHOR, LocalDate.now().toEpochDay())
+        set(value) = sp.edit().putLong(KEY_STATS_ANCHOR, value).apply()
+
+    var statsRangeStartEpochDay: Long
+        get() = sp.getLong(KEY_STATS_RANGE_START, LocalDate.now().minusDays(29).toEpochDay())
+        set(value) = sp.edit().putLong(KEY_STATS_RANGE_START, value).apply()
+
+    var statsRangeEndEpochDay: Long
+        get() = sp.getLong(KEY_STATS_RANGE_END, LocalDate.now().toEpochDay())
+        set(value) = sp.edit().putLong(KEY_STATS_RANGE_END, value).apply()
+
+    /** 分类占比/排行共用：EXPENSE / INCOME */
+    var statsCategoryType: String
+        get() = sp.getString(KEY_STATS_CATEGORY_TYPE, TxType.EXPENSE.name) ?: TxType.EXPENSE.name
+        set(value) = sp.edit().putString(KEY_STATS_CATEGORY_TYPE, value).apply()
+
+    fun statsBoardConfig(): StatsBoardConfig = StatsBoardConfig(
+        order = sanitizeStatsOrder(statsSectionOrder),
+        hidden = statsHiddenSections.mapNotNull { StatsSection.fromKey(it) }.toSet(),
+        rankingLimit = statsRankingLimit,
+        summaryShowEmpty = statsSummaryShowEmpty,
+    )
+
+    fun saveStatsBoardConfig(config: StatsBoardConfig) {
+        statsSectionOrder = config.order.map { it.key }
+        statsHiddenSections = config.hidden.map { it.key }.toSet()
+        statsRankingLimit = config.rankingLimit
+        statsSummaryShowEmpty = config.summaryShowEmpty
+    }
+
     private companion object {
         const val KEY_THEME_MODE = "theme_mode"
         const val KEY_HIDDEN_SUGGESTIONS = "hidden_suggestions"
         const val KEY_PENALTIES = "suggestion_penalties"
         const val KEY_SEARCH_HISTORY = "search_history"
+        const val KEY_STATS_SECTION_ORDER = "stats_section_order"
+        const val KEY_STATS_HIDDEN = "stats_hidden_sections"
+        const val KEY_STATS_RANKING_LIMIT = "stats_ranking_limit"
+        const val KEY_STATS_SUMMARY_EMPTY = "stats_summary_show_empty"
+        const val KEY_STATS_MODE = "stats_mode"
+        const val KEY_STATS_ANCHOR = "stats_anchor_epoch_day"
+        const val KEY_STATS_RANGE_START = "stats_range_start_epoch_day"
+        const val KEY_STATS_RANGE_END = "stats_range_end_epoch_day"
+        const val KEY_STATS_CATEGORY_TYPE = "stats_category_type"
     }
 }
