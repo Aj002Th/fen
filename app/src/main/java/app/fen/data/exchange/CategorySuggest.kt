@@ -96,6 +96,23 @@ object CategorySuggest {
         Rule("理财", listOf("理财", "基金", "利息", "分红")),
     )
 
+    fun isGeneric(source: String): Boolean = source.trim() in genericCategories
+
+    /**
+     * 解析阶段先把「商户消费 / 扫二维码付款 / 群收款」这类没有语义的来源，
+     * 按备注关键词归到具体分类；命中不了就归到「未分类」。
+     */
+    fun bucketize(records: List<ParsedRecord>, categories: List<Category>): List<ParsedRecord> =
+        records.map { record ->
+            if (record.type == TxType.EXPENSE && isGeneric(record.sourceCategory)) {
+                val inferred = keywordCategory(record.note, record.type, categories)?.name
+                    ?: UNCATEGORIZED_NAME
+                record.copy(sourceCategory = inferred, rawCategory = record.sourceCategory)
+            } else {
+                record
+            }
+        }
+
     fun suggest(source: String, type: TxType, categories: List<Category>): MappingTarget {
         val name = source.trim()
         val existing = categories.filter { it.type == type }
@@ -111,13 +128,10 @@ object CategorySuggest {
         }
         // 退款在 iCost 里以「商户名-退款」当分类，没有可用语义
         if (name.endsWith("-退款")) return MappingTarget(MappingKind.UNCATEGORIZED)
-        if (type == TxType.EXPENSE && name in genericCategories) {
-            return MappingTarget(MappingKind.AUTO)
-        }
         return MappingTarget(MappingKind.UNCATEGORIZED)
     }
 
-    /** AUTO：按备注关键词找已有分类；找不到返回 null。 */
+    /** 按备注关键词找已有分类；找不到返回 null。 */
     fun keywordCategory(note: String, type: TxType, categories: List<Category>): Category? {
         if (note.isBlank()) return null
         val text = note.lowercase()
@@ -127,20 +141,6 @@ object CategorySuggest {
             if (rule.keywords.any { text.contains(it.lowercase()) }) return category
         }
         return null
-    }
-
-    /** 某来源分类在 AUTO 下的分布（分类名 → 条数，未命中记为「未分类」）。 */
-    fun autoDistribution(
-        records: List<ParsedRecord>,
-        type: TxType,
-        categories: List<Category>,
-    ): Map<String, Int> {
-        val result = LinkedHashMap<String, Int>()
-        records.filter { it.type == type }.forEach { record ->
-            val name = keywordCategory(record.note, type, categories)?.name ?: "未分类"
-            result[name] = (result[name] ?: 0) + 1
-        }
-        return result.entries.sortedByDescending { it.value }.associate { it.key to it.value }
     }
 
     /** 新建分类时按名字挑一个合适的线性图标 key。 */

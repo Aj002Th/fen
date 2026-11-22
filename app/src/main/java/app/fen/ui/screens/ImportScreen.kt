@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.FileOpen
+import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -100,6 +101,7 @@ fun ImportScreen(
     var confirmRestore by remember { mutableStateOf(false) }
     var confirmUndo by remember { mutableStateOf(false) }
     var sourcePicker by remember { mutableStateOf(false) }
+    var showHelp by remember { mutableStateOf(false) }
 
     val filePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
@@ -142,6 +144,14 @@ fun ImportScreen(
                 style = MaterialTheme.typography.headlineLarge,
                 modifier = Modifier.weight(1f),
             )
+            if (!state.source.isBackup) {
+                CircleAction(
+                    icon = Icons.Outlined.HelpOutline,
+                    contentDescription = "导入说明",
+                    onClick = { showHelp = true },
+                    tint = Fen.colors.inkSoft,
+                )
+            }
         }
 
         when (state.stage) {
@@ -202,6 +212,24 @@ fun ImportScreen(
         }
     }
 
+    if (showHelp) {
+        AlertDialog(
+            onDismissRequest = { showHelp = false },
+            title = { Text("导入说明") },
+            text = {
+                Text(
+                    "自动识别：按表头判断格式，大多数情况够用。\n\n" +
+                        "通用表格：只依赖表头（日期、金额、分类或类型），不要求列顺序。\n\n" +
+                        "来源只是提示；选错也可以在预览页返回重选。",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showHelp = false }) { Text("知道了") }
+            },
+        )
+    }
+
     if (sourcePicker) {
         SourcePickerDialog(
             current = state.source,
@@ -214,12 +242,9 @@ fun ImportScreen(
     }
 
     editing?.let { mapping ->
-        val records = state.session?.recordsFor(mapping.source, mapping.type).orEmpty()
-        val distribution = CategorySuggest.autoDistribution(records, mapping.type, categories)
         MappingDialog(
             mapping = mapping,
             categories = categories,
-            autoPreview = distribution.entries.take(4).joinToString(" · ") { "${it.key} ${it.value}" },
             onDismiss = { editing = null },
             onPick = { target ->
                 onUpdateMapping(mapping.source, mapping.type, target)
@@ -304,14 +329,6 @@ private fun SetupContent(
                         )
                     }
                 }
-                item {
-                    Text(
-                        "完整备份是 JSON，保留分类图标、颜色、id 和精确时间；恢复后与导出前一致。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Fen.colors.inkSoft,
-                        modifier = Modifier.padding(top = 14.dp, start = 4.dp, end = 4.dp),
-                    )
-                }
             } else {
                 item {
                     Surface(
@@ -369,22 +386,6 @@ private fun SetupContent(
                             )
                         }
                     }
-                }
-
-                item {
-                    Text(
-                        "xlsx / xls / csv 都可以。来源不确定时保持「自动识别」；" +
-                            "如果选了具体来源，Fen 会按该来源的列名再确认一次。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Fen.colors.inkSoft,
-                        modifier = Modifier.padding(top = 14.dp, start = 4.dp, end = 4.dp),
-                    )
-                    Text(
-                        "「通用表格」只依赖表头：日期/时间、金额、分类（或类型/收支）、备注；不要求列顺序，没有表头就无法解析。",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Fen.colors.inkFaint,
-                        modifier = Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp),
-                    )
                 }
             }
 
@@ -837,7 +838,7 @@ private fun MappingList(
     val session = state.session ?: return
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         Text(
-            "共 ${session.mappings.size} 个来源分类。默认建议已经填好，点任意一行可以改。",
+            "共 ${session.mappings.size} 个分类结果。默认已按备注归好，点任意一行可以整体改。",
             style = MaterialTheme.typography.bodyMedium,
             color = Fen.colors.inkSoft,
             modifier = Modifier.padding(bottom = 10.dp),
@@ -859,7 +860,10 @@ private fun MappingList(
                                 style = MaterialTheme.typography.titleMedium,
                             )
                             Text(
-                                "${mapping.type.label()} · ${mapping.count} 笔 · ¥${formatMoney(mapping.amount)}",
+                                "${mapping.type.label()} · ${mapping.count} 笔 · ¥${formatMoney(mapping.amount)}" +
+                                    if (mapping.origins.isNotEmpty()) {
+                                        " · 来自 ${mapping.origins.joinToString("、")}"
+                                    } else "",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Fen.colors.inkSoft,
                             )
@@ -890,7 +894,6 @@ private fun MappingList(
 private fun MappingDialog(
     mapping: CategoryMapping,
     categories: List<Category>,
-    autoPreview: String,
     onDismiss: () -> Unit,
     onPick: (MappingTarget) -> Unit,
 ) {
@@ -900,13 +903,8 @@ private fun MappingDialog(
         text = {
             Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                 OptionRow(
-                    title = "按备注自动归类",
-                    subtitle = if (autoPreview.isBlank()) "按商户/备注关键词匹配已有分类" else autoPreview,
-                    selected = mapping.target.kind == MappingKind.AUTO,
-                ) { onPick(MappingTarget(MappingKind.AUTO)) }
-                OptionRow(
                     title = "未分类",
-                    subtitle = "保留流水，但不参与分类统计",
+                    subtitle = "归到「未分类」分类，可搜索、可编辑、参与统计",
                     selected = mapping.target.kind == MappingKind.UNCATEGORIZED,
                 ) { onPick(MappingTarget(MappingKind.UNCATEGORIZED)) }
 
@@ -1113,7 +1111,6 @@ private fun ActionButton(
 private fun targetLabel(target: MappingTarget, categories: List<Category>): String = when (target.kind) {
     MappingKind.EXISTING -> categories.firstOrNull { it.id == target.categoryId }?.name ?: "未分类"
     MappingKind.NEW -> "新建「${target.newName.ifBlank { "同名分类" }}」"
-    MappingKind.AUTO -> "按备注自动归类"
     MappingKind.UNCATEGORIZED -> "未分类"
 }
 

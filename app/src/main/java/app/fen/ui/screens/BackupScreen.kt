@@ -85,31 +85,6 @@ fun BackupScreen(
                 }
             }
         }
-
-        item {
-            Text(
-                "完整备份是 Fen 的无损格式：分类图标、颜色、id、精确时间都会保留。" +
-                    "它和 CSV 表格不是一回事，不能互相替代。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Fen.colors.inkSoft,
-                modifier = Modifier.padding(top = 16.dp, start = 4.dp, end = 4.dp),
-            )
-        }
-
-        item {
-            Surface(
-                shape = RoundedCornerShape(18.dp),
-                color = Fen.colors.surfaceMuted,
-                modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
-            ) {
-                Text(
-                    "恢复会先清空当前的分类和流水，再写回备份；操作不可撤销。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Fen.colors.inkSoft,
-                    modifier = Modifier.padding(14.dp),
-                )
-            }
-        }
     }
 }
 

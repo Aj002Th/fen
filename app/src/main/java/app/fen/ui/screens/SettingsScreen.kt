@@ -136,7 +136,7 @@ fun SettingsScreen(
             ) {
                 SettingItem(
                     title = "导入",
-                    subtitle = "iCost / 微信 / 支付宝 / 京东 / 美团 / 记账 App",
+                    subtitle = "账单导入与来源选择",
                     icon = Icons.Outlined.FileUpload,
                     tint = Color(0xFFF2A93E),
                     onClick = onOpenImport,

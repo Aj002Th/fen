@@ -36,9 +36,32 @@ class PlannerTest {
     @Test
     fun suggestions() {
         assertEquals(MappingKind.EXISTING, CategorySuggest.suggest("餐饮美食", TxType.EXPENSE, all).kind)
-        assertEquals(MappingKind.AUTO, CategorySuggest.suggest("商户消费", TxType.EXPENSE, all).kind)
+        assertEquals(MappingKind.UNCATEGORIZED, CategorySuggest.suggest("商户消费", TxType.EXPENSE, all).kind)
         assertEquals(MappingKind.UNCATEGORIZED, CategorySuggest.suggest("AA巴士-退款", TxType.INCOME, all).kind)
         assertEquals(MappingKind.UNCATEGORIZED, CategorySuggest.suggest("不存在", TxType.EXPENSE, all).kind)
+
+        val withUncategorized = all + Category("c-uncat", "未分类", TxType.EXPENSE, "other", 0xFF7C8794, 9)
+        assertEquals(
+            MappingKind.EXISTING,
+            CategorySuggest.suggest("未分类", TxType.EXPENSE, withUncategorized).kind,
+        )
+    }
+
+    @Test
+    fun genericSourcesAreBucketedByNote() {
+        val records = listOf(
+            record("商户消费", amount = 1000, note = "地铁"),
+            record("商户消费", amount = 2000, note = "未知商户"),
+            record("餐饮美食", amount = 3000, note = "午饭"),
+        )
+        val bucketed = CategorySuggest.bucketize(records, all)
+        assertEquals("交通", bucketed[0].sourceCategory)
+        assertEquals("商户消费", bucketed[0].rawCategory)
+        assertEquals("未分类", bucketed[1].sourceCategory)
+        assertEquals("商户消费", bucketed[1].rawCategory)
+        // 非通用来源保持原样
+        assertEquals("餐饮美食", bucketed[2].sourceCategory)
+        assertEquals("", bucketed[2].rawCategory)
     }
 
     @Test
@@ -52,8 +75,8 @@ class PlannerTest {
     fun mappingKindsAndTransferPolicy() {
         val records = listOf(
             record("餐饮美食", amount = 1000),
-            record("商户消费", amount = 2000, note = "地铁"),
-            record("商户消费", amount = 3000, note = "未知商户"),
+            record("交通", amount = 2000),
+            record("未分类", amount = 3000),
             record("转账", amount = 5000, note = "微信转账", transfer = true),
         )
         val session = ImportSession(
@@ -65,7 +88,8 @@ class PlannerTest {
             warnings = emptyList(),
             mappings = listOf(
                 CategoryMapping("餐饮美食", TxType.EXPENSE, 1, 1000, MappingTarget(MappingKind.EXISTING, food.id)),
-                CategoryMapping("商户消费", TxType.EXPENSE, 2, 5000, MappingTarget(MappingKind.AUTO)),
+                CategoryMapping("交通", TxType.EXPENSE, 1, 2000, MappingTarget(MappingKind.EXISTING, transport.id)),
+                CategoryMapping("未分类", TxType.EXPENSE, 1, 3000, MappingTarget(MappingKind.UNCATEGORIZED)),
                 CategoryMapping("转账", TxType.EXPENSE, 1, 5000, MappingTarget(MappingKind.NEW, newName = "转账")),
             ),
         )
@@ -78,14 +102,16 @@ class PlannerTest {
             transferPolicy = TransferPolicy.EXPENSE,
             batchId = "batch",
             startSortOrder = 3,
+            uncategorizedId = { "uncat-${it.name}" },
             newId = { "new-${counter++}" },
         )
         assertEquals(4, plan.transactions.size)
         assertEquals(food.id, plan.transactions[0].categoryId)
         assertEquals(transport.id, plan.transactions[1].categoryId)
-        assertNull(plan.transactions[2].categoryId)
+        assertEquals("uncat-EXPENSE", plan.transactions[2].categoryId)
         assertEquals(1, plan.uncategorized)
         assertTrue(plan.transactions.all { it.importBatch == "batch" })
+        assertTrue(plan.transactions.all { it.categoryId != null })
         assertEquals(1, plan.newCategories.size)
         assertEquals(TxType.EXPENSE, plan.transactions[3].type)
     }
@@ -103,12 +129,19 @@ class PlannerTest {
                 CategoryMapping("转账", TxType.EXPENSE, 1, 5000, MappingTarget(MappingKind.UNCATEGORIZED)),
             ),
         )
-        val skipped = ImportPlanner.build(session, all, false, TransferPolicy.SKIP, "b", 0)
+        val skipped = ImportPlanner.build(
+            session, all, false, TransferPolicy.SKIP, "b", 0,
+            uncategorizedId = { "u-${it.name}" },
+        )
         assertEquals(0, skipped.transactions.size)
         assertEquals(1, skipped.skippedTransfers)
 
-        val income = ImportPlanner.build(session, all, false, TransferPolicy.INCOME, "b", 0)
+        val income = ImportPlanner.build(
+            session, all, false, TransferPolicy.INCOME, "b", 0,
+            uncategorizedId = { "u-${it.name}" },
+        )
         assertEquals(TxType.INCOME, income.transactions.single().type)
+        assertEquals("u-INCOME", income.transactions.single().categoryId)
     }
 
     @Test
@@ -128,7 +161,10 @@ class PlannerTest {
                 CategoryMapping("餐饮美食", TxType.EXPENSE, 2, 2000, MappingTarget(MappingKind.EXISTING, food.id)),
             ),
         )
-        val plan = ImportPlanner.build(session, all, skipDuplicates = true, TransferPolicy.SIGN, "b", 0)
+        val plan = ImportPlanner.build(
+            session, all, skipDuplicates = true, transferPolicy = TransferPolicy.SIGN,
+            batchId = "b", startSortOrder = 0, uncategorizedId = { "u-${it.name}" },
+        )
         assertEquals(1, plan.transactions.size)
         assertEquals(1, plan.skippedDuplicates)
     }

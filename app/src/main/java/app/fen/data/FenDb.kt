@@ -5,6 +5,7 @@ import android.content.Context
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import app.fen.data.exchange.UNCATEGORIZED_NAME
 import java.util.UUID
 
 /**
@@ -120,6 +121,29 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
         }
         if (oldVersion < 7) {
             db.execSQL("ALTER TABLE import_batch ADD COLUMN file_hash TEXT")
+        }
+        if (oldVersion < 8) {
+            // 把 NULL / 已删除分类的流水归到一个真实的「未分类」分类
+            for (type in TxType.entries) {
+                val missing = db.rawQuery(
+                    """
+                    SELECT 1 FROM tx
+                    WHERE type = ? AND (category_id IS NULL OR category_id NOT IN (SELECT id FROM category))
+                    LIMIT 1
+                    """.trimIndent(),
+                    arrayOf(type.name),
+                ).use { it.moveToFirst() }
+                if (missing) {
+                    val id = ensureUncategorized(db, type)
+                    db.execSQL(
+                        """
+                        UPDATE tx SET category_id = ?
+                        WHERE type = ? AND (category_id IS NULL OR category_id NOT IN (SELECT id FROM category))
+                        """.trimIndent(),
+                        arrayOf(id, type.name),
+                    )
+                }
+            }
         }
     }
 
@@ -413,10 +437,53 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
             db.delete("import_batch", null, null)
             categories.forEach { db.insertOrThrow("category", null, it.toValues()) }
             txs.forEach { db.insertOrThrow("tx", null, it.toValues()) }
+            // 备份里如果还有 category_id = NULL 的流水，也归到真实的「未分类」
+            for (type in TxType.entries) {
+                val hasNull = db.rawQuery(
+                    "SELECT 1 FROM tx WHERE type = ? AND category_id IS NULL LIMIT 1",
+                    arrayOf(type.name),
+                ).use { it.moveToFirst() }
+                if (hasNull) {
+                    val id = ensureUncategorized(db, type)
+                    db.execSQL(
+                        "UPDATE tx SET category_id = ? WHERE type = ? AND category_id IS NULL",
+                        arrayOf(id, type.name),
+                    )
+                }
+            }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
         }
+    }
+
+    /** 确保「未分类」是一个真实分类，返回它的 id。 */
+    fun ensureUncategorized(type: TxType): String = ensureUncategorized(writableDatabase, type)
+
+    private fun ensureUncategorized(db: SQLiteDatabase, type: TxType): String {
+        db.rawQuery(
+            "SELECT id FROM category WHERE name = ? AND type = ? LIMIT 1",
+            arrayOf(UNCATEGORIZED_NAME, type.name),
+        ).use { cursor ->
+            if (cursor.moveToFirst()) return cursor.getString(0)
+        }
+        val id = UUID.randomUUID().toString()
+        val order = db.rawQuery("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM category", null).use {
+            if (it.moveToFirst()) it.getInt(0) else 0
+        }
+        db.insertOrThrow(
+            "category",
+            null,
+            Category(
+                id = id,
+                name = UNCATEGORIZED_NAME,
+                type = type,
+                icon = if (type == TxType.INCOME) "other_income" else "other",
+                color = 0xFF7C8794,
+                sortOrder = order,
+            ).toValues(),
+        )
+        return id
     }
 
     private fun Tx.toValues() = ContentValues().apply {
@@ -439,7 +506,7 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
     }
 
     private companion object {
-        const val DB_VERSION = 7
+        const val DB_VERSION = 8
 
         val CategoryPaletteColors = listOf(
             0xFFF2583E, 0xFF3E8BF2, 0xFF17A467, 0xFFF2A93E,

@@ -73,7 +73,7 @@ fun ExportScreen(
                 Column {
                     DataRow(
                         title = "导出表格",
-                        subtitle = "CSV · 用 Excel / WPS 打开、编辑或归档",
+                        subtitle = "CSV · 可用 Excel 编辑，不含图标与颜色",
                         icon = Icons.Outlined.TableChart,
                         tint = Color(0xFF3E8BF2),
                         onClick = { csvExport.launch(stamped("fen", "csv")) },
@@ -88,16 +88,6 @@ fun ExportScreen(
                     )
                 }
             }
-        }
-
-        item {
-            Text(
-                "CSV 只有日期、类型、金额、分类、备注：分类按名字匹配，不包含图标、颜色、id 和精确秒。" +
-                    "需要完整数据请用「备份 → 完整备份」。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = Fen.colors.inkSoft,
-                modifier = Modifier.padding(top = 16.dp, start = 4.dp, end = 4.dp),
-            )
         }
     }
 }

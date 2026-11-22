@@ -19,6 +19,7 @@ object ImportPlanner {
                 count = source.count,
                 amount = source.amount,
                 target = CategorySuggest.suggest(source.name, source.type, categories),
+                origins = source.origins,
             )
         }
 
@@ -29,6 +30,7 @@ object ImportPlanner {
         transferPolicy: TransferPolicy,
         batchId: String?,
         startSortOrder: Int,
+        uncategorizedId: (app.fen.data.TxType) -> String,
         newId: () -> String = { UUID.randomUUID().toString() },
     ): ImportPlan {
         val newCategories = mutableListOf<Category>()
@@ -53,8 +55,6 @@ object ImportPlanner {
             knownIds.add(category.id)
             return category.id
         }
-
-        fun allCategories(): List<Category> = existingCategories + newCategories
 
         var skippedDuplicates = 0
         var skippedTransfers = 0
@@ -82,16 +82,15 @@ object ImportPlanner {
 
             val mapping = session.mappingFor(record.sourceCategory, record.type)
                 ?: session.mappingFor(record.sourceCategory, type)
-            val categoryId: String? = when (mapping?.target?.kind) {
+            val resolved: String? = when (mapping?.target?.kind) {
                 MappingKind.EXISTING ->
                     mapping.target.categoryId?.takeIf { knownIds.contains(it) }
                 MappingKind.NEW ->
                     ensureCategory(mapping.target.newName.ifBlank { sourceLabel(record.sourceCategory) }, type)
-                MappingKind.AUTO ->
-                    CategorySuggest.keywordCategory(record.note, type, allCategories())?.id
                 MappingKind.UNCATEGORIZED, null -> null
             }
-            if (categoryId == null) uncategorized++
+            val categoryId = resolved ?: uncategorizedId(type)
+            if (resolved == null) uncategorized++
 
             transactions.add(
                 Tx(

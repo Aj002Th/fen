@@ -291,6 +291,7 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
                     transferPolicy = state.transferPolicy,
                     batchId = batchId,
                     startSortOrder = repository.nextCategoryOrder(),
+                    uncategorizedId = { repository.ensureUncategorized(it) },
                 )
                 if (plan.transactions.isEmpty()) {
                     _importState.value = state.copy(

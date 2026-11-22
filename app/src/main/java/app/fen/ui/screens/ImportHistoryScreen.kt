@@ -111,16 +111,6 @@ fun ImportHistoryScreen(
                     }
                 }
             }
-
-            item {
-                Text(
-                    "导入记录按批次追踪：改金额、改备注、改时间、把流水转到别的分类，都仍然属于原批次；" +
-                        "只有删除流水（或删除分类时一并删除流水）才会减少批次里的现存条数。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Fen.colors.inkSoft,
-                    modifier = Modifier.padding(top = 10.dp, start = 4.dp, end = 4.dp),
-                )
-            }
         }
     }
 

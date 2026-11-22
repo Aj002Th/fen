@@ -71,15 +71,18 @@ object FileDecode {
                 warnings = emptyList(),
                 mappings = emptyList(),
             )
-            is ParsedFile.Sheet -> ImportSession(
-                fileName = fileName,
-                source = parsed.result.source,
-                backup = null,
-                records = parsed.result.records,
-                skipped = parsed.result.skipped,
-                warnings = parsed.result.warnings,
-                mappings = ImportPlanner.buildMappings(parsed.result.records, categories),
-            )
+            is ParsedFile.Sheet -> {
+                val records = CategorySuggest.bucketize(parsed.result.records, categories)
+                ImportSession(
+                    fileName = fileName,
+                    source = parsed.result.source,
+                    backup = null,
+                    records = records,
+                    skipped = parsed.result.skipped,
+                    warnings = parsed.result.warnings,
+                    mappings = ImportPlanner.buildMappings(records, categories),
+                )
+            }
         }
 
     fun isZip(bytes: ByteArray): Boolean =

@@ -16,10 +16,13 @@ data class ParsedRecord(
     val occurredAt: Long,
     val type: TxType,
     val amount: Long,
+    /** 经过「按备注归类」之后的分类名，映射列表用它。 */
     val sourceCategory: String,
     val note: String,
     val isTransfer: Boolean = false,
     val suspectDuplicate: Boolean = false,
+    /** 原始来源分类（如 商户消费），仅用于在映射列表里说明「来自哪里」。 */
+    val rawCategory: String = "",
 )
 
 /** 来源分类的聚合，用于「分类映射」列表。 */
@@ -28,6 +31,8 @@ data class SourceCategory(
     val type: TxType,
     val count: Int,
     val amount: Long,
+    /** 这个归类来自哪些原始分类，如 [商户消费, 扫二维码付款]。 */
+    val origins: List<String> = emptyList(),
 )
 
 /** 表格类文件（iCost / 通用 CSV）的解析结果。 */
@@ -39,14 +44,11 @@ data class SheetResult(
 )
 
 /** 分类映射方式。 */
-enum class MappingKind { EXISTING, NEW, UNCATEGORIZED, AUTO }
+enum class MappingKind { EXISTING, NEW, UNCATEGORIZED }
 
 /**
- * 一个来源分类要落到哪里：
- * - EXISTING：合并进已有分类（categoryId）
- * - NEW：新建分类（newName，默认用来源名）
- * - UNCATEGORIZED：不分类
- * - AUTO：按备注关键词自动归类，匹配不到则不分类
+ * 归到「未分类」现在是落到一个真实的「未分类」分类（导入时自动创建），
+ * 而不是 category_id = NULL，这样它也能被搜索、编辑、统计。
  */
 data class MappingTarget(
     val kind: MappingKind,
@@ -60,6 +62,8 @@ data class CategoryMapping(
     val count: Int,
     val amount: Long,
     val target: MappingTarget,
+    /** 例如「餐饮」这个归类来自 商户消费 / 扫二维码付款。 */
+    val origins: List<String> = emptyList(),
 )
 
 /** 转账行（iCost 模板里 type=转账）如何落成支出/收入。 */
@@ -82,8 +86,10 @@ data class ImportOutcome(
     val skippedDuplicates: Int,
 )
 
-/** 来源分类为空时统一显示为「未分类」，保证聚合与映射使用同一个 key。 */
-fun sourceLabel(name: String): String = name.trim().ifEmpty { "未分类" }
+/** 空分类统一显示为「未分类」，与真实分类同名。 */
+const val UNCATEGORIZED_NAME = "未分类"
+
+fun sourceLabel(name: String): String = name.trim().ifEmpty { UNCATEGORIZED_NAME }
 
 /** 一次导入会话，UI 直接渲染它。 */
 data class ImportSession(
@@ -107,21 +113,22 @@ data class ImportSession(
 
     fun mappingFor(source: String, type: TxType): CategoryMapping? =
         mappings.firstOrNull { it.source == sourceLabel(source) && it.type == type }
-
-    /** 某个来源分类用于 AUTO 时命中的记录。 */
-    fun recordsFor(source: String, type: TxType): List<ParsedRecord> =
-        records.filter { sourceLabel(it.sourceCategory) == source && it.type == type }
 }
 
-/** 把一组记录按 (来源分类, 类型) 聚合。 */
+/** 把一组记录按 (归类名, 类型) 聚合，并记录原始来源。 */
 fun aggregateSourceCategories(records: List<ParsedRecord>): List<SourceCategory> =
     records.groupBy { sourceLabel(it.sourceCategory) to it.type }
         .map { (key, items) ->
+            val origins = items
+                .map { it.rawCategory.trim() }
+                .filter { it.isNotEmpty() && it != key.first }
+                .distinct()
             SourceCategory(
                 name = key.first,
                 type = key.second,
                 count = items.size,
                 amount = items.sumOf { it.amount },
+                origins = origins,
             )
         }
         .sortedWith(compareBy<SourceCategory>({ it.type }, { -it.count }))
