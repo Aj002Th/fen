@@ -2,9 +2,11 @@ package app.fen.autobook.source.recognizers
 
 import app.fen.autobook.source.SourceRecognizer
 import app.fen.autobook.source.scoreSource
+import app.fen.autobook.source.templates.WechatTemplate
 
 object WechatRecognizer : SourceRecognizer {
     override val id = "wechat"
+    override val imageHints = WechatTemplate.hints
 
     private val titles = listOf("微信支付", "微信", "WeChat")
     private val pages = listOf("支付成功", "账单详情", "转账", "红包")

@@ -1,6 +1,11 @@
 package app.fen.autobook.source
 
-data class SourceMatch(val sourceId: String, val page: String?, val score: Float)
+data class SourceMatch(
+    val sourceId: String,
+    val page: String?,
+    val score: Float,
+    val imageHints: ImageHints? = null,
+)
 
 class SourceDetection(
     private val recognizers: List<SourceRecognizer>,
@@ -18,7 +23,7 @@ class SourceDetection(
 
         val accepted = best.second >= minScore && best.second - secondScore >= minGap
         return if (accepted) {
-            SourceMatch(best.first.id, best.first.pageHint(text), best.second)
+            SourceMatch(best.first.id, best.first.pageHint(text), best.second, best.first.imageHints)
         } else {
             SourceMatch("generic", null, best.second)
         }

@@ -2,9 +2,11 @@ package app.fen.autobook.source.recognizers
 
 import app.fen.autobook.source.SourceRecognizer
 import app.fen.autobook.source.scoreSource
+import app.fen.autobook.source.templates.AlipayTemplate
 
 object AlipayRecognizer : SourceRecognizer {
     override val id = "alipay"
+    override val imageHints = AlipayTemplate.hints
 
     private val titles = listOf("支付宝", "Alipay")
     private val pages = listOf("支付成功", "账单详情", "交易详情")

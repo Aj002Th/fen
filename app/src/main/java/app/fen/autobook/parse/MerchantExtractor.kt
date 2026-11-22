@@ -3,10 +3,10 @@ package app.fen.autobook.parse
 import app.fen.autobook.model.OcrLine
 
 object MerchantExtractor {
-    private val anchors = listOf("商户全称", "收款方", "商户", "订单摘要", "商品说明")
+    private val defaultAnchors = listOf("商户全称", "收款方", "商户", "订单摘要", "商品说明")
     private val noise = listOf("支付", "收款")
 
-    fun extract(lines: List<OcrLine>): String {
+    fun extract(lines: List<OcrLine>, anchors: List<String> = defaultAnchors): String {
         for (anchor in anchors) {
             for (line in lines) {
                 val text = line.text.trim()

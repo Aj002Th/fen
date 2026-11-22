@@ -2,9 +2,11 @@ package app.fen.autobook.source.recognizers
 
 import app.fen.autobook.source.SourceRecognizer
 import app.fen.autobook.source.scoreSource
+import app.fen.autobook.source.templates.UnionpayTemplate
 
 object UnionpayRecognizer : SourceRecognizer {
     override val id = "unionpay"
+    override val imageHints = UnionpayTemplate.hints
 
     private val titles = listOf("云闪付", "银联")
     private val pages = listOf("交易详情", "交易记录", "支付消息")
