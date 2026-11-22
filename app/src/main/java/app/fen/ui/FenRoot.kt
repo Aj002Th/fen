@@ -2,6 +2,9 @@ package app.fen.ui
 
 import android.widget.Toast
 import androidx.activity.compose.PredictiveBackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -39,6 +42,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.PieChart
 import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -68,7 +72,12 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import app.fen.BuildConfig
+import app.fen.FenApp
+import app.fen.autobook.capture.ImageImportState
+import app.fen.autobook.ui.BatchConfirmSheet
+import app.fen.autobook.ui.ConfirmBillSheet
 import app.fen.data.Tx
+import app.fen.data.TxType
 import app.fen.ui.screens.AddTransactionScreen
 import app.fen.ui.screens.BackupScreen
 import app.fen.ui.screens.BillsScreen
@@ -164,6 +173,25 @@ private fun FenContent(viewModel: FenViewModel) {
     var editingTx by remember { mutableStateOf<Tx?>(null) }
     val addOffset = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
+    val smartImport = remember(context) { (context.applicationContext as FenApp).imageImport }
+    val smartImportState by smartImport.state.collectAsStateWithLifecycle()
+    val imagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(9)
+    ) { uris ->
+        if (uris.size == 1) {
+            smartImport.submit(uris.first())
+        } else if (uris.size > 1) {
+            smartImport.submitAll(uris)
+        }
+    }
+
+    LaunchedEffect(smartImportState) {
+        val current = smartImportState
+        if (current is ImageImportState.Error) {
+            Toast.makeText(context, current.message, Toast.LENGTH_SHORT).show()
+            smartImport.consume()
+        }
+    }
 
     suspend fun dismissAdd() {
         addOffset.animateTo(1f, fenFloat)
@@ -292,6 +320,11 @@ private fun FenContent(viewModel: FenViewModel) {
                             onOpenImport = { navController.navigate("import") },
                             onOpenExport = { navController.navigate("export") },
                             onOpenBackup = { navController.navigate("backup") },
+                            onOpenImageImport = {
+                                imagePicker.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            },
                             showDebug = BuildConfig.DEBUG,
                             onSeedDemo = {
                                 scope.launch(Dispatchers.IO) { viewModel.seedDemoData(400) }
@@ -446,6 +479,80 @@ private fun FenContent(viewModel: FenViewModel) {
                     if (!andContinue) scope.launch { dismissAdd() }
                 },
             )
+        }
+
+        val ready = smartImportState as? ImageImportState.Ready
+        if (ready != null) {
+            ConfirmBillSheet(
+                bill = ready.bill,
+                categories = snapshot.categories,
+                existing = snapshot.transactions,
+                preview = ready.preview,
+                onSave = { type, amountMinor, categoryId, note, occurredAt ->
+                    viewModel.addTransactionAt(type, amountMinor, categoryId, note, occurredAt)
+                    if (categoryId != null) {
+                        viewModel.rememberMerchant(note, type, categoryId)
+                    }
+                    smartImport.consume()
+                },
+                onDismiss = { smartImport.consume() },
+            )
+        }
+
+        val readyBatch = smartImportState as? ImageImportState.ReadyBatch
+        if (readyBatch != null) {
+            BatchConfirmSheet(
+                items = readyBatch.items,
+                categories = snapshot.categories,
+                existing = snapshot.transactions,
+                onSaveAll = { bills ->
+                    bills.forEach { bill ->
+                        val type = bill.type ?: TxType.EXPENSE
+                        val categoryId = bill.categoryId ?: return@forEach
+                        viewModel.addTransactionAt(
+                            type = type,
+                            amountMinor = bill.amountMinor,
+                            categoryId = categoryId,
+                            note = bill.merchant,
+                            occurredAtMillis = bill.occurredAt,
+                        )
+                        viewModel.rememberMerchant(bill.merchant, type, categoryId)
+                    }
+                    smartImport.consume()
+                },
+                onDismiss = { smartImport.consume() },
+            )
+        }
+
+        val loading = smartImportState as? ImageImportState.Loading
+        if (loading != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.25f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Surface(shape = RoundedCornerShape(18.dp), color = Fen.colors.surface) {
+                    Row(
+                        modifier = Modifier.padding(20.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = if (loading.total > 0) {
+                                "识别中 ${loading.completed}/${loading.total}"
+                            } else {
+                                "识别中…"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+            }
         }
     }
 }

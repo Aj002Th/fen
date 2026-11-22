@@ -6,6 +6,7 @@ import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.fen.FenApp
+import app.fen.autobook.classify.MerchantKey
 import app.fen.data.FenBackupCodec
 import app.fen.data.ImportBatch
 import app.fen.data.Snapshot
@@ -46,6 +47,7 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repository = (app as FenApp).repository
     private val prefs = (app as FenApp).prefs
+    private val autoMap = (app as FenApp).autoMap
     val snapshot: StateFlow<Snapshot> = repository.snapshot
 
     private val _month = MutableStateFlow(YearMonth.now())
@@ -250,6 +252,29 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
             note = note,
             occurredAt = dateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(),
         )
+    }
+
+    fun addTransactionAt(
+        type: TxType,
+        amountMinor: Long,
+        categoryId: String?,
+        note: String,
+        occurredAtMillis: Long,
+    ) {
+        repository.addTransaction(
+            type = type,
+            amountMinor = amountMinor,
+            categoryId = categoryId,
+            note = note,
+            occurredAt = occurredAtMillis,
+        )
+    }
+
+    fun rememberMerchant(merchant: String, type: TxType, categoryId: String) {
+        if (merchant.isBlank() || categoryId.isBlank()) return
+        val key = MerchantKey.of(merchant, type)
+        if (key.isBlank()) return
+        autoMap.upsert(key, categoryId)
     }
 
     fun updateTransaction(tx: Tx) = repository.updateTransaction(tx)
