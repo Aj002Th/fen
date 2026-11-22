@@ -1,17 +1,24 @@
 package app.fen.ui.components
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -25,6 +32,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.fen.ui.theme.Fen
@@ -319,29 +329,47 @@ fun Segmented(
     modifier: Modifier = Modifier,
     accent: Color = Fen.colors.ink,
 ) {
-    Row(
+    BoxWithConstraints(
         modifier = modifier
             .clip(RoundedCornerShape(14.dp))
             .background(Fen.colors.surfaceMuted)
             .padding(4.dp),
     ) {
-        options.forEachIndexed { index, label ->
-            val active = index == selected
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(if (active) Fen.colors.surface else Color.Transparent)
-                    .clickable { onSelect(index) }
-                    .padding(vertical = 8.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (active) accent else Fen.colors.inkSoft,
-                )
+        val segmentWidth = maxWidth / options.size
+        val sliding by animateFloatAsState(
+            targetValue = selected.toFloat(),
+            animationSpec = tween(240, easing = FastOutSlowInEasing),
+            label = "segmentIndicator",
+        )
+        Box(
+            modifier = Modifier
+                .offset { IntOffset((segmentWidth * sliding).roundToPx(), 0) }
+                .width(segmentWidth)
+                .height(36.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(accent.copy(alpha = if (Fen.colors.isDark) 0.22f else 0.12f)),
+        )
+        Row(Modifier.fillMaxWidth()) {
+            options.forEachIndexed { index, label ->
+                val active = index == selected
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(36.dp)
+                        .clip(RoundedCornerShape(11.dp))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null,
+                        ) { onSelect(index) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (active) accent else Fen.colors.inkSoft,
+                    )
+                }
             }
         }
     }

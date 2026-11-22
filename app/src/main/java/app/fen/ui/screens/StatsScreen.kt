@@ -164,6 +164,7 @@ fun StatsScreen(
                 Segmented(
                     options = listOf("周", "月", "年", "全部", "范围"),
                     selected = statsMode.ordinal,
+                    accent = Fen.colors.link,
                     onSelect = { index ->
                         val mode = StatsMode.entries[index]
                         periodDirection = if (index >= statsMode.ordinal) 1 else -1
