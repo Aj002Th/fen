@@ -43,8 +43,9 @@ docs/
 # Acceptance artifacts
 artifacts/
 
-# Agent skills (installed locally, not part of the app)
+# Agent skills and local tooling (installed locally, not part of the app)
 .agents/skills/
+.opencode/
 
 # Release signing config (local only)
 keystore.properties
