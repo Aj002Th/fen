@@ -123,26 +123,16 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
             db.execSQL("ALTER TABLE import_batch ADD COLUMN file_hash TEXT")
         }
         if (oldVersion < 8) {
-            // 把 NULL / 已删除分类的流水归到一个真实的「未分类」分类
+            // 「未分类」成为真实分类；NULL / 已删除分类的流水一并归进去
             for (type in TxType.entries) {
-                val missing = db.rawQuery(
+                val id = ensureUncategorized(db, type)
+                db.execSQL(
                     """
-                    SELECT 1 FROM tx
+                    UPDATE tx SET category_id = ?
                     WHERE type = ? AND (category_id IS NULL OR category_id NOT IN (SELECT id FROM category))
-                    LIMIT 1
                     """.trimIndent(),
-                    arrayOf(type.name),
-                ).use { it.moveToFirst() }
-                if (missing) {
-                    val id = ensureUncategorized(db, type)
-                    db.execSQL(
-                        """
-                        UPDATE tx SET category_id = ?
-                        WHERE type = ? AND (category_id IS NULL OR category_id NOT IN (SELECT id FROM category))
-                        """.trimIndent(),
-                        arrayOf(id, type.name),
-                    )
-                }
+                    arrayOf(id, type.name),
+                )
             }
         }
     }
@@ -173,6 +163,10 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
         income.forEachIndexed { index, (name, icon) ->
             add(name, TxType.INCOME, icon, IncomePaletteColors[index % IncomePaletteColors.size])
         }
+
+        // 「未分类」是一个真实分类，手工记账时也能直接选
+        ensureUncategorized(db, TxType.EXPENSE)
+        ensureUncategorized(db, TxType.INCOME)
     }
 
     fun categories(): List<Category> = readableDatabase.query(
