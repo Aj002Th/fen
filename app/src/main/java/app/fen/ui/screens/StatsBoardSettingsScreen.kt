@@ -56,7 +56,6 @@ import app.fen.ui.components.CircleAction
 import app.fen.ui.components.RowDivider
 import app.fen.ui.components.SectionLabel
 import app.fen.ui.theme.Fen
-import app.fen.ui.theme.glassContainer
 
 @Composable
 fun StatsBoardSettingsScreen(
@@ -229,7 +228,6 @@ fun StatsBoardSettingsScreen(
 
     if (showResetConfirm) {
         AlertDialog(
-            containerColor = glassContainer(),
             onDismissRequest = { showResetConfirm = false },
             title = { Text("恢复默认看板？") },
             text = { Text("会恢复默认顺序、全部显示，并把排行数量改回 5、汇总表恢复隐藏无记录行。") },

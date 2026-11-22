@@ -37,7 +37,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.fen.ui.theme.Fen
-import app.fen.ui.theme.glassContainer
 import app.fen.util.label
 import app.fen.util.shortDate
 import java.time.LocalDate
@@ -73,7 +72,7 @@ fun StatsRangePickerSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = glassContainer(),
+        containerColor = Fen.colors.surface,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         dragHandle = { BottomSheetDefaults.DragHandle(color = Fen.colors.inkFaint) },
     ) {

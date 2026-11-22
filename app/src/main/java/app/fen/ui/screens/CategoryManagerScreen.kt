@@ -61,7 +61,6 @@ import app.fen.ui.icons.CategoryIconKeys
 import app.fen.ui.icons.categoryIcon
 import app.fen.ui.theme.CategoryColorValues
 import app.fen.ui.theme.Fen
-import app.fen.ui.theme.glassContainer
 
 @Composable
 fun CategoryManagerScreen(
@@ -407,7 +406,7 @@ private fun CategoryEditorSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = glassContainer(),
+        containerColor = Fen.colors.surface,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         dragHandle = { BottomSheetDefaults.DragHandle(color = Fen.colors.inkFaint) },
     ) {

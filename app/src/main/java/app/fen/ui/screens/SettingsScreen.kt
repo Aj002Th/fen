@@ -1,8 +1,6 @@
 package app.fen.ui.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -18,7 +16,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Category
-import androidx.compose.material.icons.outlined.BlurOn
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
@@ -53,15 +50,12 @@ import app.fen.ui.components.IconBadge
 import app.fen.ui.components.RowDivider
 import app.fen.ui.components.SectionLabel
 import app.fen.ui.theme.Fen
-import app.fen.ui.theme.glassContainer
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     themeMode: Int,
     onThemeModeChange: (Int) -> Unit,
-    themeMaterial: Int,
-    onThemeMaterialChange: (Int) -> Unit,
     onBack: () -> Unit,
     onOpenCategories: () -> Unit,
     onOpenStatsBoard: () -> Unit,
@@ -73,7 +67,6 @@ fun SettingsScreen(
     onClearData: () -> Unit = {},
 ) {
     var showThemeDialog by remember { mutableStateOf(false) }
-    var showMaterialDialog by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
     var showSeedConfirm by remember { mutableStateOf(false) }
     var showClearConfirm by remember { mutableStateOf(false) }
@@ -144,33 +137,17 @@ fun SettingsScreen(
                 color = Fen.colors.surface,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Column {
-                    SettingItem(
-                        title = "主题",
-                        subtitle = when (themeMode) {
-                            1 -> "浅色"
-                            2 -> "深色"
-                            else -> "跟随系统"
-                        },
-                        icon = Icons.Outlined.DarkMode,
-                        tint = Color(0xFF7C8794),
-                        onClick = { showThemeDialog = true },
-                    )
-                    Box(
-                        Modifier
-                            .padding(start = 64.dp, end = 14.dp)
-                            .height(1.dp)
-                            .fillMaxWidth()
-                            .background(Fen.colors.divider),
-                    )
-                    SettingItem(
-                        title = "材质",
-                        subtitle = if (themeMaterial == 1) "玻璃" else "纯色",
-                        icon = Icons.Outlined.BlurOn,
-                        tint = Color(0xFF5B8DEF),
-                        onClick = { showMaterialDialog = true },
-                    )
-                }
+                SettingItem(
+                    title = "主题",
+                    subtitle = when (themeMode) {
+                        1 -> "浅色"
+                        2 -> "深色"
+                        else -> "跟随系统"
+                    },
+                    icon = Icons.Outlined.DarkMode,
+                    tint = Color(0xFF7C8794),
+                    onClick = { showThemeDialog = true },
+                )
             }
         }
 
@@ -277,7 +254,7 @@ fun SettingsScreen(
         ModalBottomSheet(
             onDismissRequest = { showThemeDialog = false },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = glassContainer(),
+            containerColor = Fen.colors.surface,
         ) {
             Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
                 Text(
@@ -316,60 +293,8 @@ fun SettingsScreen(
         }
     }
 
-    if (showMaterialDialog) {
-        ModalBottomSheet(
-            onDismissRequest = { showMaterialDialog = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            containerColor = glassContainer(),
-        ) {
-            Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
-                Text(
-                    text = "材质",
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-                )
-                listOf("纯色" to 0, "玻璃" to 1).forEach { (label, material) ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                onThemeMaterialChange(material)
-                                showMaterialDialog = false
-                            }
-                            .padding(horizontal = 20.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = Fen.colors.ink,
-                            )
-                            if (material == 1) {
-                                Text(
-                                    text = "底栏、面板和弹窗变半透明，内容卡片保持实色",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Fen.colors.inkSoft,
-                                )
-                            }
-                        }
-                        if (themeMaterial == material) {
-                            Icon(
-                                imageVector = Icons.Rounded.Check,
-                                contentDescription = null,
-                                tint = Fen.colors.link,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     if (showAbout) {
         AlertDialog(
-            containerColor = glassContainer(),
             onDismissRequest = { showAbout = false },
             title = {
                 Text(
@@ -398,7 +323,6 @@ fun SettingsScreen(
     }
     if (showSeedConfirm) {
         AlertDialog(
-            containerColor = glassContainer(),
             onDismissRequest = { showSeedConfirm = false },
             title = { Text("生成示例数据？") },
             text = { Text("会插入约 400 条最近 6 个月的记录，用于验收界面与统计。") },
@@ -416,7 +340,6 @@ fun SettingsScreen(
 
     if (showClearConfirm) {
         AlertDialog(
-            containerColor = glassContainer(),
             onDismissRequest = { showClearConfirm = false },
             title = { Text("清空全部记录？") },
             text = { Text("只删除流水，分类会保留。此操作不可恢复。") },

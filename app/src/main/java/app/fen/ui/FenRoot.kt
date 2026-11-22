@@ -13,7 +13,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -83,8 +82,6 @@ import app.fen.ui.screens.StatsScreen
 import app.fen.ui.theme.Fen
 import app.fen.ui.theme.FenMotion
 import app.fen.ui.theme.FenTheme
-import app.fen.ui.theme.glassContainer
-import app.fen.ui.theme.glassOutline
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -111,13 +108,12 @@ private val tabs = listOf(
 @Composable
 fun FenRoot(viewModel: FenViewModel = viewModel()) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
-    val themeMaterial by viewModel.themeMaterial.collectAsStateWithLifecycle()
     val darkTheme = when (themeMode) {
         1 -> false
         2 -> true
         else -> isSystemInDarkTheme()
     }
-    FenTheme(darkTheme = darkTheme, glass = themeMaterial == 1) {
+    FenTheme(darkTheme = darkTheme) {
         FenContent(viewModel)
     }
 }
@@ -131,7 +127,6 @@ private fun FenContent(viewModel: FenViewModel) {
     val snapshot by viewModel.snapshot.collectAsStateWithLifecycle()
     val month by viewModel.month.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
-    val themeMaterial by viewModel.themeMaterial.collectAsStateWithLifecycle()
     val hiddenSuggestions by viewModel.hiddenSuggestions.collectAsStateWithLifecycle()
     val penalties by viewModel.suggestionPenalties.collectAsStateWithLifecycle()
     val searchHistory by viewModel.searchHistory.collectAsStateWithLifecycle()
@@ -274,8 +269,6 @@ private fun FenContent(viewModel: FenViewModel) {
                         SettingsScreen(
                             themeMode = themeMode,
                             onThemeModeChange = viewModel::setThemeMode,
-                            themeMaterial = themeMaterial,
-                            onThemeMaterialChange = viewModel::setThemeMaterial,
                             onBack = { navController.popBackStack() },
                             onOpenCategories = { navController.navigate("categories") },
                             onOpenStatsBoard = { navController.navigate("stats-board") },
@@ -454,11 +447,9 @@ private fun FenBottomBar(currentRoute: String?, onSelect: (String) -> Unit, onAd
             .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val barShape = RoundedCornerShape(26.dp)
         Surface(
-            shape = barShape,
-            color = glassContainer(),
-            border = if (Fen.colors.glass) BorderStroke(1.dp, glassOutline()) else null,
+            shape = RoundedCornerShape(26.dp),
+            color = Fen.colors.surface,
             modifier = Modifier.weight(1f),
         ) {
             val gap = 2.dp

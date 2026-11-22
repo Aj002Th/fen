@@ -56,7 +56,6 @@ import app.fen.ui.components.RowDivider
 import app.fen.ui.components.SectionLabel
 import app.fen.ui.icons.categoryIcon
 import app.fen.ui.theme.Fen
-import app.fen.ui.theme.glassContainer
 import app.fen.util.formatMoney
 import app.fen.util.label
 import app.fen.util.timeLabel
@@ -215,7 +214,6 @@ fun BillsScreen(
 
     pendingDelete?.let { tx ->
         AlertDialog(
-            containerColor = glassContainer(),
             onDismissRequest = { pendingDelete = null },
             title = { Text("删除这笔记录？") },
             text = { Text("删除后无法恢复。") },

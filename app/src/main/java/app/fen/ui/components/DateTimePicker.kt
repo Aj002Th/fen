@@ -38,7 +38,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.fen.ui.theme.Fen
-import app.fen.ui.theme.glassContainer
 import app.fen.util.label
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -65,7 +64,7 @@ fun DateTimePickerSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = glassContainer(),
+        containerColor = Fen.colors.surface,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
         dragHandle = { BottomSheetDefaults.DragHandle(color = Fen.colors.inkFaint) },
     ) {
