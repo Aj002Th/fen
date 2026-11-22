@@ -58,6 +58,17 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
         )
         db.execSQL("CREATE INDEX idx_tx_occurred ON tx(occurred_at)")
         db.execSQL("CREATE INDEX idx_tx_batch ON tx(import_batch)")
+        db.execSQL(
+            """
+            CREATE TABLE auto_map(
+                merchant_key TEXT NOT NULL,
+                type TEXT NOT NULL,
+                category_id TEXT NOT NULL,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY(merchant_key, type)
+            )
+            """.trimIndent()
+        )
         seed(db)
     }
 
@@ -137,6 +148,19 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
         }
         if (oldVersion < 9) {
             addBuiltinCategories(db)
+        }
+        if (oldVersion < 10) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS auto_map(
+                    merchant_key TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    category_id TEXT NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    PRIMARY KEY(merchant_key, type)
+                )
+                """.trimIndent()
+            )
         }
     }
 
@@ -294,6 +318,59 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
         readableDatabase.rawQuery("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM category", null).use {
             return if (it.moveToFirst()) it.getInt(0) else 0
         }
+    }
+
+    fun upsertAutoMap(merchantKey: String, type: String, categoryId: String) {
+        writableDatabase.insertWithOnConflict(
+            "auto_map",
+            null,
+            ContentValues().apply {
+                put("merchant_key", merchantKey)
+                put("type", type)
+                put("category_id", categoryId)
+                put("updated_at", System.currentTimeMillis())
+            },
+            SQLiteDatabase.CONFLICT_REPLACE,
+        )
+    }
+
+    fun findAutoMap(merchantKey: String, type: String): String? =
+        readableDatabase.query(
+            "auto_map",
+            arrayOf("category_id"),
+            "merchant_key = ? AND type = ?",
+            arrayOf(merchantKey, type),
+            null, null, null,
+        ).use { c -> if (c.moveToFirst()) c.getString(0) else null }
+
+    fun deleteAutoMapForCategory(categoryId: String) {
+        writableDatabase.delete("auto_map", "category_id = ?", arrayOf(categoryId))
+    }
+
+    fun updateAutoMapCategory(fromId: String, toId: String) {
+        writableDatabase.update(
+            "auto_map",
+            ContentValues().apply {
+                put("category_id", toId)
+                put("updated_at", System.currentTimeMillis())
+            },
+            "category_id = ?",
+            arrayOf(fromId),
+        )
+    }
+
+    fun allAutoMaps(): Map<String, String> {
+        val result = LinkedHashMap<String, String>()
+        readableDatabase.query(
+            "auto_map",
+            arrayOf("merchant_key", "type", "category_id"),
+            null, null, null, null, null,
+        ).use { c ->
+            while (c.moveToNext()) {
+                result[c.getString(0) + "|" + c.getString(1)] = c.getString(2)
+            }
+        }
+        return result
     }
 
     /**
@@ -556,7 +633,7 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
     }
 
     private companion object {
-        const val DB_VERSION = 9
+        const val DB_VERSION = 10
     }
 }
 
