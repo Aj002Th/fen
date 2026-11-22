@@ -12,10 +12,13 @@ import app.fen.data.Snapshot
 import app.fen.data.Tx
 import app.fen.data.TxType
 import app.fen.data.exchange.FenCsv
+import app.fen.data.exchange.FenTemplate
 import app.fen.data.exchange.FileDecode
 import app.fen.data.exchange.ImportOutcome
+import app.fen.data.exchange.ImportParseException
 import app.fen.data.exchange.ImportPlanner
 import app.fen.data.exchange.ImportSession
+import app.fen.data.exchange.ImportSource
 import app.fen.data.exchange.MappingTarget
 import app.fen.data.exchange.TransferPolicy
 import kotlinx.coroutines.Dispatchers
@@ -158,32 +161,90 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
         _message.value = null
     }
 
-    fun startImport(uri: Uri) {
-        _importState.value = ImportUiState(stage = ImportStage.PARSING)
+    /** 只记下文件，不解析；等用户选好来源再点「解析」。 */
+    fun pickImportFile(uri: Uri) {
         viewModelScope.launch(Dispatchers.IO) {
-            val resolver = getApplication<Application>().contentResolver
             val name = displayName(uri) ?: "导入文件"
-            _importState.value = _importState.value.copy(fileName = name)
+            val state = _importState.value
+            _importState.value = state.copy(
+                stage = ImportStage.IDLE,
+                pickedUri = uri,
+                fileName = name,
+                session = null,
+                error = null,
+                mapping = false,
+                outcome = null,
+                restored = null,
+                undone = false,
+            )
+        }
+    }
+
+    /** 从「数据 → 恢复完整备份」直接进入备份恢复模式。 */
+    fun startBackupRestore() {
+        _importState.value = ImportUiState(source = ImportSource.FEN_JSON)
+    }
+
+    fun setImportSource(source: ImportSource) {
+        _importState.value = _importState.value.copy(source = source)
+    }
+
+    fun startParse() {
+        val state = _importState.value
+        val uri = state.pickedUri ?: return
+        _importState.value = state.copy(stage = ImportStage.PARSING, error = null, mapping = false)
+        viewModelScope.launch(Dispatchers.IO) {
             try {
-                val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
+                val bytes = getApplication<Application>().contentResolver
+                    .openInputStream(uri)?.use { it.readBytes() }
                     ?: error("无法读取文件")
                 val hash = sha256(bytes)
-                val parsed = FileDecode.parse(name, bytes)
-                    ?: error("无法识别这个文件，请确认是 iCost 导出的 xlsx / csv，或 Fen 的 JSON 备份。")
-                val session = FileDecode.sessionFrom(name, parsed, snapshot.value.categories)
+                val parsed = FileDecode.parse(state.fileName, bytes, state.source)
+                    ?: error("无法识别这个文件，请确认是 xlsx / xls / csv，或 Fen 的 JSON 备份。")
+                val session = FileDecode.sessionFrom(state.fileName, parsed, snapshot.value.categories)
                 pendingHash = hash
-                _importState.value = ImportUiState(
+                _importState.value = state.copy(
                     stage = ImportStage.READY,
-                    fileName = name,
                     session = session,
                     hashSeen = prefs.importHashes.contains(hash),
+                    error = null,
+                    mapping = false,
                 )
+            } catch (e: ImportParseException) {
+                _importState.value = state.copy(stage = ImportStage.IDLE, error = e.message)
             } catch (e: Exception) {
-                _importState.value = ImportUiState(
-                    stage = ImportStage.ERROR,
-                    fileName = name,
-                    error = e.message ?: "导入失败",
+                _importState.value = state.copy(
+                    stage = ImportStage.IDLE,
+                    error = e.message ?: "解析失败",
                 )
+            }
+        }
+    }
+
+    /** 从预览/映射/结果回到第一步，保留已选文件和来源。 */
+    fun backToSetup() {
+        val state = _importState.value
+        _importState.value = state.copy(
+            stage = ImportStage.IDLE,
+            session = null,
+            error = null,
+            mapping = false,
+            outcome = null,
+            restored = null,
+            undone = false,
+        )
+    }
+
+    fun saveTemplate(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                getApplication<Application>().contentResolver.openOutputStream(uri)?.use {
+                    it.write(FenTemplate.content().toByteArray(Charsets.UTF_8))
+                } ?: error("无法写入文件")
+            }.onSuccess {
+                _message.value = "模板已保存"
+            }.onFailure {
+                _message.value = "保存失败：${it.message}"
             }
         }
     }
@@ -366,6 +427,8 @@ enum class ImportStage { IDLE, PARSING, READY, IMPORTING, DONE, ERROR }
 
 data class ImportUiState(
     val stage: ImportStage = ImportStage.IDLE,
+    val pickedUri: Uri? = null,
+    val source: ImportSource = ImportSource.AUTO,
     val fileName: String = "",
     val session: ImportSession? = null,
     val skipDuplicates: Boolean = false,

@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import app.fen.data.exchange.FenTemplate
 import app.fen.ui.components.CircleAction
 import app.fen.ui.components.IconBadge
 import app.fen.ui.components.RowDivider
@@ -44,20 +45,22 @@ import java.time.format.DateTimeFormatter
 fun DataScreen(
     batchCount: Int,
     onBack: () -> Unit,
-    onImportFile: (Uri) -> Unit,
-    onExportBackup: (Uri) -> Unit,
-    onExportCsv: (Uri) -> Unit,
+    onOpenImport: () -> Unit,
+    onOpenRestore: () -> Unit,
     onOpenHistory: () -> Unit,
+    onExportCsv: (Uri) -> Unit,
+    onExportBackup: (Uri) -> Unit,
+    onSaveTemplate: (Uri) -> Unit,
 ) {
-    val jsonExport = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/json")
-    ) { uri -> uri?.let(onExportBackup) }
     val csvExport = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/csv")
     ) { uri -> uri?.let(onExportCsv) }
-    val picker = rememberLauncherForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri -> uri?.let(onImportFile) }
+    val jsonExport = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri -> uri?.let(onExportBackup) }
+    val templateSaver = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri -> uri?.let(onSaveTemplate) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -79,69 +82,72 @@ fun DataScreen(
             }
         }
 
-        item { SectionLabel("备份与导出", modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)) }
+        item { SectionLabel("导入", modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)) }
         item {
             Surface(shape = RoundedCornerShape(22.dp), color = Fen.colors.surface, modifier = Modifier.fillMaxWidth()) {
                 Column {
                     DataItem(
-                        title = "完整备份",
-                        subtitle = "JSON · 保留分类、图标与精确时间，可原样恢复",
-                        icon = Icons.Outlined.FileDownload,
-                        tint = Color(0xFF17A467),
-                        onClick = { jsonExport.launch(stamped("fen-backup", "json")) },
+                        title = "账单导入",
+                        subtitle = "iCost / 微信 / 支付宝 / Fen CSV / JSON 备份",
+                        icon = Icons.Outlined.FileUpload,
+                        tint = Color(0xFFF2A93E),
+                        onClick = onOpenImport,
                     )
                     RowDivider(startInset = 64.dp)
                     DataItem(
+                        title = "恢复完整备份",
+                        subtitle = "从 Fen JSON 备份还原（会覆盖当前数据）",
+                        icon = Icons.Outlined.Restore,
+                        tint = Color(0xFF8B6CF2),
+                        onClick = onOpenRestore,
+                    )
+                    RowDivider(startInset = 64.dp)
+                    DataItem(
+                        title = "导入记录",
+                        subtitle = if (batchCount > 0) "共 $batchCount 次，可整批撤销" else "还没有导入过",
+                        icon = Icons.Outlined.History,
+                        tint = Color(0xFF7C8794),
+                        onClick = onOpenHistory,
+                    )
+                }
+            }
+        }
+
+        item { SectionLabel("导出", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp)) }
+        item {
+            Surface(shape = RoundedCornerShape(22.dp), color = Fen.colors.surface, modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    DataItem(
                         title = "导出表格",
-                        subtitle = "CSV · 用 Excel 打开、编辑或归档",
+                        subtitle = "CSV · 用 Excel / WPS 打开、编辑或归档",
                         icon = Icons.Outlined.TableChart,
                         tint = Color(0xFF3E8BF2),
                         onClick = { csvExport.launch(stamped("fen", "csv")) },
                     )
-                }
-            }
-        }
-
-        item { SectionLabel("导入", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp)) }
-        item {
-            Surface(shape = RoundedCornerShape(22.dp), color = Fen.colors.surface, modifier = Modifier.fillMaxWidth()) {
-                Column {
+                    RowDivider(startInset = 64.dp)
                     DataItem(
-                        title = "导入账单",
-                        subtitle = "支持 iCost 导出的 xlsx / csv，可预览并调整分类",
-                        icon = Icons.Outlined.FileUpload,
-                        tint = Color(0xFFF2A93E),
-                        onClick = { picker.launch(arrayOf("*/*")) },
+                        title = "下载导入模板",
+                        subtitle = "CSV · 日期 / 类型 / 金额 / 分类 / 备注",
+                        icon = Icons.Outlined.FileDownload,
+                        tint = Color(0xFF17A467),
+                        onClick = { templateSaver.launch(FenTemplate.fileName()) },
                     )
                     RowDivider(startInset = 64.dp)
                     DataItem(
-                        title = "恢复备份",
-                        subtitle = "从 Fen 的 JSON 备份还原（覆盖当前数据）",
+                        title = "完整备份",
+                        subtitle = "JSON · 保留分类、图标与精确时间，换机恢复",
                         icon = Icons.Outlined.Restore,
                         tint = Color(0xFF8B6CF2),
-                        onClick = { picker.launch(arrayOf("*/*")) },
+                        onClick = { jsonExport.launch(stamped("fen-backup", "json")) },
                     )
                 }
-            }
-        }
-
-        item { SectionLabel("记录", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp)) }
-        item {
-            Surface(shape = RoundedCornerShape(22.dp), color = Fen.colors.surface, modifier = Modifier.fillMaxWidth()) {
-                DataItem(
-                    title = "导入记录",
-                    subtitle = if (batchCount > 0) "共 $batchCount 次，可整批撤销" else "还没有导入过",
-                    icon = Icons.Outlined.History,
-                    tint = Color(0xFF7C8794),
-                    onClick = onOpenHistory,
-                )
             }
         }
 
         item {
             Text(
-                "iCost 的「导出账单」与「导入模板」列数不同，Fen 会按表头自动识别；" +
-                    "导入前都能先预览金额、条数和分类映射。",
+                "导入时可以先选「自动识别」，也可以指定 iCost / 微信 / 支付宝 / Fen 模板。" +
+                    "所有导入都会先预览，再让你调整分类。",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Fen.colors.inkSoft,
                 modifier = Modifier.padding(top = 16.dp, start = 4.dp, end = 4.dp),

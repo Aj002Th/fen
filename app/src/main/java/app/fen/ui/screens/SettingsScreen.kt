@@ -131,8 +131,8 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 SettingItem(
-                    title = "数据与备份",
-                    subtitle = "导出备份、导入 iCost 账单、恢复数据",
+                    title = "数据",
+                    subtitle = "账单导入、模板、导出与完整备份",
                     icon = Icons.Outlined.Storage,
                     tint = Color(0xFF21B8C7),
                     onClick = onOpenData,

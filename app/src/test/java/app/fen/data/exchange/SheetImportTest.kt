@@ -77,7 +77,54 @@ class SheetImportTest {
         assertEquals(TxType.EXPENSE, result.records[0].type)
         assertEquals(1800L, result.records[0].amount)
         assertEquals("咖啡", result.records[0].note)
+        assertEquals("商户消费", result.records[0].sourceCategory)
         assertEquals(TxType.INCOME, result.records[1].type)
+    }
+
+    @Test
+    fun alipayRawCsv() {
+        val table = Table(
+            listOf(
+                listOf("交易号", "交易创建时间", "交易分类", "交易对方", "商品名称", "金额（元）", "收/支", "交易状态"),
+                listOf("2024010122001", "2024-01-01 10:00:00", "餐饮美食", "某商户", "午饭", "18.00", "支出", "交易成功"),
+                listOf("2024010222002", "2024-01-02 09:00:00", "交通出行", "地铁", "乘车码", "3.00", "支出", "交易成功"),
+            )
+        )
+        val result = SheetImport.parse(table)
+        assertEquals(2, result.records.size)
+        assertEquals(1800L, result.records[0].amount)
+        assertEquals("餐饮美食", result.records[0].sourceCategory)
+        assertEquals("午饭", result.records[0].note)
+        assertEquals(TxType.EXPENSE, result.records[0].type)
+    }
+
+    @Test
+    fun fenTemplateParses() {
+        val table = Csv.parse(FenTemplate.content())
+        val result = SheetImport.parse(table)
+        assertEquals(2, result.records.size)
+        assertEquals(2850L, result.records[0].amount)
+        assertEquals("餐饮", result.records[0].sourceCategory)
+        assertEquals(TxType.INCOME, result.records[1].type)
+    }
+
+    @Test
+    fun sourceChecks() {
+        val csv = FenTemplate.content().toByteArray(Charsets.UTF_8)
+        // 选「Fen 完整备份」但给 CSV → 明确报错
+        var thrown = false
+        try {
+            FileDecode.parse("x.csv", csv, ImportSource.FEN_JSON)
+        } catch (e: ImportParseException) {
+            thrown = true
+            assertTrue(e.message!!.contains("完整备份"))
+        }
+        assertTrue(thrown)
+
+        // 自动识别可以正常读 CSV
+        val parsed = FileDecode.parse("x.csv", csv, ImportSource.AUTO)
+        assertTrue(parsed is ParsedFile.Sheet)
+        assertEquals(2, (parsed as ParsedFile.Sheet).result.records.size)
     }
 
     @Test

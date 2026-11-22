@@ -132,14 +132,14 @@ object SheetImport {
             .removeSuffix("（人民币）")
             .removeSuffix("(人民币)")
         return when {
-            header == "日期" || header == "时间" || header.contains("日期") || header == "交易时间" -> Field.DATE
+            header == "日期" || header == "时间" || header.contains("日期") || header.contains("时间") -> Field.DATE
             header == "类型" || header == "收支" || header == "收支类型" || header == "记账类型" ||
                 header == "收/支" || header == "收/支类型" -> Field.TYPE
             header == "金额" || header == "交易金额" || header == "发生金额" || header.endsWith("金额") -> Field.AMOUNT
             header == "二级分类" || header == "子分类" -> Field.SUBCATEGORY
             header == "一级分类" || header == "分类" || header == "交易分类" || header == "主分类" ||
-                header.endsWith("分类") -> Field.CATEGORY
-            header == "备注" || header == "说明" || header == "商品" || header == "商品说明" ||
+                header == "交易类型" || header.endsWith("分类") -> Field.CATEGORY
+            header == "备注" || header == "说明" || header.contains("商品") ||
                 header == "交易备注" || header.contains("备注") -> Field.NOTE
             header.startsWith("账户") || header == "支付方式" || header == "付款方式" -> Field.ACCOUNT
             header == "货币" || header == "币种" -> Field.CURRENCY

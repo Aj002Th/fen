@@ -228,27 +228,32 @@ private fun FenContent(viewModel: FenViewModel) {
                     DataScreen(
                         batchCount = batches.size,
                         onBack = { navController.popBackStack() },
-                        onImportFile = { uri ->
-                            viewModel.startImport(uri)
+                        onOpenImport = { navController.navigate("import") },
+                        onOpenRestore = {
+                            viewModel.startBackupRestore()
                             navController.navigate("import")
                         },
-                        onExportBackup = viewModel::exportBackup,
-                        onExportCsv = viewModel::exportCsv,
                         onOpenHistory = { navController.navigate("import-history") },
+                        onExportCsv = viewModel::exportCsv,
+                        onExportBackup = viewModel::exportBackup,
+                        onSaveTemplate = viewModel::saveTemplate,
                     )
                 }
                 composable("import") {
                     ImportScreen(
                         state = importState,
                         categories = snapshot.categories,
-                        onBack = {
-                            if (importState.mapping) {
-                                viewModel.setMappingView(false)
-                            } else {
-                                viewModel.cancelImport()
-                                navController.popBackStack()
-                            }
+                        batchCount = batches.size,
+                        onPickFile = viewModel::pickImportFile,
+                        onSaveTemplate = viewModel::saveTemplate,
+                        onSetSource = viewModel::setImportSource,
+                        onStartParse = viewModel::startParse,
+                        onExit = {
+                            viewModel.cancelImport()
+                            navController.popBackStack()
                         },
+                        onBackToSetup = viewModel::backToSetup,
+                        onOpenHistory = { navController.navigate("import-history") },
                         onSetSkipDuplicates = viewModel::setSkipDuplicates,
                         onSetTransferPolicy = viewModel::setTransferPolicy,
                         onUpdateMapping = viewModel::updateMapping,

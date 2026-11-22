@@ -349,14 +349,27 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
         }
     }
 
-    fun importBatches(): List<ImportBatch> = readableDatabase.query(
-        "import_batch",
-        arrayOf("id", "source", "label", "created_at", "rows"),
-        null, null, null, null, "created_at DESC",
+    fun importBatches(): List<ImportBatch> = readableDatabase.rawQuery(
+        """
+        SELECT b.id, b.source, b.label, b.created_at, b.rows,
+               (SELECT COUNT(*) FROM tx t WHERE t.import_batch = b.id) AS remaining
+        FROM import_batch b
+        ORDER BY b.created_at DESC
+        """.trimIndent(),
+        null,
     ).use { c ->
         buildList {
             while (c.moveToNext()) {
-                add(ImportBatch(c.getString(0), c.getString(1), c.getString(2), c.getLong(3), c.getInt(4)))
+                add(
+                    ImportBatch(
+                        id = c.getString(0),
+                        source = c.getString(1),
+                        label = c.getString(2),
+                        createdAt = c.getLong(3),
+                        rows = c.getInt(4),
+                        remaining = c.getInt(5),
+                    )
+                )
             }
         }
     }

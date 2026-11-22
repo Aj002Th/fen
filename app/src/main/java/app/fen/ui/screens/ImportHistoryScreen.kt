@@ -90,7 +90,13 @@ fun ImportHistoryScreen(
                                 maxLines = 1,
                             )
                             Text(
-                                "${batch.source} · ${batch.rows} 条 · ${formatBatchTime(batch.createdAt)}",
+                                "${batch.source} · " +
+                                    (if (batch.remaining == batch.rows) {
+                                        "现存 ${batch.remaining} 条"
+                                    } else {
+                                        "现存 ${batch.remaining} 条（原 ${batch.rows} 条）"
+                                    }) +
+                                    " · ${formatBatchTime(batch.createdAt)}",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Fen.colors.inkSoft,
                             )
@@ -108,7 +114,8 @@ fun ImportHistoryScreen(
 
             item {
                 Text(
-                    "删除导入记录会同时删除那次导入写入的流水；导入时新建的分类会保留。",
+                    "导入记录按批次追踪：改金额、改备注、改时间、把流水转到别的分类，都仍然属于原批次；" +
+                        "只有删除流水（或删除分类时一并删除流水）才会减少批次里的现存条数。",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Fen.colors.inkSoft,
                     modifier = Modifier.padding(top = 10.dp, start = 4.dp, end = 4.dp),
@@ -122,7 +129,7 @@ fun ImportHistoryScreen(
             onDismissRequest = { pendingDelete = null },
             title = { Text("删除这次导入？") },
             text = {
-                Text("会删除「${batch.label.ifBlank { "未命名导入" }}」写入的 ${batch.rows} 条流水。此操作不可撤销。")
+                Text("会删除「${batch.label.ifBlank { "未命名导入" }}」里现存的 ${batch.remaining} 条流水。此操作不可撤销。")
             },
             confirmButton = {
                 TextButton(onClick = {

@@ -34,6 +34,8 @@ data class ImportBatch(
     val label: String,
     val createdAt: Long,
     val rows: Int,
+    /** 当前仍属于这个批次的流水数（编辑/转移分类不会减少；删除流水或删除分类会）。 */
+    val remaining: Int = rows,
 )
 
 data class Snapshot(

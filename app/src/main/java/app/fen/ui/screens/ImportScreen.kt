@@ -1,6 +1,9 @@
 package app.fen.ui.screens
 
+import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -26,6 +29,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.FileOpen
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.AlertDialog
@@ -52,6 +57,8 @@ import app.fen.data.Category
 import app.fen.data.TxType
 import app.fen.data.exchange.CategoryMapping
 import app.fen.data.exchange.CategorySuggest
+import app.fen.data.exchange.FenTemplate
+import app.fen.data.exchange.ImportSource
 import app.fen.data.exchange.MappingKind
 import app.fen.data.exchange.MappingTarget
 import app.fen.data.exchange.TransferPolicy
@@ -72,7 +79,14 @@ private val rangeFormatter = DateTimeFormatter.ofPattern("yyyy年M月d日")
 fun ImportScreen(
     state: ImportUiState,
     categories: List<Category>,
-    onBack: () -> Unit,
+    batchCount: Int,
+    onPickFile: (Uri) -> Unit,
+    onSaveTemplate: (Uri) -> Unit,
+    onSetSource: (ImportSource) -> Unit,
+    onStartParse: () -> Unit,
+    onExit: () -> Unit,
+    onBackToSetup: () -> Unit,
+    onOpenHistory: () -> Unit,
     onSetSkipDuplicates: (Boolean) -> Unit,
     onSetTransferPolicy: (TransferPolicy) -> Unit,
     onUpdateMapping: (String, TxType, MappingTarget) -> Unit,
@@ -85,14 +99,25 @@ fun ImportScreen(
     var editing by remember { mutableStateOf<CategoryMapping?>(null) }
     var confirmRestore by remember { mutableStateOf(false) }
     var confirmUndo by remember { mutableStateOf(false) }
+    var sourcePicker by remember { mutableStateOf(false) }
 
-    BackHandler {
-        if (state.stage == ImportStage.READY && state.mapping) {
-            onSetMappingView(false)
-        } else {
-            onBack()
+    val filePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let(onPickFile) }
+    val templateSaver = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri -> uri?.let(onSaveTemplate) }
+
+    fun back() {
+        when {
+            state.stage == ImportStage.READY && state.mapping -> onSetMappingView(false)
+            state.stage == ImportStage.READY -> onBackToSetup()
+            state.stage == ImportStage.IDLE -> onExit()
+            else -> onExit()
         }
     }
+
+    BackHandler { back() }
 
     Column(Modifier.fillMaxSize().navigationBarsPadding()) {
         Row(
@@ -102,28 +127,55 @@ fun ImportScreen(
             CircleAction(
                 icon = Icons.AutoMirrored.Rounded.ArrowBack,
                 contentDescription = "返回",
-                onClick = onBack,
+                onClick = { back() },
                 tint = Fen.colors.ink,
             )
             Spacer(Modifier.size(10.dp))
             Text(
-                text = if (state.stage == ImportStage.READY && state.mapping) "调整分类" else "导入账单",
+                text = when {
+                    state.stage == ImportStage.READY && state.mapping -> "调整分类"
+                    state.stage == ImportStage.READY || state.stage == ImportStage.PARSING -> "导入预览"
+                    else -> "账单导入"
+                },
                 style = MaterialTheme.typography.headlineLarge,
+                modifier = Modifier.weight(1f),
             )
+            if (state.stage == ImportStage.IDLE) {
+                TextButton(
+                    onClick = onStartParse,
+                    enabled = state.pickedUri != null,
+                ) {
+                    Text(
+                        "解析",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (state.pickedUri != null) Fen.colors.ink else Fen.colors.inkFaint,
+                    )
+                }
+            }
         }
 
         when (state.stage) {
+            ImportStage.IDLE -> SetupContent(
+                state = state,
+                batchCount = batchCount,
+                onPickFile = { filePicker.launch(arrayOf("*/*")) },
+                onDownloadTemplate = { templateSaver.launch(FenTemplate.fileName()) },
+                onPickSource = { sourcePicker = true },
+                onParse = onStartParse,
+                onOpenHistory = onOpenHistory,
+            )
+
             ImportStage.PARSING, ImportStage.IMPORTING -> Busy(
                 text = if (state.stage == ImportStage.PARSING) "正在解析文件…" else "正在写入…",
                 subtitle = state.fileName,
             )
 
-            ImportStage.ERROR -> ErrorState(state.error ?: "导入失败", onBack)
+            ImportStage.ERROR -> ErrorState(state.error ?: "导入失败", onExit)
 
             ImportStage.READY -> {
                 val session = state.session
                 if (session == null) {
-                    ErrorState("没有可导入的内容", onBack)
+                    ErrorState("没有可导入的内容", onExit)
                 } else if (session.isBackup) {
                     BackupReady(
                         fileName = state.fileName,
@@ -131,13 +183,13 @@ fun ImportScreen(
                         transactions = session.backup?.transactions?.size ?: 0,
                         exportedAt = session.backup?.exportedAt ?: 0L,
                         onRestore = { confirmRestore = true },
-                        onCancel = onBack,
+                        onCancel = onBackToSetup,
                     )
                 } else if (!state.mapping) {
                     Overview(
                         state = state,
                         onNext = { onSetMappingView(true) },
-                        onCancel = onBack,
+                        onCancel = onBackToSetup,
                         onSetSkipDuplicates = onSetSkipDuplicates,
                         onSetTransferPolicy = onSetTransferPolicy,
                     )
@@ -157,9 +209,18 @@ fun ImportScreen(
                 onDone = onDone,
                 onUndo = { confirmUndo = true },
             )
-
-            ImportStage.IDLE -> Unit
         }
+    }
+
+    if (sourcePicker) {
+        SourcePickerDialog(
+            current = state.source,
+            onDismiss = { sourcePicker = false },
+            onPick = {
+                onSetSource(it)
+                sourcePicker = false
+            },
+        )
     }
 
     editing?.let { mapping ->
@@ -198,7 +259,7 @@ fun ImportScreen(
         AlertDialog(
             onDismissRequest = { confirmUndo = false },
             title = { Text("撤销这次导入？") },
-            text = { Text("会删除这次导入写入的全部流水。导入时新建的分类会保留。") },
+            text = { Text("会删除这次导入写入的全部流水（包括后来改过金额或分类的）。导入时新建的分类会保留。") },
             confirmButton = {
                 TextButton(onClick = {
                     confirmUndo = false
@@ -211,6 +272,253 @@ fun ImportScreen(
         )
     }
 }
+
+/* ------------------------------- 第一步：选文件与来源 ------------------------------- */
+
+@Composable
+private fun SetupContent(
+    state: ImportUiState,
+    batchCount: Int,
+    onPickFile: () -> Unit,
+    onDownloadTemplate: () -> Unit,
+    onPickSource: () -> Unit,
+    onParse: () -> Unit,
+    onOpenHistory: () -> Unit,
+) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
+        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 16.dp)) {
+            item {
+                Surface(
+                    shape = RoundedCornerShape(22.dp),
+                    color = Fen.colors.surface,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(Modifier.padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        QuickAction(
+                            title = "导入记录",
+                            badge = if (batchCount > 0) batchCount.toString() else null,
+                            icon = Icons.Outlined.History,
+                            onClick = onOpenHistory,
+                            modifier = Modifier.weight(1f),
+                        )
+                        QuickAction(
+                            title = "下载模板文件",
+                            badge = null,
+                            icon = Icons.Outlined.FileOpen,
+                            onClick = onDownloadTemplate,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+
+            item {
+                SectionLabel(
+                    "按步骤操作",
+                    modifier = Modifier.padding(top = 20.dp, bottom = 8.dp),
+                )
+            }
+
+            item {
+                Surface(
+                    shape = RoundedCornerShape(22.dp),
+                    color = Fen.colors.surface,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column {
+                        StepRow(
+                            label = "选择数据文件",
+                            value = state.fileName.ifBlank { "点此选择" },
+                            valueStrong = state.fileName.isNotBlank(),
+                            placeholder = state.fileName.isBlank(),
+                            onClick = onPickFile,
+                        )
+                        RowDivider()
+                        StepRow(
+                            label = "选择导入来源",
+                            value = sourceText(state.source),
+                            valueStrong = true,
+                            placeholder = false,
+                            onClick = onPickSource,
+                        )
+                    }
+                }
+            }
+
+            state.error?.let { error ->
+                item {
+                    WarningCard(
+                        title = "解析失败",
+                        body = error,
+                        modifier = Modifier.padding(top = 14.dp),
+                        color = Fen.colors.expense,
+                    )
+                }
+            }
+
+            item {
+                Text(
+                    "xlsx / xls / csv 都可以。来源不确定时保持「自动识别」；" +
+                        "如果选了具体来源，Fen 会按该来源的列名再确认一次。",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Fen.colors.inkSoft,
+                    modifier = Modifier.padding(top = 14.dp, start = 4.dp, end = 4.dp),
+                )
+            }
+        }
+
+        ActionButton(
+            label = if (state.pickedUri == null) "请先选择文件" else "解析",
+            onClick = onParse,
+            color = Fen.colors.ink,
+            enabled = state.pickedUri != null,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+        )
+    }
+}
+
+@Composable
+private fun QuickAction(
+    title: String,
+    badge: String?,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        color = Fen.colors.surfaceMuted,
+        modifier = modifier.height(52.dp),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(icon, contentDescription = null, tint = Fen.colors.inkSoft, modifier = Modifier.size(18.dp))
+            Text(title, style = MaterialTheme.typography.titleMedium, color = Fen.colors.ink)
+            if (badge != null) {
+                Surface(shape = RoundedCornerShape(8.dp), color = Fen.colors.ink) {
+                    Text(
+                        badge,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Fen.colors.surface,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StepRow(
+    label: String,
+    value: String,
+    valueStrong: Boolean,
+    placeholder: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.titleMedium, color = Fen.colors.ink)
+        Spacer(Modifier.weight(1f))
+        Text(
+            value,
+            style = MaterialTheme.typography.bodyLarge,
+            color = when {
+                placeholder -> Fen.colors.inkFaint
+                valueStrong -> Fen.colors.ink
+                else -> Fen.colors.inkSoft
+            },
+            maxLines = 1,
+        )
+        Icon(
+            Icons.Rounded.ChevronRight,
+            contentDescription = null,
+            tint = Fen.colors.inkFaint,
+            modifier = Modifier.size(18.dp),
+        )
+    }
+}
+
+@Composable
+private fun RowDivider() {
+    Box(Modifier.fillMaxWidth().padding(start = 16.dp).height(1.dp).background(Fen.colors.divider))
+}
+
+private fun sourceText(source: ImportSource): String =
+    if (source.group.isBlank()) "自动识别（推荐）" else "${source.group} · ${source.label}"
+
+/**
+ * 二级来源选择：第一层是「自动识别 / Fen / iCost / 平台账单 / 其他」，
+ * 第二层才是具体格式。Fen 和 iCost 各自有 CSV/JSON、导出/模板两种。
+ */
+@Composable
+private fun SourcePickerDialog(
+    current: ImportSource,
+    onDismiss: () -> Unit,
+    onPick: (ImportSource) -> Unit,
+) {
+    var group by remember { mutableStateOf<String?>(null) }
+    val activeGroup = group
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (activeGroup != null) {
+                    Text(
+                        "‹",
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.clickable { group = null }.padding(end = 12.dp),
+                    )
+                }
+                Text(if (activeGroup == null) "选择导入来源" else activeGroup)
+            }
+        },
+        text = {
+            Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
+                if (activeGroup == null) {
+                    OptionRow(
+                        title = "自动识别",
+                        subtitle = "推荐：按表头自动判断，不用先选来源",
+                        selected = current == ImportSource.AUTO,
+                    ) { onPick(ImportSource.AUTO) }
+                    ImportSource.groups().filter { it.isNotBlank() }.forEach { name ->
+                        val children = ImportSource.inGroup(name)
+                        val selected = current.group == name
+                        OptionRow(
+                            title = name,
+                            subtitle = children.joinToString(" / ") { it.label },
+                            selected = selected,
+                            trailingChevron = true,
+                        ) { group = name }
+                    }
+                } else {
+                    ImportSource.inGroup(activeGroup).forEach { source ->
+                        OptionRow(
+                            title = source.label,
+                            subtitle = source.note,
+                            selected = current == source,
+                        ) { onPick(source) }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("关闭") }
+        },
+    )
+}
+
+/* ------------------------------- 解析结果 ------------------------------- */
 
 @Composable
 private fun Busy(text: String, subtitle: String) {
@@ -289,7 +597,7 @@ private fun BackupReady(
             }
         }
         Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ActionButton("取消", onClick = onCancel, color = Fen.colors.surfaceMuted, textColor = Fen.colors.ink, modifier = Modifier.weight(1f))
+            ActionButton("返回", onClick = onCancel, color = Fen.colors.surfaceMuted, textColor = Fen.colors.ink, modifier = Modifier.weight(1f))
             ActionButton("恢复备份", onClick = onRestore, color = Fen.colors.expense, modifier = Modifier.weight(1.6f))
         }
     }
@@ -460,7 +768,7 @@ private fun Overview(
         }
 
         Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            ActionButton("取消", onClick = onCancel, color = Fen.colors.surfaceMuted, textColor = Fen.colors.ink, modifier = Modifier.weight(1f))
+            ActionButton("返回", onClick = onCancel, color = Fen.colors.surfaceMuted, textColor = Fen.colors.ink, modifier = Modifier.weight(1f))
             ActionButton(
                 "调整分类（${session.mappings.size}）",
                 onClick = onNext,
@@ -587,6 +895,7 @@ private fun OptionRow(
     title: String,
     subtitle: String,
     selected: Boolean,
+    trailingChevron: Boolean = false,
     onClick: () -> Unit,
 ) {
     Row(
@@ -607,7 +916,15 @@ private fun OptionRow(
                 Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = Fen.colors.inkFaint)
             }
         }
-        if (selected) Text("✓", color = Fen.colors.ink)
+        when {
+            selected -> Text("✓", color = Fen.colors.ink)
+            trailingChevron -> Icon(
+                Icons.Rounded.ChevronRight,
+                contentDescription = null,
+                tint = Fen.colors.inkFaint,
+                modifier = Modifier.size(18.dp),
+            )
+        }
     }
 }
 
@@ -763,4 +1080,3 @@ private fun formatDateTime(millis: Long): String {
     val formatter = DateTimeFormatter.ofPattern("yyyy年M月d日 HH:mm")
     return Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).format(formatter)
 }
-

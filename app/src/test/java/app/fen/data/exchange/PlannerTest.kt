@@ -2,6 +2,7 @@ package app.fen.data.exchange
 
 import app.fen.data.Category
 import app.fen.data.FenBackupCodec
+import app.fen.data.ImportBatch
 import app.fen.data.Tx
 import app.fen.data.TxType
 import org.junit.Assert.assertEquals
@@ -149,6 +150,18 @@ class PlannerTest {
         assertEquals("餐饮", result.records[0].sourceCategory)
         assertEquals("午饭, 咖啡", result.records[0].note)
         assertEquals(TxType.INCOME, result.records[1].type)
+    }
+
+    @Test
+    fun editingKeepsImportBatch() {
+        val tx = Tx("t", TxType.EXPENSE, 100, food.id, "午饭", 1_700_000_000_000, importBatch = "batch-1")
+        val edited = tx.copy(amount = 250, categoryId = transport.id, note = "改过", occurredAt = 1_700_000_100_000)
+        assertEquals("batch-1", edited.importBatch)
+        assertEquals("batch-1", tx.copy().importBatch)
+
+        val batch = ImportBatch("batch-1", "iCost Excel", "a.xlsx", 1_700_000_000_000, rows = 3588)
+        assertEquals(3588, batch.remaining)
+        assertEquals(3500, batch.copy(remaining = 3500).remaining)
     }
 
     @Test
