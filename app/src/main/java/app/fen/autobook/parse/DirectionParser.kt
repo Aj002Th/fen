@@ -4,7 +4,7 @@ import app.fen.data.TxType
 
 object DirectionParser {
     private val unsupported = listOf("转账", "还款")
-    private val income = listOf("收款", "入账", "退款", "收入")
+    private val income = listOf("已收款", "收款成功", "收款到账", "入账", "退款", "收入")
     private val expense = listOf("付款", "支付", "消费", "实付", "支出")
 
     fun parse(text: String): TxType? {
