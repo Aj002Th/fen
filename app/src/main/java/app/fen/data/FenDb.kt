@@ -135,6 +135,53 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
                 )
             }
         }
+        if (oldVersion < 9) {
+            addBuiltinCategories(db)
+        }
+    }
+
+    /** 补上 v9 新增的转账 / 退款。缺哪个补哪个，已有的不改。 */
+    private fun addBuiltinCategories(db: SQLiteDatabase) {
+        val existing = db.query(
+            "category",
+            arrayOf("name", "type", "sort_order"),
+            null, null, null, null, null,
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    add(
+                        CategorySlot(
+                            name = cursor.getString(0),
+                            type = TxType.valueOf(cursor.getString(1)),
+                            sortOrder = cursor.getInt(2),
+                        )
+                    )
+                }
+            }
+        }
+        val plan = planV9(existing)
+        plan.sortUpdates.forEach { update ->
+            db.update(
+                "category",
+                ContentValues().apply { put("sort_order", update.sortOrder) },
+                "name = ? AND type = ?",
+                arrayOf(update.name, update.type.name),
+            )
+        }
+        plan.inserts.forEach { (category, order) ->
+            db.insertOrThrow(
+                "category",
+                null,
+                Category(
+                    id = UUID.randomUUID().toString(),
+                    name = category.name,
+                    type = category.type,
+                    icon = category.icon,
+                    color = category.color,
+                    sortOrder = order,
+                ).toValues(),
+            )
+        }
     }
 
     private fun seed(db: SQLiteDatabase) {
@@ -150,18 +197,8 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
             })
         }
 
-        val expense = listOf(
-            "餐饮" to "food", "购物" to "shopping", "交通" to "transport",
-            "娱乐" to "entertainment", "居住" to "housing", "医疗" to "medical",
-            "学习" to "study",
-        )
-        expense.forEachIndexed { index, (name, icon) ->
-            add(name, TxType.EXPENSE, icon, CategoryPaletteColors[index % CategoryPaletteColors.size])
-        }
-
-        val income = listOf("工资" to "salary", "奖金" to "bonus", "理财" to "invest")
-        income.forEachIndexed { index, (name, icon) ->
-            add(name, TxType.INCOME, icon, IncomePaletteColors[index % IncomePaletteColors.size])
+        (BuiltinCategories.expense + BuiltinCategories.income).forEach { category ->
+            add(category.name, category.type, category.icon, category.color)
         }
 
         // 「未分类」是一个真实分类，手工记账时也能直接选
@@ -519,15 +556,7 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
     }
 
     private companion object {
-        const val DB_VERSION = 8
-
-        val CategoryPaletteColors = listOf(
-            0xFFF2583E, 0xFF3E8BF2, 0xFF17A467, 0xFFF2A93E,
-            0xFF8B6CF2, 0xFFE05C9A, 0xFF21B8C7, 0xFF7C8794,
-        )
-        val IncomePaletteColors = listOf(
-            0xFF17A467, 0xFF3E8BF2, 0xFF8B6CF2, 0xFFF2A93E,
-        )
+        const val DB_VERSION = 9
     }
 }
 
