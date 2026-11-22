@@ -59,6 +59,8 @@ import app.fen.data.Tx
 import app.fen.ui.screens.AddTransactionScreen
 import app.fen.ui.screens.BillsScreen
 import app.fen.ui.screens.CategoryManagerScreen
+import app.fen.ui.screens.McpLogScreen
+import app.fen.ui.screens.McpScreen
 import app.fen.ui.screens.SearchScreen
 import app.fen.ui.screens.SettingsScreen
 import app.fen.ui.screens.StatsScreen
@@ -172,6 +174,7 @@ private fun FenContent(viewModel: FenViewModel) {
                         onThemeModeChange = viewModel::setThemeMode,
                         onBack = { navController.popBackStack() },
                         onOpenCategories = { navController.navigate("categories") },
+                        onOpenMcp = { navController.navigate("mcp") },
                         showDebug = BuildConfig.DEBUG,
                         onSeedDemo = {
                             scope.launch(Dispatchers.IO) { viewModel.seedDemoData(400) }
@@ -204,6 +207,19 @@ private fun FenContent(viewModel: FenViewModel) {
                             viewModel.deleteCategoryWithTransactions(category)
                         },
                         countFor = { id -> viewModel.categoryUsage(id) },
+                    )
+                }
+                composable("mcp") {
+                    McpScreen(
+                        viewModel = viewModel(),
+                        onBack = { navController.popBackStack() },
+                        onOpenLog = { navController.navigate("mcp/log") },
+                    )
+                }
+                composable("mcp/log") {
+                    McpLogScreen(
+                        viewModel = viewModel(),
+                        onBack = { navController.popBackStack() },
                     )
                 }
             }

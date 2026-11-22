@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -49,6 +50,7 @@ fun SettingsScreen(
     onThemeModeChange: (Int) -> Unit,
     onBack: () -> Unit,
     onOpenCategories: () -> Unit,
+    onOpenMcp: () -> Unit = {},
     showDebug: Boolean = false,
     onSeedDemo: () -> Unit = {},
     onClearData: () -> Unit = {},
@@ -117,6 +119,23 @@ fun SettingsScreen(
                     icon = Icons.Outlined.DarkMode,
                     tint = Color(0xFF7C8794),
                     onClick = { showThemeDialog = true },
+                )
+            }
+        }
+
+        item { SectionLabel("扩展", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp)) }
+        item {
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = Fen.colors.surface,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                SettingItem(
+                    title = "本地 MCP",
+                    subtitle = "让 AI 在你的局域网里读写账本",
+                    icon = Icons.Outlined.Link,
+                    tint = Color(0xFF2F6BFF),
+                    onClick = onOpenMcp,
                 )
             }
         }
@@ -226,7 +245,7 @@ fun SettingsScreen(
             text = {
                 Text(
                     "一个开源、克制的 Android 记账应用。\n" +
-                        "数据只保存在本机，没有账号、没有网络请求。\n\n" +
+                        "不连接互联网。数据只在本机；本地 MCP 只在你开启时，通过同一 WiFi 提供访问。\n\n" +
                         "版本 ${BuildConfig.VERSION_NAME}"
                 )
             },
