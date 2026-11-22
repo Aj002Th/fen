@@ -140,7 +140,7 @@ private fun FenContent(viewModel: FenViewModel) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val showBottomBar = currentRoute == "bills" || currentRoute == "stats"
+    val showBottomBar = currentRoute == null || RootTabs.isRoot(currentRoute)
     var showAdd by remember { mutableStateOf(false) }
     var editingTx by remember { mutableStateOf<Tx?>(null) }
     val addOffset = remember { Animatable(1f) }
@@ -460,7 +460,7 @@ private fun FenBottomBar(currentRoute: String?, onSelect: (String) -> Unit, onAd
                 val selectedIndex = tabs.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
                 val slidingIndex by animateFloatAsState(
                     targetValue = selectedIndex.toFloat(),
-                    animationSpec = tween(FenMotion.durationMillis, easing = FastOutSlowInEasing),
+                    animationSpec = tween(260, easing = FastOutSlowInEasing),
                     label = "tabIndicator",
                 )
                 Box(
