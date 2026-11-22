@@ -49,4 +49,24 @@ class AmountParserTest {
     fun `rejects card tail numbers`() {
         assertNull(AmountParser.parse("尾号1234"))
     }
+
+    @Test
+    fun `rejects chinese date text`() {
+        assertNull(AmountParser.parse("2026年11月23日 12:30"))
+    }
+
+    @Test
+    fun `rejects huge order ids`() {
+        assertNull(AmountParser.parse("202311230001"))
+    }
+
+    @Test
+    fun `rejects card numbers`() {
+        assertNull(AmountParser.parse("卡号 6222 0000 0000 0000"))
+    }
+
+    @Test
+    fun `rejects labeled time`() {
+        assertNull(AmountParser.parse("时间 12:30"))
+    }
 }

@@ -16,6 +16,8 @@ class ClassifierTest {
         merchant: String = "某某餐厅",
         type: TxType? = TxType.EXPENSE,
         rawText: String = "",
+        sourceId: String? = "wechat",
+        sourcePage: String? = "payment_done",
     ) = ParsedBill(
         amountMinor = 3250,
         type = type,
@@ -23,14 +25,15 @@ class ClassifierTest {
         merchant = merchant,
         occurredAt = 1_763_800_000_000,
         rawText = rawText.ifBlank { merchant },
-        sourceId = "wechat",
-        sourcePage = "payment_done",
+        sourceId = sourceId,
+        sourcePage = sourcePage,
         extractor = ExtractorMode.IMAGE,
         confidence = 0.9f,
         evidence = emptyList(),
     )
 
     private val food = category("cat-food", "餐饮", TxType.EXPENSE)
+    private val shopping = category("cat-shop", "购物", TxType.EXPENSE)
     private val salary = category("cat-salary", "工资", TxType.INCOME)
 
     @Test
@@ -67,6 +70,19 @@ class ClassifierTest {
         val result = classifier.classify(bill(), listOf(food, salary))
 
         assertNull(result.categoryId)
+        assertEquals(ClassificationSource.RULE, result.source)
+    }
+
+    @Test
+    fun `source hint maps taobao order to shopping`() {
+        val classifier = Classifier(InMemoryAutoMapStore(), RuleClassifier(emptyMap()))
+
+        val result = classifier.classify(
+            bill(sourceId = "taobao", sourcePage = "order_detail"),
+            listOf(food, shopping),
+        )
+
+        assertEquals(shopping.id, result.categoryId)
         assertEquals(ClassificationSource.RULE, result.source)
     }
 

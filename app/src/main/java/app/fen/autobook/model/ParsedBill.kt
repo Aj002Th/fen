@@ -16,4 +16,5 @@ data class ParsedBill(
     val extractor: ExtractorMode,
     val confidence: Float,
     val evidence: List<String>,
+    val timeGuessed: Boolean = false,
 )

@@ -9,19 +9,22 @@ import app.fen.autobook.model.ParsedBill
 import app.fen.autobook.ocr.OcrEngine
 import app.fen.autobook.pipeline.RecognitionEngine
 import app.fen.data.Category
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import java.time.ZoneId
 
 sealed interface ImageImportState {
     data object Idle : ImageImportState
-    data object Loading : ImageImportState
+    data class Loading(val completed: Int = 0, val total: Int = 0) : ImageImportState
     data class Ready(val bill: ParsedBill, val preview: Bitmap?) : ImageImportState
     data class ReadyBatch(val items: List<BatchItem>) : ImageImportState
     data class Error(val message: String) : ImageImportState
@@ -36,43 +39,62 @@ class ImageImportController(
     dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    private var job: Job? = null
     private val _state = MutableStateFlow<ImageImportState>(ImageImportState.Idle)
     val state: StateFlow<ImageImportState> = _state.asStateFlow()
 
     fun submit(uri: Uri) {
-        scope.launch {
-            _state.value = ImageImportState.Loading
+        job?.cancel()
+        job = scope.launch {
+            _state.value = ImageImportState.Loading()
             try {
-                val bill = recognize(uri) ?: error("无法读取图片")
-                _state.value = ImageImportState.Ready(bill, null)
+                val result = withTimeout(OCR_TIMEOUT_MS) { recognize(uri, keepBitmap = true) }
+                    ?: error("无法读取图片")
+                _state.value = ImageImportState.Ready(result.bill, result.bitmap)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
-                _state.value = ImageImportState.Error(error.message ?: "识别失败")
+                _state.value = ImageImportState.Error("识别失败，请重试")
             }
         }
     }
 
     fun submitAll(uris: List<Uri>) {
         if (uris.isEmpty()) return
-        scope.launch {
-            _state.value = ImageImportState.Loading
+        job?.cancel()
+        job = scope.launch {
+            val limited = uris.take(MAX_BATCH)
+            _state.value = ImageImportState.Loading(0, limited.size)
             val items = mutableListOf<BatchItem>()
-            for (uri in uris.take(MAX_BATCH)) {
-                val bill = runCatching { recognize(uri) }.getOrNull()
+            for ((index, uri) in limited.withIndex()) {
+                val result = try {
+                    withTimeout(OCR_TIMEOUT_MS) { recognize(uri, keepBitmap = false) }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    null
+                }
+                val bill = result?.bill
                 if (bill != null && bill.amountMinor > 0) {
                     items += BatchItem(bill, null)
                 } else {
                     items += BatchItem(null, "未识别到金额")
                 }
+                _state.value = ImageImportState.Loading(index + 1, limited.size)
             }
             _state.value = ImageImportState.ReadyBatch(items)
         }
     }
 
     fun consume() {
+        job?.cancel()
+        job = null
         _state.value = ImageImportState.Idle
     }
 
-    private suspend fun recognize(uri: Uri): ParsedBill? {
+    private data class Recognized(val bill: ParsedBill, val bitmap: Bitmap?)
+
+    private suspend fun recognize(uri: Uri, keepBitmap: Boolean): Recognized? {
         val bitmap = decode(uri) ?: return null
         return try {
             val ocrResult = ocr.recognize(bitmap)
@@ -81,9 +103,10 @@ class ImageImportController(
                 nowMillis = System.currentTimeMillis(),
                 zone = ZoneId.systemDefault(),
             )
-            classifier.apply(bill, categories())
+            val classified = classifier.apply(bill, categories())
+            Recognized(classified, if (keepBitmap) bitmap else null)
         } finally {
-            bitmap.recycle()
+            if (!keepBitmap) bitmap.recycle()
         }
     }
 
@@ -104,5 +127,6 @@ class ImageImportController(
     private companion object {
         const val MAX_EDGE = 2048
         const val MAX_BATCH = 9
+        const val OCR_TIMEOUT_MS = 10_000L
     }
 }

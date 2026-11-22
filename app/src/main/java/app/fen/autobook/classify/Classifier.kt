@@ -21,9 +21,14 @@ class Classifier(
             ?.let { type -> categories.filter { it.type == type } }
             ?: categories
 
-        val mappedId = maps.find(MerchantKey.of(bill.merchant, bill.type ?: TxType.EXPENSE))
+        val mappedKey = MerchantKey.of(bill.merchant, bill.type ?: TxType.EXPENSE)
+        val mappedId = if (mappedKey.isBlank()) null else maps.find(mappedKey)
         val mapped = candidates.firstOrNull { it.id == mappedId }
         if (mapped != null) return Classification(mapped.id, ClassificationSource.MAPPING, 1f)
+
+        val hintedName = SourceCategoryHints.categoryName(bill.sourceId, bill.sourcePage)
+        val hinted = candidates.firstOrNull { it.name == hintedName }
+        if (hinted != null) return Classification(hinted.id, ClassificationSource.RULE, 0.7f)
 
         val ruled = rules.match(bill.rawText.ifBlank { bill.merchant }, candidates)
         if (ruled != null) return Classification(ruled.id, ClassificationSource.RULE, 0.8f)

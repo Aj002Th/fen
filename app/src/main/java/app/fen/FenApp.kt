@@ -42,9 +42,10 @@ class FenApp : Application() {
     override fun onCreate() {
         super.onCreate()
         val db = FenDb(this)
-        repository = FenRepository(db)
+        val autoMapStore = SqliteAutoMapStore(db)
+        repository = FenRepository(db, autoMapStore)
         prefs = AppPrefs(this)
-        autoMap = SqliteAutoMapStore(db)
+        autoMap = autoMapStore
         imageImport = ImageImportController(
             context = this,
             ocr = MlKitOcrEngine(),

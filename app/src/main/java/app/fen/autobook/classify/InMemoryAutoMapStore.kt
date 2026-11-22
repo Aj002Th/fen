@@ -13,5 +13,11 @@ class InMemoryAutoMapStore : AutoMapStore {
         map.entries.removeAll { it.value == categoryId }
     }
 
+    override fun updateCategory(fromId: String, toId: String) {
+        for (key in map.keys.toList()) {
+            if (map[key] == fromId) map[key] = toId
+        }
+    }
+
     override fun all(): Map<String, String> = map.toMap()
 }

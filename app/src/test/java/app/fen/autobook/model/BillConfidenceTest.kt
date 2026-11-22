@@ -40,4 +40,11 @@ class BillConfidenceTest {
     fun `missing type lowers confidence`() {
         assertTrue(BillConfidence.of(bill(type = null)) < 0.8f)
     }
+
+    @Test
+    fun `guessed time and generic source lower confidence`() {
+        val guessed = bill().copy(timeGuessed = true, sourceId = "generic")
+
+        assertTrue(BillConfidence.of(guessed) < 0.8f)
+    }
 }

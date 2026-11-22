@@ -16,6 +16,12 @@ class InMemoryAutoMapStoreTest {
     }
 
     @Test
+    fun `merchant key drops app titles`() {
+        assertEquals("", MerchantKey.of("微信支付", TxType.EXPENSE))
+        assertEquals("", MerchantKey.of("淘宝", TxType.EXPENSE))
+    }
+
+    @Test
     fun `merchant key includes type`() {
         assertNotEquals(
             MerchantKey.of("某某餐厅", TxType.EXPENSE),
@@ -44,6 +50,18 @@ class InMemoryAutoMapStoreTest {
         assertNull(store.find("a"))
         assertNull(store.find("b"))
         assertEquals("cat2", store.find("c"))
+    }
+
+    @Test
+    fun `merging category updates mappings`() {
+        val store = InMemoryAutoMapStore()
+        store.upsert("a", "cat1")
+        store.upsert("b", "cat2")
+
+        store.updateCategory("cat1", "cat2")
+
+        assertEquals("cat2", store.find("a"))
+        assertEquals("cat2", store.find("b"))
     }
 
     @Test

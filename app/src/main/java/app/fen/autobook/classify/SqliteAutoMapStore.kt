@@ -15,6 +15,8 @@ class SqliteAutoMapStore(private val db: FenDb) : AutoMapStore {
 
     override fun deleteForCategory(categoryId: String) = db.deleteAutoMapForCategory(categoryId)
 
+    override fun updateCategory(fromId: String, toId: String) = db.updateAutoMapCategory(fromId, toId)
+
     override fun all(): Map<String, String> = db.allAutoMaps()
 
     private fun split(key: String): Pair<String, String> {

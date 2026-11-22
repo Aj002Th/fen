@@ -48,9 +48,12 @@ class SourceTemplateTest {
         val bill = engine.recognize(
             listOf(
                 line("微信支付", 40),
+                line("支付成功"),
                 line("订单号 202311230001"),
                 line("¥32.50", 60),
                 line("余额 ¥1000.00", 50),
+                line("优惠 ¥5.00"),
+                line("红包 ¥1.00"),
                 line("收款方 某某餐厅"),
                 line("支付时间 2026-11-23 12:30"),
             ),
@@ -58,6 +61,7 @@ class SourceTemplateTest {
             zone,
         )
 
+        assertEquals("wechat", bill.sourceId)
         assertEquals(3250L, bill.amountMinor)
         assertEquals("某某餐厅", bill.merchant)
         assertEquals(at(2026, 11, 23, 12, 30), bill.occurredAt)
@@ -68,9 +72,11 @@ class SourceTemplateTest {
         val bill = engine.recognize(
             listOf(
                 line("支付宝", 40),
+                line("账单详情"),
                 line("优惠 ¥5.00"),
                 line("金额 ¥32.50", 60),
                 line("余额 ¥1000.00", 50),
+                line("红包 ¥1.00"),
                 line("收款方 某某餐厅"),
                 line("创建时间 2026-11-23 12:30"),
             ),
@@ -78,6 +84,7 @@ class SourceTemplateTest {
             zone,
         )
 
+        assertEquals("alipay", bill.sourceId)
         assertEquals(3250L, bill.amountMinor)
         assertEquals("某某餐厅", bill.merchant)
     }
@@ -97,6 +104,7 @@ class SourceTemplateTest {
             zone,
         )
 
+        assertEquals("unionpay", bill.sourceId)
         assertEquals(3250L, bill.amountMinor)
         assertEquals("某某餐厅", bill.merchant)
     }

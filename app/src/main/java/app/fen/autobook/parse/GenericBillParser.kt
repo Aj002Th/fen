@@ -20,8 +20,12 @@ class GenericBillParser {
     ): ParsedBill {
         val normalized = lines.map { it.copy(text = TextNormalizer.normalize(it.text)) }
         val amountLine = selectAmountLine(normalized, hints)
-        val amount = amountLine?.let { AmountParser.parse(it.text) } ?: 0L
-        val occurredAt = selectTime(normalized, hints, nowMillis, zone)
+        val amount = amountLine?.let { line ->
+            amountNearAnchor(line.text, hints?.amountAnchors ?: defaultAmountAnchors)
+        } ?: 0L
+        val parsedTime = selectTime(normalized, hints, nowMillis, zone)
+        val occurredAt = parsedTime ?: nowMillis
+        val timeGuessed = parsedTime == null
         val type = DirectionParser.parse(normalized.joinToString(" ") { it.text })
         val merchant = selectMerchant(normalized, hints)
         val rawText = OcrResult(normalized).fullText
@@ -38,20 +42,25 @@ class GenericBillParser {
             extractor = ExtractorMode.IMAGE,
             confidence = 0f,
             evidence = listOfNotNull(amountLine?.text).filter { it.isNotBlank() },
+            timeGuessed = timeGuessed,
         )
         return bill.copy(confidence = BillConfidence.of(bill))
     }
 
     private fun selectAmountLine(lines: List<OcrLine>, hints: ImageHints?): OcrLine? {
-        val exclusions = hints?.excludePatterns ?: defaultExcludePatterns
-        val candidates = lines.filter { line ->
-            exclusions.none { line.text.contains(it) }
-        }
+        val exclusions = (hints?.excludePatterns.orEmpty() + defaultExcludePatterns).distinct()
         val anchors = hints?.amountAnchors ?: defaultAmountAnchors
+        val candidates = lines.filter { line ->
+            val excluded = exclusions.any { line.text.contains(it) }
+            val stronglyAnchored = anchors.any { anchor ->
+                anchor != "¥" && anchor != "￥" && line.text.contains(anchor)
+            }
+            !excluded || stronglyAnchored
+        }
 
         val anchored = candidates
             .filter { line -> anchors.any { line.text.contains(it) } }
-            .mapNotNull { line -> AmountParser.parse(line.text)?.let { line to it } }
+            .mapNotNull { line -> amountNearAnchor(line.text, anchors)?.let { line to it } }
         val chosen = if (hints?.preferLargestAmount == false) {
             anchored.firstOrNull()
         } else {
@@ -65,12 +74,22 @@ class GenericBillParser {
             ?.first
     }
 
+    private fun amountNearAnchor(line: String, anchors: List<String>): Long? {
+        for (anchor in anchors) {
+            val index = line.indexOf(anchor)
+            if (index >= 0) {
+                AmountParser.parse(line.substring(index + anchor.length))?.let { return it }
+            }
+        }
+        return AmountParser.parse(line)
+    }
+
     private fun selectTime(
         lines: List<OcrLine>,
         hints: ImageHints?,
         nowMillis: Long,
         zone: ZoneId,
-    ): Long {
+    ): Long? {
         if (hints != null) {
             lines.firstNotNullOfOrNull { line ->
                 if (hints.timeAnchors.any { line.text.contains(it) }) {
@@ -80,7 +99,7 @@ class GenericBillParser {
                 }
             }?.let { return it }
         }
-        return lines.firstNotNullOfOrNull { DateTimeParser.parse(it.text, nowMillis, zone) } ?: nowMillis
+        return lines.firstNotNullOfOrNull { DateTimeParser.parse(it.text, nowMillis, zone) }
     }
 
     private fun selectMerchant(lines: List<OcrLine>, hints: ImageHints?): String {

@@ -45,12 +45,25 @@ class GenericBillParserTest {
     }
 
     @Test
+    fun `parses amount after anchor on mixed discount line`() {
+        val lines = listOf(
+            line("已优惠 ¥5.00 实付 ¥32.50", 60),
+            line("支付时间 2026-11-23 12:30"),
+        )
+
+        val bill = GenericBillParser().parse(lines, now, zone)
+
+        assertEquals(3250L, bill.amountMinor)
+    }
+
+    @Test
     fun `falls back to now and blank merchant`() {
         val bill = GenericBillParser().parse(listOf(line("¥10.00")), now, zone)
 
         assertEquals(1000L, bill.amountMinor)
         assertEquals(now, bill.occurredAt)
         assertEquals("", bill.merchant)
+        assertTrue(bill.timeGuessed)
         assertTrue(bill.confidence < 0.7f)
     }
 }

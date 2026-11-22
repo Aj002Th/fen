@@ -2,6 +2,8 @@ package app.fen.autobook.source
 
 import app.fen.autobook.source.recognizers.AlipayRecognizer
 import app.fen.autobook.source.recognizers.GenericRecognizer
+import app.fen.autobook.source.recognizers.JdRecognizer
+import app.fen.autobook.source.recognizers.MeituanRecognizer
 import app.fen.autobook.source.recognizers.UnionpayRecognizer
 import app.fen.autobook.source.recognizers.WechatRecognizer
 import org.junit.Assert.assertEquals
@@ -14,6 +16,8 @@ class SourceDetectionTest {
             WechatRecognizer,
             AlipayRecognizer,
             UnionpayRecognizer,
+            JdRecognizer,
+            MeituanRecognizer,
             GenericRecognizer,
         )
     )
@@ -55,5 +59,25 @@ class SourceDetectionTest {
         val match = detection.detect("随便一段文字")
 
         assertEquals("generic", match.sourceId)
+    }
+
+    @Test
+    fun `tie between two families falls back to generic`() {
+        val match = detection.detect("京东 美团 订单详情")
+
+        assertEquals("generic", match.sourceId)
+    }
+
+    @Test
+    fun `weak match below gap falls back to generic`() {
+        val weak = object : SourceRecognizer {
+            override val id = "weak"
+            override fun detect(text: String): Float = 0.6f
+            override fun pageHint(text: String): String? = null
+            override val billTypeHints = emptyMap<String, String>()
+        }
+        val custom = SourceDetection(listOf(weak, GenericRecognizer))
+
+        assertEquals("generic", custom.detect("x").sourceId)
     }
 }

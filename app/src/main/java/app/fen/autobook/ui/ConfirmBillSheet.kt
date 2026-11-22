@@ -1,13 +1,21 @@
 package app.fen.autobook.ui
 
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
+import android.graphics.Bitmap
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -26,6 +34,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import app.fen.autobook.classify.DuplicateDetector
@@ -38,6 +49,7 @@ import app.fen.util.parseAmountToMinor
 import app.fen.util.toAmountInput
 import app.fen.util.toLocalDateTime
 import java.time.format.DateTimeFormatter
+import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,9 +57,11 @@ fun ConfirmBillSheet(
     bill: ParsedBill,
     categories: List<Category>,
     existing: List<Tx>,
+    preview: Bitmap?,
     onSave: (TxType, Long, String?, String, Long) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
     var type by remember(bill) { mutableStateOf(bill.type ?: TxType.EXPENSE) }
     var amountText by remember(bill) { mutableStateOf(bill.amountMinor.toAmountInput()) }
     var categoryId by remember(bill) { mutableStateOf(bill.categoryId) }
@@ -57,8 +71,8 @@ fun ConfirmBillSheet(
 
     val options = categories.filter { it.type == type }
     LaunchedEffect(options, categoryId) {
-        if (options.none { it.id == categoryId }) {
-            categoryId = options.firstOrNull()?.id
+        if (categoryId != null && options.none { it.id == categoryId }) {
+            categoryId = null
         }
     }
 
@@ -79,11 +93,32 @@ fun ConfirmBillSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("确认账单", style = MaterialTheme.typography.headlineSmall)
+
+            if (preview != null) {
+                Image(
+                    bitmap = preview.asImageBitmap(),
+                    contentDescription = "账单截图",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 160.dp),
+                    contentScale = ContentScale.Fit,
+                )
+            }
+
+            Text(
+                text = buildString {
+                    append("识别置信度 ${(bill.confidence * 100).toInt()}%")
+                    if (bill.timeGuessed) append(" · 时间未识别，已用当前时间")
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (bill.confidence < 0.6f) Fen.colors.expense else Fen.colors.inkSoft,
+            )
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
@@ -126,7 +161,14 @@ fun ConfirmBillSheet(
                 modifier = Modifier.fillMaxWidth(),
             )
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        showDateTimePicker(context, occurredAt) { occurredAt = it }
+                    },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
                     text = "时间 " + occurredAt.toLocalDateTime()
                         .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")),
@@ -158,10 +200,11 @@ fun ConfirmBillSheet(
                 ) { Text("保存") }
             }
 
-            if (bill.sourceId != null) {
-                val page = bill.sourcePage?.let { " / $it" } ?: ""
+            val sourceLabel = SourceLabels.source(bill.sourceId)
+            if (sourceLabel != null) {
+                val page = SourceLabels.page(bill.sourcePage)?.let { " / $it" } ?: ""
                 Text(
-                    text = "来源：${bill.sourceId}$page",
+                    text = "来源：$sourceLabel$page · 图片",
                     style = MaterialTheme.typography.bodySmall,
                     color = Fen.colors.inkFaint,
                 )
@@ -187,4 +230,33 @@ fun ConfirmBillSheet(
             },
         )
     }
+}
+
+private fun showDateTimePicker(
+    context: android.content.Context,
+    current: Long,
+    onPicked: (Long) -> Unit,
+) {
+    val calendar = Calendar.getInstance().apply { timeInMillis = current }
+    DatePickerDialog(
+        context,
+        { _, year, month, day ->
+            TimePickerDialog(
+                context,
+                { _, hour, minute ->
+                    val picked = Calendar.getInstance().apply {
+                        set(year, month, day, hour, minute, 0)
+                        set(Calendar.MILLISECOND, 0)
+                    }
+                    onPicked(picked.timeInMillis)
+                },
+                calendar.get(Calendar.HOUR_OF_DAY),
+                calendar.get(Calendar.MINUTE),
+                true,
+            ).show()
+        },
+        calendar.get(Calendar.YEAR),
+        calendar.get(Calendar.MONTH),
+        calendar.get(Calendar.DAY_OF_MONTH),
+    ).show()
 }

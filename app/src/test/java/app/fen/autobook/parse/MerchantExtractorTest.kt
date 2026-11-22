@@ -40,4 +40,34 @@ class MerchantExtractorTest {
 
         assertEquals("", MerchantExtractor.extract(lines))
     }
+
+    @Test
+    fun `prefers merchant over app title`() {
+        val lines = listOf(
+            line("微信支付", 40),
+            line("测试餐厅", 20),
+        )
+
+        assertEquals("测试餐厅", MerchantExtractor.extract(lines))
+    }
+
+    @Test
+    fun `keeps merchant names containing digits`() {
+        val lines = listOf(
+            line("星巴克 2 店", 40),
+            line("¥10.00", 80),
+        )
+
+        assertEquals("星巴克 2 店", MerchantExtractor.extract(lines))
+    }
+
+    @Test
+    fun `skips merchant id lines`() {
+        val lines = listOf(
+            line("商户单号 4200001234", 40),
+            line("测试餐厅", 20),
+        )
+
+        assertEquals("测试餐厅", MerchantExtractor.extract(lines))
+    }
 }
