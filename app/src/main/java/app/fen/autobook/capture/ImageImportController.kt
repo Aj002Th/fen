@@ -23,7 +23,7 @@ sealed interface ImageImportState {
     data object Idle : ImageImportState
     data object Loading : ImageImportState
     data class Ready(val bill: ParsedBill, val preview: Bitmap?) : ImageImportState
-    data class ReadyBatch(val bills: List<ParsedBill>) : ImageImportState
+    data class ReadyBatch(val items: List<BatchItem>) : ImageImportState
     data class Error(val message: String) : ImageImportState
 }
 
@@ -55,15 +55,16 @@ class ImageImportController(
         if (uris.isEmpty()) return
         scope.launch {
             _state.value = ImageImportState.Loading
-            val bills = mutableListOf<ParsedBill>()
+            val items = mutableListOf<BatchItem>()
             for (uri in uris.take(MAX_BATCH)) {
-                runCatching { recognize(uri) }.getOrNull()?.let { bills += it }
+                val bill = runCatching { recognize(uri) }.getOrNull()
+                if (bill != null && bill.amountMinor > 0) {
+                    items += BatchItem(bill, null)
+                } else {
+                    items += BatchItem(null, "未识别到金额")
+                }
             }
-            _state.value = if (bills.isEmpty()) {
-                ImageImportState.Error("未识别到账单")
-            } else {
-                ImageImportState.ReadyBatch(bills)
-            }
+            _state.value = ImageImportState.ReadyBatch(items)
         }
     }
 
