@@ -140,6 +140,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.cio)
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     debugImplementation(libs.compose.ui.tooling)

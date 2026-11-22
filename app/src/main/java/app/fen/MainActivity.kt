@@ -2,6 +2,7 @@ package app.fen
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -41,6 +42,12 @@ class MainActivity : ComponentActivity() {
                 CoroutineScope(Dispatchers.IO).launch { repository.seedDemoData(count) }
             }
             "/clear" -> CoroutineScope(Dispatchers.IO).launch { repository.clearTransactions() }
+            "/mcp/start" -> (application as FenApp).mcp.start()
+            "/mcp/stop" -> (application as FenApp).mcp.stop()
+            "/mcp/test" -> CoroutineScope(Dispatchers.IO).launch {
+                val result = (application as FenApp).mcp.selfTest()
+                Log.i("FenMcp", "selfTest=$result")
+            }
         }
     }
 }
