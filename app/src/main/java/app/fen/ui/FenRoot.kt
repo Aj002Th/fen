@@ -368,6 +368,7 @@ private fun FenContent(viewModel: FenViewModel) {
                             onSetSkipDuplicates = viewModel::setSkipDuplicates,
                             onSetTransferPolicy = viewModel::setTransferPolicy,
                             onUpdateMapping = viewModel::updateMapping,
+                            onCreateUncategorized = viewModel::createUncategorizedCategories,
                             onSetMappingView = viewModel::setMappingView,
                             onConfirm = viewModel::confirmImport,
                             onRestore = viewModel::restoreBackup,
