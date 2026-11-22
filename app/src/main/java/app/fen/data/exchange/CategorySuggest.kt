@@ -109,7 +109,7 @@ object CategorySuggest {
      */
     fun bucketize(records: List<ParsedRecord>, categories: List<Category>): List<ParsedRecord> =
         records.map { record ->
-            if (record.type == TxType.EXPENSE && isGeneric(record.sourceCategory)) {
+            if (isGeneric(record.sourceCategory)) {
                 val fallback = if (record.sourceCategory.trim() == "扫二维码付款") "转账" else UNBUCKETED_NAME
                 val inferred = keywordCategory(record.note, record.type, categories)?.name ?: fallback
                 record.copy(sourceCategory = inferred, rawCategory = record.sourceCategory)

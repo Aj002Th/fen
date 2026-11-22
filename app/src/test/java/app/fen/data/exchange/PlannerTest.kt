@@ -146,6 +146,14 @@ class PlannerTest {
         assertEquals("未归类", bucketed[2].sourceCategory)
         assertEquals("群收款", bucketed[3].sourceCategory)
         assertEquals("", bucketed[3].rawCategory)
+
+        // 收了一笔扫码付款，备注认不出是什么：方向是收入，也该归到收入转账
+        val received = CategorySuggest.bucketize(
+            listOf(record("扫二维码付款", type = TxType.INCOME, amount = 5000, note = "张三")),
+            withNew,
+        ).single()
+        assertEquals("转账", received.sourceCategory)
+        assertEquals("扫二维码付款", received.rawCategory)
     }
 
     @Test
