@@ -35,11 +35,11 @@ import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.ErrorOutline
-import androidx.compose.material.icons.outlined.FileOpen
+import androidx.compose.material.icons.outlined.FileDownload
 import androidx.compose.material.icons.outlined.Forest
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.HelpOutline
-import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.ManageHistory
 import androidx.compose.material.icons.outlined.Park
 import androidx.compose.material.icons.outlined.Restaurant
 import androidx.compose.material.icons.outlined.ShoppingBag
@@ -367,14 +367,14 @@ private fun SetupContent(
                             QuickAction(
                                 title = "导入记录",
                                 badge = if (batchCount > 0) batchCount.toString() else null,
-                                icon = Icons.Outlined.History,
+                                icon = Icons.Outlined.ManageHistory,
                                 onClick = onOpenHistory,
                                 modifier = Modifier.weight(1f),
                             )
                             QuickAction(
                                 title = "下载模板文件",
                                 badge = null,
-                                icon = Icons.Outlined.FileOpen,
+                                icon = Icons.Outlined.FileDownload,
                                 onClick = onDownloadTemplate,
                                 modifier = Modifier.weight(1f),
                             )

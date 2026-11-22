@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Input
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Category
@@ -21,7 +22,6 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Restore
-import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -137,7 +137,7 @@ fun SettingsScreen(
                 SettingItem(
                     title = "导入",
                     subtitle = "账单导入与来源选择",
-                    icon = Icons.Outlined.FileUpload,
+                    icon = Icons.AutoMirrored.Outlined.Input,
                     tint = Color(0xFFF2A93E),
                     onClick = onOpenImport,
                 )
@@ -153,7 +153,7 @@ fun SettingsScreen(
                 SettingItem(
                     title = "导出",
                     subtitle = "CSV 表格与导入模板",
-                    icon = Icons.Outlined.TableChart,
+                    icon = Icons.Outlined.FileUpload,
                     tint = Color(0xFF3E8BF2),
                     onClick = onOpenExport,
                 )

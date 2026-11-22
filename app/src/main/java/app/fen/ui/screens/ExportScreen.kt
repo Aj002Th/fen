@@ -16,7 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.FileDownload
-import androidx.compose.material.icons.outlined.TableChart
+import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -74,7 +74,7 @@ fun ExportScreen(
                     DataRow(
                         title = "导出表格",
                         subtitle = "CSV · 可用 Excel 编辑，不含图标与颜色",
-                        icon = Icons.Outlined.TableChart,
+                        icon = Icons.Outlined.FileUpload,
                         tint = Color(0xFF3E8BF2),
                         onClick = { csvExport.launch(stamped("fen", "csv")) },
                     )
