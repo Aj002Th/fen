@@ -917,6 +917,20 @@ private fun MappingDialog(
                     selected = mapping.target.kind == MappingKind.UNCATEGORIZED,
                 ) { onPick(MappingTarget(MappingKind.UNCATEGORIZED)) }
 
+                val sourceName = mapping.source.trim()
+                val canCreate = sourceName.isNotEmpty() &&
+                    sourceName != UNBUCKETED_NAME &&
+                    sourceName != UNCATEGORIZED_NAME &&
+                    categories.none { it.type == mapping.type && it.name == sourceName }
+                if (canCreate) {
+                    Spacer(Modifier.height(6.dp))
+                    OptionRow(
+                        title = "新建「$sourceName」分类",
+                        subtitle = "现有分类都不合适时使用",
+                        selected = mapping.target.kind == MappingKind.NEW,
+                    ) { onPick(MappingTarget(MappingKind.NEW, newName = sourceName)) }
+                }
+
                 Spacer(Modifier.height(10.dp))
                 Text("现有分类", style = MaterialTheme.typography.labelLarge, color = Fen.colors.inkSoft)
                 Spacer(Modifier.height(4.dp))
@@ -930,20 +944,6 @@ private fun MappingDialog(
                                 mapping.target.categoryId == category.id,
                         ) { onPick(MappingTarget(MappingKind.EXISTING, categoryId = category.id)) }
                     }
-
-                val sourceName = mapping.source.trim()
-                val canCreate = sourceName.isNotEmpty() &&
-                    sourceName != UNBUCKETED_NAME &&
-                    sourceName != UNCATEGORIZED_NAME &&
-                    categories.none { it.type == mapping.type && it.name == sourceName }
-                if (canCreate) {
-                    Spacer(Modifier.height(10.dp))
-                    OptionRow(
-                        title = "新建「$sourceName」分类",
-                        subtitle = "现有分类都不合适时使用",
-                        selected = mapping.target.kind == MappingKind.NEW,
-                    ) { onPick(MappingTarget(MappingKind.NEW, newName = sourceName)) }
-                }
             }
         },
         confirmButton = {
