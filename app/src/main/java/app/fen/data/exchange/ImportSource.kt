@@ -22,7 +22,7 @@ enum class ImportSource(val label: String, val group: String, val note: String =
     QIANJI("钱迹", "记账 App"),
     TUANTUAN("团团记账", "记账 App"),
 
-    GENERIC("通用表格", "", "按表头尽量识别"),
+    GENERIC("通用表格", "", "只依赖表头：日期/金额/分类或类型"),
 
     /** 只在「备份 → 恢复」里使用，不出现在导入来源菜单。 */
     FEN_JSON("完整备份", "备份", "无损 JSON，恢复会覆盖当前数据"),

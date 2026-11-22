@@ -128,6 +128,21 @@ class SheetImportTest {
     }
 
     @Test
+    fun genericTableIgnoresColumnOrder() {
+        val table = Table(
+            listOf(
+                listOf("备注", "分类", "金额", "日期", "无关列"),
+                listOf("午饭", "餐饮", "28.50", "2026/11/20 12:30", "x"),
+            )
+        )
+        val result = SheetImport.parse(table)
+        assertEquals(1, result.records.size)
+        assertEquals(2850L, result.records[0].amount)
+        assertEquals("餐饮", result.records[0].sourceCategory)
+        assertEquals("午饭", result.records[0].note)
+    }
+
+    @Test
     fun unknownLayoutProducesWarning() {
         val result = SheetImport.parse(Table(listOf(listOf("a", "b"), listOf("1", "2"))))
         assertTrue(result.records.isEmpty())

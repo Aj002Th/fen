@@ -142,18 +142,6 @@ fun ImportScreen(
                 style = MaterialTheme.typography.headlineLarge,
                 modifier = Modifier.weight(1f),
             )
-            if (state.stage == ImportStage.IDLE) {
-                TextButton(
-                    onClick = onStartParse,
-                    enabled = state.pickedUri != null,
-                ) {
-                    Text(
-                        "解析",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = if (state.pickedUri != null) Fen.colors.ink else Fen.colors.inkFaint,
-                    )
-                }
-            }
         }
 
         when (state.stage) {
@@ -391,6 +379,12 @@ private fun SetupContent(
                         color = Fen.colors.inkSoft,
                         modifier = Modifier.padding(top = 14.dp, start = 4.dp, end = 4.dp),
                     )
+                    Text(
+                        "「通用表格」只依赖表头：日期/时间、金额、分类（或类型/收支）、备注；不要求列顺序，没有表头就无法解析。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Fen.colors.inkFaint,
+                        modifier = Modifier.padding(top = 6.dp, start = 4.dp, end = 4.dp),
+                    )
                 }
             }
 
@@ -550,7 +544,7 @@ private fun SourcePickerDialog(
                     }
                     OptionRow(
                         title = "通用表格",
-                        subtitle = "按表头尽量识别",
+                        subtitle = "只依赖表头：日期 / 金额 / 分类或类型",
                         selected = current == ImportSource.GENERIC,
                     ) { onPick(ImportSource.GENERIC) }
                 } else {

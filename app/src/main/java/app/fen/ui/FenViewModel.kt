@@ -206,7 +206,7 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
                 _importState.value = state.copy(
                     stage = ImportStage.READY,
                     session = session,
-                    hashSeen = prefs.importHashes.contains(hash),
+                    hashSeen = repository.hasImportHash(hash),
                     error = null,
                     mapping = false,
                 )
@@ -313,10 +313,9 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
                         label = session.fileName,
                         createdAt = System.currentTimeMillis(),
                         rows = plan.transactions.size,
+                        fileHash = pendingHash,
                     ),
                 )
-                val hash = pendingHash
-                if (hash != null) prefs.importHashes = prefs.importHashes + hash
                 _batches.value = repository.importBatches()
                 _importState.value = state.copy(
                     stage = ImportStage.DONE,

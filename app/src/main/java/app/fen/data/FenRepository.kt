@@ -110,6 +110,8 @@ class FenRepository(private val db: FenDb) {
 
     fun importBatches(): List<ImportBatch> = db.importBatches()
 
+    fun hasImportHash(hash: String): Boolean = db.hasImportHash(hash)
+
     /** 撤销一次导入：删除该批次写入的流水与批次记录（保留导入时新建的空分类）。 */
     fun deleteImportBatch(id: String) {
         db.deleteImportBatch(id)

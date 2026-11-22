@@ -50,7 +50,8 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
                 source TEXT NOT NULL,
                 label TEXT NOT NULL DEFAULT '',
                 created_at INTEGER NOT NULL,
-                rows INTEGER NOT NULL
+                rows INTEGER NOT NULL,
+                file_hash TEXT
             )
             """.trimIndent()
         )
@@ -116,6 +117,9 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
                 """.trimIndent()
             )
             db.execSQL("CREATE INDEX IF NOT EXISTS idx_tx_batch ON tx(import_batch)")
+        }
+        if (oldVersion < 7) {
+            db.execSQL("ALTER TABLE import_batch ADD COLUMN file_hash TEXT")
         }
     }
 
@@ -342,6 +346,7 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
                 put("label", batch.label)
                 put("created_at", batch.createdAt)
                 put("rows", batch.rows)
+                put("file_hash", batch.fileHash)
             })
             db.setTransactionSuccessful()
         } finally {
@@ -352,7 +357,8 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
     fun importBatches(): List<ImportBatch> = readableDatabase.rawQuery(
         """
         SELECT b.id, b.source, b.label, b.created_at, b.rows,
-               (SELECT COUNT(*) FROM tx t WHERE t.import_batch = b.id) AS remaining
+               (SELECT COUNT(*) FROM tx t WHERE t.import_batch = b.id) AS remaining,
+               b.file_hash
         FROM import_batch b
         ORDER BY b.created_at DESC
         """.trimIndent(),
@@ -368,10 +374,20 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
                         createdAt = c.getLong(3),
                         rows = c.getInt(4),
                         remaining = c.getInt(5),
+                        fileHash = c.getString(6),
                     )
                 )
             }
         }
+    }
+
+    /** 是否还有未删除的批次导入过同一个文件。 */
+    fun hasImportHash(hash: String): Boolean {
+        if (hash.isBlank()) return false
+        readableDatabase.rawQuery(
+            "SELECT 1 FROM import_batch WHERE file_hash = ? LIMIT 1",
+            arrayOf(hash),
+        ).use { return it.moveToFirst() }
     }
 
     /** 删除一次导入以及它写入的全部流水 */
@@ -423,7 +439,7 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
     }
 
     private companion object {
-        const val DB_VERSION = 6
+        const val DB_VERSION = 7
 
         val CategoryPaletteColors = listOf(
             0xFFF2583E, 0xFF3E8BF2, 0xFF17A467, 0xFFF2A93E,

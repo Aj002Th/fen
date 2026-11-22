@@ -36,6 +36,8 @@ data class ImportBatch(
     val rows: Int,
     /** 当前仍属于这个批次的流水数（编辑/转移分类不会减少；删除流水或删除分类会）。 */
     val remaining: Int = rows,
+    /** 导入文件的 SHA-256；批次还在时才用于「这个文件之前导入过」的提示。 */
+    val fileHash: String? = null,
 )
 
 data class Snapshot(
