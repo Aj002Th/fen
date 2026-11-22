@@ -95,6 +95,11 @@ class AppPrefs(context: Context) {
         get() = sp.getLong(KEY_STATS_RANGE_END, LocalDate.now().toEpochDay())
         set(value) = sp.edit().putLong(KEY_STATS_RANGE_END, value).apply()
 
+    /** 上一次确认/沿用自定义范围的时间，用于 3 分钟内不再弹选择框 */
+    var statsRangeSelectedAt: Long
+        get() = sp.getLong(KEY_STATS_RANGE_SELECTED_AT, 0L)
+        set(value) = sp.edit().putLong(KEY_STATS_RANGE_SELECTED_AT, value).apply()
+
     /** 分类占比/排行共用：EXPENSE / INCOME */
     var statsCategoryType: String
         get() = sp.getString(KEY_STATS_CATEGORY_TYPE, TxType.EXPENSE.name) ?: TxType.EXPENSE.name
@@ -127,6 +132,7 @@ class AppPrefs(context: Context) {
         const val KEY_STATS_ANCHOR = "stats_anchor_epoch_day"
         const val KEY_STATS_RANGE_START = "stats_range_start_epoch_day"
         const val KEY_STATS_RANGE_END = "stats_range_end_epoch_day"
+        const val KEY_STATS_RANGE_SELECTED_AT = "stats_range_selected_at"
         const val KEY_STATS_CATEGORY_TYPE = "stats_category_type"
     }
 }

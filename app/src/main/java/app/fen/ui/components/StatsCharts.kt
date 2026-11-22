@@ -563,7 +563,11 @@ fun SummaryTable(rows: List<SummaryRow>, unit: BucketUnit) {
     var expanded by remember(rows) { mutableStateOf(false) }
     val body = rows.dropLast(2)
     val footer = rows.takeLast(2)
-    val collapsedLimit = 8
+    // 月视图最多 31 行、年视图最多 12 行，都不折叠；只有更长的自定义区间才折叠。
+    val collapsedLimit = when (unit) {
+        BucketUnit.DAY -> 31
+        BucketUnit.MONTH, BucketUnit.YEAR -> 12
+    }
     val shownBody = if (expanded || body.size <= collapsedLimit) body else body.take(collapsedLimit)
 
     Column {

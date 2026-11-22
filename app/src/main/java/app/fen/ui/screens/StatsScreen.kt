@@ -82,6 +82,8 @@ fun StatsScreen(
     onShift: (Long) -> Unit,
     onSetCustomRange: (LocalDate, LocalDate) -> Unit,
     onSetCategoryType: (TxType) -> Unit,
+    shouldPromptForRange: () -> Boolean,
+    onTouchRange: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     var showRangePicker by remember { mutableStateOf(false) }
@@ -157,7 +159,11 @@ fun StatsScreen(
                     onSelect = { index ->
                         val mode = StatsMode.entries[index]
                         if (mode == StatsMode.RANGE && statsMode != StatsMode.RANGE) {
-                            showRangePicker = true
+                            if (shouldPromptForRange()) {
+                                showRangePicker = true
+                            } else {
+                                onTouchRange()
+                            }
                         }
                         onSetMode(mode)
                     },

@@ -1,7 +1,9 @@
 package app.fen.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,8 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.DragIndicator
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -31,14 +32,24 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import app.fen.data.StatsBoardConfig
 import app.fen.data.StatsSection
 import app.fen.ui.components.CircleAction
@@ -57,6 +68,11 @@ fun StatsBoardSettingsScreen(
     onReset: () -> Unit,
 ) {
     var showResetConfirm by remember { mutableStateOf(false) }
+    var draggedSection by remember { mutableStateOf<StatsSection?>(null) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    val density = LocalDensity.current
+    val rowHeight = 64.dp
+    val rowHeightPx = with(density) { rowHeight.toPx() }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -80,7 +96,7 @@ fun StatsBoardSettingsScreen(
 
         item {
             Text(
-                text = "开关控制是否显示，箭头调整顺序。所有数据仍然在统计页内展开，不会进入子页面。",
+                text = "开关控制是否显示，拖动左侧手柄调整顺序。所有数据仍然在统计页内展开，不会进入子页面。",
                 style = MaterialTheme.typography.bodyMedium,
                 color = Fen.colors.inkSoft,
                 modifier = Modifier.padding(bottom = 6.dp),
@@ -96,18 +112,40 @@ fun StatsBoardSettingsScreen(
             ) {
                 Column {
                     config.order.forEachIndexed { index, section ->
-                        SectionSettingRow(
-                            index = index,
-                            section = section,
-                            visible = section !in config.hidden,
-                            canUp = index > 0,
-                            canDown = index < config.order.lastIndex,
-                            onToggle = { onToggle(section, it) },
-                            onUp = { onMove(section, -1) },
-                            onDown = { onMove(section, 1) },
-                        )
-                        if (index < config.order.lastIndex) {
-                            RowDivider(startInset = 48.dp)
+                        key(section.key) {
+                            DraggableSectionRow(
+                                index = index,
+                                lastIndex = config.order.lastIndex,
+                                section = section,
+                                visible = section !in config.hidden,
+                                dragging = draggedSection == section,
+                                dragOffset = if (draggedSection == section) dragOffset else 0f,
+                                rowHeight = rowHeight,
+                                onToggle = { onToggle(section, it) },
+                                onDragStart = {
+                                    draggedSection = section
+                                    dragOffset = 0f
+                                },
+                                onDrag = { amount ->
+                                    dragOffset += amount
+                                    val currentIndex = config.order.indexOf(section)
+                                    if (dragOffset > rowHeightPx / 2f && currentIndex < config.order.lastIndex) {
+                                        onMove(section, 1)
+                                        dragOffset -= rowHeightPx
+                                    } else if (dragOffset < -rowHeightPx / 2f && currentIndex > 0) {
+                                        onMove(section, -1)
+                                        dragOffset += rowHeightPx
+                                    }
+                                    if (currentIndex <= 0 && dragOffset < 0f) dragOffset = 0f
+                                    if (currentIndex >= config.order.lastIndex && dragOffset > 0f) {
+                                        dragOffset = 0f
+                                    }
+                                },
+                                onDragEnd = {
+                                    draggedSection = null
+                                    dragOffset = 0f
+                                },
+                            )
                         }
                     }
                 }
@@ -165,7 +203,7 @@ fun StatsBoardSettingsScreen(
 
         item {
             Text(
-                text = "统计范围不在这里设置，直接在统计页顶部切换；最后选择会被记住。",
+                text = "统计范围不在这里设置，直接在统计页顶部切换；3 分钟内再次进入会沿用上一次范围。",
                 style = MaterialTheme.typography.labelMedium,
                 color = Fen.colors.inkFaint,
                 modifier = Modifier.padding(top = 14.dp),
@@ -189,7 +227,7 @@ fun StatsBoardSettingsScreen(
         AlertDialog(
             onDismissRequest = { showResetConfirm = false },
             title = { Text("恢复默认看板？") },
-            text = { Text("会恢复默认顺序、全部显示，并把排行数量改回 5。") },
+            text = { Text("会恢复默认顺序、全部显示，并把排行数量改回 5、汇总表恢复隐藏无记录行。") },
             confirmButton = {
                 TextButton(onClick = {
                     onReset()
@@ -204,87 +242,102 @@ fun StatsBoardSettingsScreen(
 }
 
 @Composable
-private fun SectionSettingRow(
+private fun DraggableSectionRow(
     index: Int,
+    lastIndex: Int,
     section: StatsSection,
     visible: Boolean,
-    canUp: Boolean,
-    canDown: Boolean,
+    dragging: Boolean,
+    dragOffset: Float,
+    rowHeight: Dp,
     onToggle: (Boolean) -> Unit,
-    onUp: () -> Unit,
-    onDown: () -> Unit,
+    onDragStart: () -> Unit,
+    onDrag: (Float) -> Unit,
+    onDragEnd: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    val currentOnDragStart by rememberUpdatedState(onDragStart)
+    val currentOnDrag by rememberUpdatedState(onDrag)
+    val currentOnDragEnd by rememberUpdatedState(onDragEnd)
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(rowHeight)
+            .zIndex(if (dragging) 1f else 0f)
+            .graphicsLayer { translationY = dragOffset }
+            .then(
+                if (dragging) {
+                    Modifier
+                        .shadow(12.dp, RoundedCornerShape(12.dp))
+                        .background(Fen.colors.surface)
+                        .border(1.dp, Fen.colors.divider, RoundedCornerShape(12.dp))
+                } else {
+                    Modifier
+                }
+            ),
     ) {
-        Text(
-            text = "${index + 1}",
-            style = MaterialTheme.typography.labelMedium,
-            color = Fen.colors.inkFaint,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            modifier = Modifier.width(20.dp),
-        )
-        Spacer(Modifier.width(8.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = section.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = if (visible) Fen.colors.ink else Fen.colors.inkSoft,
-            )
-            Text(
-                text = section.subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Fen.colors.inkSoft,
-                maxLines = 1,
+        Row(
+            modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(Fen.colors.surfaceMuted)
+                    .pointerInput(section) {
+                        detectDragGestures(
+                            onDragStart = { currentOnDragStart() },
+                            onDragEnd = { currentOnDragEnd() },
+                            onDragCancel = { currentOnDragEnd() },
+                            onDrag = { change, amount ->
+                                change.consume()
+                                currentOnDrag(amount.y)
+                            },
+                        )
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.DragIndicator,
+                    contentDescription = "拖动排序${section.title}",
+                    tint = if (dragging) Fen.colors.ink else Fen.colors.inkSoft,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = section.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (visible) Fen.colors.ink else Fen.colors.inkSoft,
+                )
+                Text(
+                    text = section.subtitle,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Fen.colors.inkSoft,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Switch(
+                checked = visible,
+                onCheckedChange = onToggle,
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = if (Fen.colors.isDark) Color(0xFF15171B) else Color.White,
+                    checkedTrackColor = Fen.colors.ink,
+                ),
             )
         }
-        ArrowButton(
-            icon = Icons.Outlined.KeyboardArrowUp,
-            contentDescription = "上移${section.title}",
-            enabled = canUp,
-            onClick = onUp,
-        )
-        Spacer(Modifier.width(2.dp))
-        ArrowButton(
-            icon = Icons.Outlined.KeyboardArrowDown,
-            contentDescription = "下移${section.title}",
-            enabled = canDown,
-            onClick = onDown,
-        )
-        Spacer(Modifier.width(6.dp))
-        Switch(
-            checked = visible,
-            onCheckedChange = onToggle,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = if (Fen.colors.isDark) Color(0xFF15171B) else Color.White,
-                checkedTrackColor = Fen.colors.ink,
-            ),
-        )
-    }
-}
-
-@Composable
-private fun ArrowButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    contentDescription: String,
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .size(30.dp)
-            .clip(CircleShape)
-            .background(if (enabled) Fen.colors.surfaceMuted else Color.Transparent)
-            .clickable(enabled = enabled, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = if (enabled) Fen.colors.ink else Fen.colors.inkFaint,
-            modifier = Modifier.size(18.dp),
-        )
+        if (index < lastIndex) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 58.dp)
+                    .height(1.dp)
+                    .background(Fen.colors.divider),
+            )
+        }
     }
 }
 

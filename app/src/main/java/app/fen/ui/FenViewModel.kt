@@ -21,6 +21,10 @@ import java.time.temporal.TemporalAdjusters
 
 class FenViewModel(app: Application) : AndroidViewModel(app) {
 
+    private companion object {
+        const val STATS_RANGE_FRESH_MS = 3 * 60 * 1000L
+    }
+
     private val repository = (app as FenApp).repository
     private val prefs = (app as FenApp).prefs
     val snapshot: StateFlow<Snapshot> = repository.snapshot
@@ -130,6 +134,18 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
         prefs.statsRangeStartEpochDay = from.toEpochDay()
         prefs.statsRangeEndEpochDay = until.toEpochDay()
         prefs.statsMode = StatsMode.RANGE.name
+        prefs.statsRangeSelectedAt = System.currentTimeMillis()
+    }
+
+    /** 3 分钟内刚选过范围就沿用，不重复弹框。 */
+    fun shouldPromptForStatsRange(): Boolean {
+        val last = prefs.statsRangeSelectedAt
+        return last <= 0L || System.currentTimeMillis() - last > STATS_RANGE_FRESH_MS
+    }
+
+    /** 进入“范围”且沿用旧区间时刷新时间，让连续使用不会反复弹框。 */
+    fun touchStatsRange() {
+        prefs.statsRangeSelectedAt = System.currentTimeMillis()
     }
 
     fun setStatsCategoryType(type: TxType) {

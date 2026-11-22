@@ -176,6 +176,8 @@ private fun FenContent(viewModel: FenViewModel) {
                         onShift = viewModel::shiftStatsPeriod,
                         onSetCustomRange = viewModel::setStatsCustomRange,
                         onSetCategoryType = viewModel::setStatsCategoryType,
+                        shouldPromptForRange = viewModel::shouldPromptForStatsRange,
+                        onTouchRange = viewModel::touchStatsRange,
                         onOpenSettings = { navController.navigate("settings") },
                     )
                 }
