@@ -133,7 +133,7 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 SettingItem(
-                    title = "外观",
+                    title = "主题",
                     subtitle = when (themeMode) {
                         1 -> "浅色"
                         2 -> "深色"
@@ -248,7 +248,7 @@ fun SettingsScreen(
     if (showThemeDialog) {
         AlertDialog(
             onDismissRequest = { showThemeDialog = false },
-            title = { Text("外观") },
+            title = { Text("主题") },
             text = {
                 Column {
                     listOf("跟随系统" to 0, "浅色" to 1, "深色" to 2).forEach { (label, mode) ->

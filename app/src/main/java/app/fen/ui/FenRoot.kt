@@ -7,8 +7,8 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -99,7 +99,12 @@ fun FenRoot(viewModel: FenViewModel = viewModel()) {
 
 @Composable
 private fun FenContent(viewModel: FenViewModel) {
-    val fenSlide = tween<IntOffset>(FenMotion.durationMillis, easing = FastOutSlowInEasing)
+    val fenExit = tween<Float>(FenMotion.durationMillis / 2, easing = FastOutSlowInEasing)
+    val fenEnter = tween<Float>(
+        FenMotion.durationMillis / 2,
+        delayMillis = FenMotion.durationMillis / 2,
+        easing = FastOutSlowInEasing,
+    )
     val fenFloat = tween<Float>(FenMotion.durationMillis, easing = FastOutSlowInEasing)
     val snapshot by viewModel.snapshot.collectAsStateWithLifecycle()
     val month by viewModel.month.collectAsStateWithLifecycle()
@@ -181,10 +186,12 @@ private fun FenContent(viewModel: FenViewModel) {
                 navController = navController,
                 startDestination = "bills",
                 modifier = Modifier.padding(innerPadding).background(Fen.colors.bg),
-                enterTransition = { slideInHorizontally(fenSlide) { it } },
-                exitTransition = { ExitTransition.None },
-                popEnterTransition = { EnterTransition.None },
-                popExitTransition = { slideOutHorizontally(fenSlide) { it } },
+                enterTransition = { fadeIn(fenEnter) },
+                exitTransition = { fadeOut(fenExit) },
+                popEnterTransition = { fadeIn(fenEnter) },
+                popExitTransition = { fadeOut(fenExit) },
+                predictivePopEnterTransition = { fadeIn(fenEnter) },
+                predictivePopExitTransition = { fadeOut(fenExit) },
             ) {
                 composable(
                     "bills",
