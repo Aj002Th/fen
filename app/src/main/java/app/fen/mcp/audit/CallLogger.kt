@@ -3,7 +3,11 @@ package app.fen.mcp.audit
 import app.fen.mcp.RequestContext
 import app.fen.mcp.RpcOutcome
 import app.fen.mcp.protocol.RpcCall
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 class CallLogger(
     private val store: CallLogStore,
@@ -65,7 +69,7 @@ class CallLogger(
             errorMessage = failure?.message ?: body?.takeIf { !ok }?.take(512),
             durationMs = clock() - started,
             requestId = call.id?.toString(),
-            batchId = body?.let { BATCH.find(it)?.groupValues?.getOrNull(1) },
+            batchId = body?.let { extractBatchId(it) },
             tokenFp = tokenFingerprint,
             bytesIn = args.toByteArray(Charsets.UTF_8).size,
             bytesOut = body?.toByteArray(Charsets.UTF_8)?.size ?: 0,
@@ -77,8 +81,17 @@ class CallLogger(
         }
     }
 
+    private fun extractBatchId(body: String): String? = runCatching {
+        val root = Json.parseToJsonElement(body).jsonObject
+        val text = root["result"]?.jsonObject
+            ?.get("content")?.jsonArray
+            ?.firstOrNull()?.jsonObject
+            ?.get("text")?.jsonPrimitive?.content
+            ?: return@runCatching null
+        Json.parseToJsonElement(text).jsonObject["batch_id"]?.jsonPrimitive?.content
+    }.getOrNull()
+
     private companion object {
         val CODE = Regex("\"code\"\\s*:\\s*\"([^\"]+)\"")
-        val BATCH = Regex("\"batch_id\"\\s*:\\s*\"([^\"]+)\"")
     }
 }
