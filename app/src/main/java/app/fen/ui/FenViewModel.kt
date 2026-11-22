@@ -9,6 +9,9 @@ import app.fen.FenApp
 import app.fen.data.FenBackupCodec
 import app.fen.data.ImportBatch
 import app.fen.data.Snapshot
+import app.fen.data.StatsBoardConfig
+import app.fen.data.StatsMode
+import app.fen.data.StatsSection
 import app.fen.data.Tx
 import app.fen.data.TxType
 import app.fen.data.exchange.FenCsv
@@ -27,12 +30,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.security.MessageDigest
+import java.time.DayOfWeek
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.YearMonth
 import java.time.ZoneId
+import java.time.temporal.TemporalAdjusters
 import java.util.UUID
 
 class FenViewModel(app: Application) : AndroidViewModel(app) {
+
+    private companion object {
+        const val STATS_RANGE_FRESH_MS = 3 * 60 * 1000L
+    }
 
     private val repository = (app as FenApp).repository
     private val prefs = (app as FenApp).prefs
@@ -52,6 +62,21 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
 
     private val _searchHistory = MutableStateFlow(prefs.searchHistory)
     val searchHistory: StateFlow<List<String>> = _searchHistory.asStateFlow()
+
+    private val _statsMode = MutableStateFlow(loadStatsMode())
+    val statsMode: StateFlow<StatsMode> = _statsMode.asStateFlow()
+
+    private val _statsAnchor = MutableStateFlow(loadStatsAnchor())
+    val statsAnchor: StateFlow<LocalDate> = _statsAnchor.asStateFlow()
+
+    private val _statsCustomRange = MutableStateFlow(loadStatsRange())
+    val statsCustomRange: StateFlow<Pair<LocalDate, LocalDate>> = _statsCustomRange.asStateFlow()
+
+    private val _statsCategoryType = MutableStateFlow(loadStatsCategoryType())
+    val statsCategoryType: StateFlow<TxType> = _statsCategoryType.asStateFlow()
+
+    private val _statsBoardConfig = MutableStateFlow(prefs.statsBoardConfig())
+    val statsBoardConfig: StateFlow<StatsBoardConfig> = _statsBoardConfig.asStateFlow()
 
     fun shiftMonth(months: Long) {
         _month.value = _month.value.plusMonths(months)
@@ -88,6 +113,127 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
     fun clearSearchHistory() {
         prefs.searchHistory = emptyList()
         _searchHistory.value = emptyList()
+    }
+
+    /* ------------------------------ 统计看板 ------------------------------ */
+
+    fun setStatsMode(mode: StatsMode) {
+        _statsMode.value = mode
+        prefs.statsMode = mode.name
+        if (mode == StatsMode.RANGE) {
+            val (start, end) = _statsCustomRange.value
+            prefs.statsRangeStartEpochDay = start.toEpochDay()
+            prefs.statsRangeEndEpochDay = end.toEpochDay()
+        }
+    }
+
+    fun shiftStatsPeriod(delta: Long) {
+        val mode = _statsMode.value
+        if (mode == StatsMode.ALL || mode == StatsMode.RANGE) return
+        val current = _statsAnchor.value
+        val shifted = when (mode) {
+            StatsMode.WEEK -> current.plusWeeks(delta)
+            StatsMode.MONTH -> current.plusMonths(delta)
+            StatsMode.YEAR -> current.plusYears(delta)
+            StatsMode.ALL, StatsMode.RANGE -> return
+        }
+        val today = LocalDate.now()
+        val shiftedStart = startOfStatsPeriod(mode, shifted)
+        val todayStart = startOfStatsPeriod(mode, today)
+        if (shiftedStart.isAfter(todayStart)) return
+        _statsAnchor.value = shifted
+        prefs.statsAnchorEpochDay = shifted.toEpochDay()
+    }
+
+    fun setStatsCustomRange(start: LocalDate, end: LocalDate) {
+        val from = if (start <= end) start else end
+        val until = if (start <= end) end else start
+        _statsCustomRange.value = from to until
+        _statsMode.value = StatsMode.RANGE
+        prefs.statsRangeStartEpochDay = from.toEpochDay()
+        prefs.statsRangeEndEpochDay = until.toEpochDay()
+        prefs.statsMode = StatsMode.RANGE.name
+        prefs.statsRangeSelectedAt = System.currentTimeMillis()
+    }
+
+    /** 3 分钟内刚选过范围就沿用，不重复弹框。 */
+    fun shouldPromptForStatsRange(): Boolean {
+        val last = prefs.statsRangeSelectedAt
+        return last <= 0L || System.currentTimeMillis() - last > STATS_RANGE_FRESH_MS
+    }
+
+    /** 进入“范围”且沿用旧区间时刷新时间，让连续使用不会反复弹框。 */
+    fun touchStatsRange() {
+        prefs.statsRangeSelectedAt = System.currentTimeMillis()
+    }
+
+    fun setStatsCategoryType(type: TxType) {
+        _statsCategoryType.value = type
+        prefs.statsCategoryType = type.name
+    }
+
+    fun setStatsSectionVisible(section: StatsSection, visible: Boolean) {
+        val config = _statsBoardConfig.value
+        updateStatsBoard(
+            config.copy(
+                hidden = if (visible) config.hidden - section else config.hidden + section,
+            )
+        )
+    }
+
+    fun moveStatsSection(section: StatsSection, direction: Int) {
+        val config = _statsBoardConfig.value
+        val index = config.order.indexOf(section)
+        if (index < 0) return
+        val target = index + direction
+        if (target !in config.order.indices) return
+        val order = config.order.toMutableList()
+        val temp = order[index]
+        order[index] = order[target]
+        order[target] = temp
+        updateStatsBoard(config.copy(order = order))
+    }
+
+    fun setStatsRankingLimit(limit: Int) {
+        updateStatsBoard(_statsBoardConfig.value.copy(rankingLimit = limit))
+    }
+
+    fun setStatsSummaryShowEmpty(show: Boolean) {
+        updateStatsBoard(_statsBoardConfig.value.copy(summaryShowEmpty = show))
+    }
+
+    fun resetStatsBoard() {
+        updateStatsBoard(StatsBoardConfig())
+    }
+
+    private fun updateStatsBoard(config: StatsBoardConfig) {
+        _statsBoardConfig.value = config
+        prefs.saveStatsBoardConfig(config)
+    }
+
+    private fun loadStatsMode(): StatsMode =
+        runCatching { StatsMode.valueOf(prefs.statsMode) }.getOrDefault(StatsMode.MONTH)
+
+    private fun loadStatsAnchor(): LocalDate {
+        val saved = LocalDate.ofEpochDay(prefs.statsAnchorEpochDay)
+        val today = LocalDate.now()
+        return if (saved.isAfter(today)) today else saved
+    }
+
+    private fun loadStatsRange(): Pair<LocalDate, LocalDate> {
+        val start = LocalDate.ofEpochDay(prefs.statsRangeStartEpochDay)
+        val end = LocalDate.ofEpochDay(prefs.statsRangeEndEpochDay)
+        return if (start <= end) start to end else end to start
+    }
+
+    private fun loadStatsCategoryType(): TxType =
+        if (prefs.statsCategoryType == TxType.INCOME.name) TxType.INCOME else TxType.EXPENSE
+
+    private fun startOfStatsPeriod(mode: StatsMode, date: LocalDate): LocalDate = when (mode) {
+        StatsMode.WEEK -> date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
+        StatsMode.MONTH -> date.withDayOfMonth(1)
+        StatsMode.YEAR -> LocalDate.of(date.year, 1, 1)
+        StatsMode.ALL, StatsMode.RANGE -> date
     }
 
     fun addTransaction(

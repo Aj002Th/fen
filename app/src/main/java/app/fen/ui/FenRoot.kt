@@ -68,6 +68,7 @@ import app.fen.ui.screens.ImportHistoryScreen
 import app.fen.ui.screens.ImportScreen
 import app.fen.ui.screens.SearchScreen
 import app.fen.ui.screens.SettingsScreen
+import app.fen.ui.screens.StatsBoardSettingsScreen
 import app.fen.ui.screens.StatsScreen
 import app.fen.ui.theme.Fen
 import app.fen.ui.theme.FenTheme
@@ -102,6 +103,11 @@ private fun FenContent(viewModel: FenViewModel) {
     val hiddenSuggestions by viewModel.hiddenSuggestions.collectAsStateWithLifecycle()
     val penalties by viewModel.suggestionPenalties.collectAsStateWithLifecycle()
     val searchHistory by viewModel.searchHistory.collectAsStateWithLifecycle()
+    val statsMode by viewModel.statsMode.collectAsStateWithLifecycle()
+    val statsAnchor by viewModel.statsAnchor.collectAsStateWithLifecycle()
+    val statsCustomRange by viewModel.statsCustomRange.collectAsStateWithLifecycle()
+    val statsCategoryType by viewModel.statsCategoryType.collectAsStateWithLifecycle()
+    val statsBoardConfig by viewModel.statsBoardConfig.collectAsStateWithLifecycle()
     val importState by viewModel.importState.collectAsStateWithLifecycle()
     val batches by viewModel.importBatches.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
@@ -179,8 +185,17 @@ private fun FenContent(viewModel: FenViewModel) {
                 composable("stats") {
                     StatsScreen(
                         snapshot = snapshot,
-                        month = month,
-                        onShiftMonth = viewModel::shiftMonth,
+                        statsMode = statsMode,
+                        statsAnchor = statsAnchor,
+                        customRange = statsCustomRange,
+                        categoryType = statsCategoryType,
+                        boardConfig = statsBoardConfig,
+                        onSetMode = viewModel::setStatsMode,
+                        onShift = viewModel::shiftStatsPeriod,
+                        onSetCustomRange = viewModel::setStatsCustomRange,
+                        onSetCategoryType = viewModel::setStatsCategoryType,
+                        shouldPromptForRange = viewModel::shouldPromptForStatsRange,
+                        onTouchRange = viewModel::touchStatsRange,
                         onOpenSettings = { navController.navigate("settings") },
                     )
                 }
@@ -190,6 +205,7 @@ private fun FenContent(viewModel: FenViewModel) {
                         onThemeModeChange = viewModel::setThemeMode,
                         onBack = { navController.popBackStack() },
                         onOpenCategories = { navController.navigate("categories") },
+                        onOpenStatsBoard = { navController.navigate("stats-board") },
                         onOpenImport = { navController.navigate("import") },
                         onOpenExport = { navController.navigate("export") },
                         onOpenBackup = { navController.navigate("backup") },
@@ -209,6 +225,17 @@ private fun FenContent(viewModel: FenViewModel) {
                         onSaveHistory = viewModel::addSearchHistory,
                         onClearHistory = viewModel::clearSearchHistory,
                         onBack = { navController.popBackStack() },
+                    )
+                }
+                composable("stats-board") {
+                    StatsBoardSettingsScreen(
+                        config = statsBoardConfig,
+                        onBack = { navController.popBackStack() },
+                        onToggle = viewModel::setStatsSectionVisible,
+                        onMove = viewModel::moveStatsSection,
+                        onRankingLimit = viewModel::setStatsRankingLimit,
+                        onSummaryShowEmpty = viewModel::setStatsSummaryShowEmpty,
+                        onReset = viewModel::resetStatsBoard,
                     )
                 }
                 composable("categories") {

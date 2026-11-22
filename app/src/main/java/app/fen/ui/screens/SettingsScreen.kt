@@ -21,6 +21,7 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Restore
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.AlertDialog
@@ -52,6 +53,7 @@ fun SettingsScreen(
     onThemeModeChange: (Int) -> Unit,
     onBack: () -> Unit,
     onOpenCategories: () -> Unit,
+    onOpenStatsBoard: () -> Unit,
     onOpenImport: () -> Unit,
     onOpenExport: () -> Unit,
     onOpenBackup: () -> Unit,
@@ -103,6 +105,23 @@ fun SettingsScreen(
                         onClick = onOpenCategories,
                     )
                 }
+            }
+        }
+
+        item { SectionLabel("统计", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp)) }
+        item {
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = Fen.colors.surface,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                SettingItem(
+                    title = "统计看板",
+                    subtitle = "显示项、排序与明细选项",
+                    icon = Icons.Outlined.Tune,
+                    tint = Color(0xFF3E8BF2),
+                    onClick = onOpenStatsBoard,
+                )
             }
         }
 
