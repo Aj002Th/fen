@@ -205,152 +205,172 @@ private fun FenContent(viewModel: FenViewModel) {
                 },
                 exitTransition = {
                     if (tabForward(initialState, targetState)) {
-                        slideOutHorizontally(fenSlide) { -it / 4 }
+                        slideOutHorizontally(fenSlide) { -it }
                     } else {
-                        slideOutHorizontally(fenSlide) { it / 4 }
+                        slideOutHorizontally(fenSlide) { it }
                     }
                 },
-                popEnterTransition = { slideInHorizontally(fenSlide) { -it / 4 } },
+                popEnterTransition = { slideInHorizontally(fenSlide) { -it } },
                 popExitTransition = { slideOutHorizontally(fenSlide) { it } },
             ) {
                 composable("bills") {
-                    BillsScreen(
-                        snapshot = snapshot,
-                        month = month,
-                        onShiftMonth = viewModel::shiftMonth,
-                        onToday = { viewModel.jumpTo(java.time.YearMonth.now()) },
-                        onDelete = viewModel::delete,
-                        onEdit = { tx ->
-                            editingTx = tx
-                            showAdd = true
-                        },
-                        onOpenSearch = { navController.navigate("search") },
-                        onOpenSettings = { navController.navigate("settings") },
-                    )
+                    FenPage {
+                        BillsScreen(
+                            snapshot = snapshot,
+                            month = month,
+                            onShiftMonth = viewModel::shiftMonth,
+                            onToday = { viewModel.jumpTo(java.time.YearMonth.now()) },
+                            onDelete = viewModel::delete,
+                            onEdit = { tx ->
+                                editingTx = tx
+                                showAdd = true
+                            },
+                            onOpenSearch = { navController.navigate("search") },
+                            onOpenSettings = { navController.navigate("settings") },
+                        )
+                    }
                 }
                 composable("stats") {
-                    StatsScreen(
-                        snapshot = snapshot,
-                        statsMode = statsMode,
-                        statsAnchor = statsAnchor,
-                        customRange = statsCustomRange,
-                        categoryType = statsCategoryType,
-                        boardConfig = statsBoardConfig,
-                        onSetMode = viewModel::setStatsMode,
-                        onShift = viewModel::shiftStatsPeriod,
-                        onSetCustomRange = viewModel::setStatsCustomRange,
-                        onSetCategoryType = viewModel::setStatsCategoryType,
-                        shouldPromptForRange = viewModel::shouldPromptForStatsRange,
-                        onTouchRange = viewModel::touchStatsRange,
-                        onOpenSettings = { navController.navigate("settings") },
-                    )
+                    FenPage {
+                        StatsScreen(
+                            snapshot = snapshot,
+                            statsMode = statsMode,
+                            statsAnchor = statsAnchor,
+                            customRange = statsCustomRange,
+                            categoryType = statsCategoryType,
+                            boardConfig = statsBoardConfig,
+                            onSetMode = viewModel::setStatsMode,
+                            onShift = viewModel::shiftStatsPeriod,
+                            onSetCustomRange = viewModel::setStatsCustomRange,
+                            onSetCategoryType = viewModel::setStatsCategoryType,
+                            shouldPromptForRange = viewModel::shouldPromptForStatsRange,
+                            onTouchRange = viewModel::touchStatsRange,
+                            onOpenSettings = { navController.navigate("settings") },
+                        )
+                    }
                 }
                 composable("settings") {
-                    SettingsScreen(
-                        themeMode = themeMode,
-                        onThemeModeChange = viewModel::setThemeMode,
-                        onBack = { navController.popBackStack() },
-                        onOpenCategories = { navController.navigate("categories") },
-                        onOpenStatsBoard = { navController.navigate("stats-board") },
-                        onOpenImport = { navController.navigate("import") },
-                        onOpenExport = { navController.navigate("export") },
-                        onOpenBackup = { navController.navigate("backup") },
-                        showDebug = BuildConfig.DEBUG,
-                        onSeedDemo = {
-                            scope.launch(Dispatchers.IO) { viewModel.seedDemoData(400) }
-                        },
-                        onClearData = {
-                            scope.launch(Dispatchers.IO) { viewModel.clearTransactions() }
-                        },
-                    )
+                    FenPage {
+                        SettingsScreen(
+                            themeMode = themeMode,
+                            onThemeModeChange = viewModel::setThemeMode,
+                            onBack = { navController.popBackStack() },
+                            onOpenCategories = { navController.navigate("categories") },
+                            onOpenStatsBoard = { navController.navigate("stats-board") },
+                            onOpenImport = { navController.navigate("import") },
+                            onOpenExport = { navController.navigate("export") },
+                            onOpenBackup = { navController.navigate("backup") },
+                            showDebug = BuildConfig.DEBUG,
+                            onSeedDemo = {
+                                scope.launch(Dispatchers.IO) { viewModel.seedDemoData(400) }
+                            },
+                            onClearData = {
+                                scope.launch(Dispatchers.IO) { viewModel.clearTransactions() }
+                            },
+                        )
+                    }
                 }
                 composable("search") {
-                    SearchScreen(
-                        snapshot = snapshot,
-                        history = searchHistory,
-                        onSaveHistory = viewModel::addSearchHistory,
-                        onClearHistory = viewModel::clearSearchHistory,
-                        onBack = { navController.popBackStack() },
-                    )
+                    FenPage {
+                        SearchScreen(
+                            snapshot = snapshot,
+                            history = searchHistory,
+                            onSaveHistory = viewModel::addSearchHistory,
+                            onClearHistory = viewModel::clearSearchHistory,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
                 }
                 composable("stats-board") {
-                    StatsBoardSettingsScreen(
-                        config = statsBoardConfig,
-                        onBack = { navController.popBackStack() },
-                        onToggle = viewModel::setStatsSectionVisible,
-                        onMove = viewModel::moveStatsSection,
-                        onRankingLimit = viewModel::setStatsRankingLimit,
-                        onSummaryShowEmpty = viewModel::setStatsSummaryShowEmpty,
-                        onReset = viewModel::resetStatsBoard,
-                    )
+                    FenPage {
+                        StatsBoardSettingsScreen(
+                            config = statsBoardConfig,
+                            onBack = { navController.popBackStack() },
+                            onToggle = viewModel::setStatsSectionVisible,
+                            onMove = viewModel::moveStatsSection,
+                            onRankingLimit = viewModel::setStatsRankingLimit,
+                            onSummaryShowEmpty = viewModel::setStatsSummaryShowEmpty,
+                            onReset = viewModel::resetStatsBoard,
+                        )
+                    }
                 }
                 composable("categories") {
-                    CategoryManagerScreen(
-                        snapshot = snapshot,
-                        onBack = { navController.popBackStack() },
-                        onAdd = { name, type, icon, color ->
-                            viewModel.addCategory(name, type, icon, color)
-                        },
-                        onUpdate = { category -> viewModel.updateCategory(category) },
-                        onDelete = { category -> viewModel.deleteCategory(category) },
-                        onMerge = { from, into -> viewModel.mergeCategory(from, into) },
-                        onDeleteWithTransactions = { category ->
-                            viewModel.deleteCategoryWithTransactions(category)
-                        },
-                        countFor = { id -> viewModel.categoryUsage(id) },
-                    )
+                    FenPage {
+                        CategoryManagerScreen(
+                            snapshot = snapshot,
+                            onBack = { navController.popBackStack() },
+                            onAdd = { name, type, icon, color ->
+                                viewModel.addCategory(name, type, icon, color)
+                            },
+                            onUpdate = { category -> viewModel.updateCategory(category) },
+                            onDelete = { category -> viewModel.deleteCategory(category) },
+                            onMerge = { from, into -> viewModel.mergeCategory(from, into) },
+                            onDeleteWithTransactions = { category ->
+                                viewModel.deleteCategoryWithTransactions(category)
+                            },
+                            countFor = { id -> viewModel.categoryUsage(id) },
+                        )
+                    }
                 }
                 composable("export") {
-                    ExportScreen(
-                        onBack = { navController.popBackStack() },
-                        onExportCsv = viewModel::exportCsv,
-                        onSaveTemplate = viewModel::saveTemplate,
-                    )
+                    FenPage {
+                        ExportScreen(
+                            onBack = { navController.popBackStack() },
+                            onExportCsv = viewModel::exportCsv,
+                            onSaveTemplate = viewModel::saveTemplate,
+                        )
+                    }
                 }
                 composable("backup") {
-                    BackupScreen(
-                        onBack = { navController.popBackStack() },
-                        onExportBackup = viewModel::exportBackup,
-                        onRestore = {
-                            viewModel.startBackupRestore()
-                            navController.navigate("import")
-                        },
-                    )
+                    FenPage {
+                        BackupScreen(
+                            onBack = { navController.popBackStack() },
+                            onExportBackup = viewModel::exportBackup,
+                            onRestore = {
+                                viewModel.startBackupRestore()
+                                navController.navigate("import")
+                            },
+                        )
+                    }
                 }
                 composable("import") {
-                    ImportScreen(
-                        state = importState,
-                        categories = snapshot.categories,
-                        batchCount = batches.size,
-                        onPickFile = viewModel::pickImportFile,
-                        onSaveTemplate = viewModel::saveTemplate,
-                        onSetSource = viewModel::setImportSource,
-                        onStartParse = viewModel::startParse,
-                        onExit = {
-                            viewModel.cancelImport()
-                            navController.popBackStack()
-                        },
-                        onBackToSetup = viewModel::backToSetup,
-                        onOpenHistory = { navController.navigate("import-history") },
-                        onSetSkipDuplicates = viewModel::setSkipDuplicates,
-                        onSetTransferPolicy = viewModel::setTransferPolicy,
-                        onUpdateMapping = viewModel::updateMapping,
-                        onSetMappingView = viewModel::setMappingView,
-                        onConfirm = viewModel::confirmImport,
-                        onRestore = viewModel::restoreBackup,
-                        onUndo = viewModel::undoImport,
-                        onDone = {
-                            viewModel.cancelImport()
-                            navController.popBackStack()
-                        },
-                    )
+                    FenPage {
+                        ImportScreen(
+                            state = importState,
+                            categories = snapshot.categories,
+                            batchCount = batches.size,
+                            onPickFile = viewModel::pickImportFile,
+                            onSaveTemplate = viewModel::saveTemplate,
+                            onSetSource = viewModel::setImportSource,
+                            onStartParse = viewModel::startParse,
+                            onExit = {
+                                viewModel.cancelImport()
+                                navController.popBackStack()
+                            },
+                            onBackToSetup = viewModel::backToSetup,
+                            onOpenHistory = { navController.navigate("import-history") },
+                            onSetSkipDuplicates = viewModel::setSkipDuplicates,
+                            onSetTransferPolicy = viewModel::setTransferPolicy,
+                            onUpdateMapping = viewModel::updateMapping,
+                            onSetMappingView = viewModel::setMappingView,
+                            onConfirm = viewModel::confirmImport,
+                            onRestore = viewModel::restoreBackup,
+                            onUndo = viewModel::undoImport,
+                            onDone = {
+                                viewModel.cancelImport()
+                                navController.popBackStack()
+                            },
+                        )
+                    }
                 }
                 composable("import-history") {
-                    ImportHistoryScreen(
-                        batches = batches,
-                        onBack = { navController.popBackStack() },
-                        onDelete = viewModel::deleteImportBatch,
-                    )
+                    FenPage {
+                        ImportHistoryScreen(
+                            batches = batches,
+                            onBack = { navController.popBackStack() },
+                            onDelete = viewModel::deleteImportBatch,
+                        )
+                    }
                 }
             }
         }
@@ -393,6 +413,13 @@ private fun FenContent(viewModel: FenViewModel) {
                 },
             )
         }
+    }
+}
+
+@Composable
+private fun FenPage(content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxSize().background(Fen.colors.bg)) {
+        content()
     }
 }
 
