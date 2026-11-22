@@ -1,17 +1,13 @@
 package app.fen.ui
 
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -49,9 +45,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -75,6 +72,7 @@ import app.fen.ui.screens.StatsScreen
 import app.fen.ui.theme.Fen
 import app.fen.ui.theme.FenMotion
 import app.fen.ui.theme.FenTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -101,6 +99,7 @@ fun FenRoot(viewModel: FenViewModel = viewModel()) {
 @Composable
 private fun FenContent(viewModel: FenViewModel) {
     val fenSlide = tween<IntOffset>(FenMotion.durationMillis, easing = FastOutSlowInEasing)
+    val fenFloat = tween<Float>(FenMotion.durationMillis, easing = FastOutSlowInEasing)
     val snapshot by viewModel.snapshot.collectAsStateWithLifecycle()
     val month by viewModel.month.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -122,9 +121,26 @@ private fun FenContent(viewModel: FenViewModel) {
     val showBottomBar = currentRoute == "bills" || currentRoute == "stats"
     var showAdd by remember { mutableStateOf(false) }
     var editingTx by remember { mutableStateOf<Tx?>(null) }
+    val addOffset = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
 
-    BackHandler(enabled = showAdd) { showAdd = false }
+    suspend fun dismissAdd() {
+        addOffset.animateTo(1f, fenFloat)
+        showAdd = false
+    }
+
+    PredictiveBackHandler(enabled = showAdd) { progress ->
+        try {
+            progress.collect { event -> addOffset.snapTo(event.progress) }
+            dismissAdd()
+        } catch (_: CancellationException) {
+            addOffset.animateTo(0f, fenFloat)
+        }
+    }
+
+    LaunchedEffect(showAdd) {
+        if (showAdd) addOffset.animateTo(0f, fenFloat)
+    }
 
     LaunchedEffect(message) {
         message?.let {
@@ -333,20 +349,21 @@ private fun FenContent(viewModel: FenViewModel) {
             }
         }
 
-        AnimatedVisibility(
-            visible = showAdd,
-            enter = slideInVertically(tween(280), initialOffsetY = { it }) + fadeIn(tween(200)),
-            exit = slideOutVertically(tween(220), targetOffsetY = { it }) + fadeOut(tween(160)),
-        ) {
+        if (showAdd || addOffset.value < 1f) {
             AddTransactionScreen(
                 snapshot = snapshot,
                 initial = editingTx,
                 suggestionPenalties = penalties,
                 onPenalizeSuggestion = viewModel::penalizeSuggestion,
-                onClose = { showAdd = false },
+                modifier = Modifier.graphicsLayer {
+                    translationY = addOffset.value * size.height
+                },
+                onClose = { scope.launch { dismissAdd() } },
                 onManageCategories = {
-                    showAdd = false
-                    navController.navigate("categories")
+                    scope.launch {
+                        dismissAdd()
+                        navController.navigate("categories")
+                    }
                 },
                 onSave = { type, amountMinor, categoryId, note, dateTime, andContinue ->
                     val editing = editingTx
@@ -366,7 +383,7 @@ private fun FenContent(viewModel: FenViewModel) {
                             )
                         )
                     }
-                    if (!andContinue) showAdd = false
+                    if (!andContinue) scope.launch { dismissAdd() }
                 },
             )
         }

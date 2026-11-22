@@ -85,6 +85,7 @@ fun AddTransactionScreen(
     initial: Tx? = null,
     suggestionPenalties: Map<String, Int> = emptyMap(),
     onPenalizeSuggestion: (String) -> Unit = {},
+    modifier: Modifier = Modifier,
     onClose: () -> Unit,
     onManageCategories: () -> Unit,
     onSave: (
@@ -170,7 +171,7 @@ fun AddTransactionScreen(
         }
     }
 
-    Surface(color = Fen.colors.bg, modifier = Modifier.fillMaxSize()) {
+    Surface(color = Fen.colors.bg, modifier = modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize()) {
         Column(
             Modifier
