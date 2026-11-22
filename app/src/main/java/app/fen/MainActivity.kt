@@ -35,6 +35,7 @@ class MainActivity : ComponentActivity() {
         if (!BuildConfig.DEBUG) return
         val uri = intent?.data ?: return
         if (uri.scheme != "fen" || uri.host != "debug") return
+        Log.i("FenMcp", "debug intent path=${uri.path}")
         val repository = (application as FenApp).repository
         when (uri.path?.trimEnd('/')) {
             "/seed" -> {
@@ -44,6 +45,21 @@ class MainActivity : ComponentActivity() {
             "/clear" -> CoroutineScope(Dispatchers.IO).launch { repository.clearTransactions() }
             "/mcp/start" -> (application as FenApp).mcp.start()
             "/mcp/stop" -> (application as FenApp).mcp.stop()
+            "/mcp/write" -> {
+                val minutes = uri.getQueryParameter("minutes")?.toLongOrNull()
+                (application as FenApp).mcp.setWriteDuration(
+                    if (minutes == null || minutes <= 0) null else minutes * 60_000
+                )
+            }
+            "/mcp/undo" -> {
+                val batch = uri.getQueryParameter("batch")
+                Log.i("FenMcp", "undo requested batch=$batch")
+                if (batch != null) {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        Log.i("FenMcp", "undo result=${(application as FenApp).mcp.undo(batch)}")
+                    }
+                }
+            }
             "/mcp/test" -> CoroutineScope(Dispatchers.IO).launch {
                 val result = (application as FenApp).mcp.selfTest()
                 Log.i("FenMcp", "selfTest=$result")

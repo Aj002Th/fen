@@ -95,7 +95,7 @@ fun McpScreen(
     }
 
     val running = state as? McpServerState.Running
-    val address = running?.addresses?.firstOrNull()
+    val address = running?.let { r -> r.addresses.firstOrNull()?.let { "$it:${r.port}" } }
     val writeUntil = running?.writeUntil
     val writeEnabled = writeUntil != null && writeUntil > now
     val remainingMinutes = if (writeUntil != null) {
@@ -162,8 +162,10 @@ fun McpScreen(
                 color = Fen.colors.inkSoft,
                 modifier = Modifier.padding(top = 10.dp),
             )
-            running?.addresses?.forEach { addr ->
-                ValueRow("地址", "http://$addr/mcp", context)
+            running?.let { server ->
+                server.addresses.forEach { addr ->
+                    ValueRow("地址", "http://$addr:${server.port}/mcp", context)
+                }
             }
             if (running != null && running.addresses.isEmpty()) {
                 Text(

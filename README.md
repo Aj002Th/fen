@@ -38,6 +38,25 @@
 
 详细流程见本地文档 `docs/06-dev-workflow.md`（未入库）。
 
+## 本地 MCP
+
+开发版内置本地 MCP 服务，让同一 WiFi 下的 AI 客户端（Claude Code / Cursor / Inspector）读写账本：
+
+- 打开 `Fen·<分支>` → 设置 → 本地 MCP，开启服务。
+- 复制对应客户端的配置；写入权限默认关闭，开启时可选择 5/15/30/60 分钟。
+- 所有调用写入本地审计库，可在「调用记录」里查看、导出和整批撤销。
+- 只监听局域网；不连接互联网。正式版默认端口 8067，开发版按包名自动分配。
+
+开发调试：
+
+```powershell
+adb shell am start -a android.intent.action.VIEW -d "fen://debug/mcp/start" -p app.fen.dev.feat_mcp
+adb shell am start -a android.intent.action.VIEW -d "fen://debug/mcp/write?minutes=15" -p app.fen.dev.feat_mcp
+.\scripts\mcp-smoke.ps1 -BaseUrl http://<手机IP>:<端口> -Token <token>
+```
+
+协议设计见本地文档 `docs/superpowers/specs/2026-11-22-local-mcp-design.md`。
+
 ## 构建与运行
 
 本机 Android 环境的完整说明见 `C:\Android\ANDROID-ENV.md`。

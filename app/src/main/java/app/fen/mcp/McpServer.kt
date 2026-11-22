@@ -19,6 +19,7 @@ import app.fen.mcp.protocol.rpcError
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.withCharset
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.embeddedServer
@@ -43,6 +44,7 @@ class McpServer(
     private val allowedHosts: () -> Set<String>,
     private val host: String = "0.0.0.0",
     private val deleteSession: (String) -> Boolean = { false },
+    private val onRejected: (RequestHeaders, String, Int, String) -> Unit = { _, _, _, _ -> },
 ) {
 
     private val rateLimiter = RateLimiter(System::currentTimeMillis)
@@ -70,10 +72,12 @@ class McpServer(
         val clientIp = call.request.local.remoteHost
 
         validateHeaders(headers, allowedHosts())?.let { rejection ->
+            onRejected(headers, clientIp, rejection.status, rejection.message)
             respondRejection(call, rejection)
             return
         }
         if (!rateLimiter.allow(clientIp)) {
+            onRejected(headers, clientIp, 429, "Rate limit exceeded")
             call.response.header(HttpHeaders.RetryAfter, "60")
             call.respondText(
                 rpcError(null, RpcCode.INVALID_REQUEST, "Rate limit exceeded").toString(),
@@ -85,6 +89,7 @@ class McpServer(
 
         val contentType = call.request.contentType().withoutParameters()
         if (contentType != ContentType.Application.Json) {
+            onRejected(headers, clientIp, 415, "Unsupported content type")
             call.respondText(
                 rpcError(null, RpcCode.INVALID_REQUEST, "Content-Type must be application/json").toString(),
                 ContentType.Application.Json,
@@ -95,6 +100,7 @@ class McpServer(
 
         val declaredLength = call.request.header(HttpHeaders.ContentLength)?.toLongOrNull()
         if (declaredLength != null && declaredLength > MAX_BODY_BYTES) {
+            onRejected(headers, clientIp, 413, "Request body too large")
             call.respondText(
                 rpcError(null, RpcCode.INVALID_REQUEST, "Request body too large").toString(),
                 ContentType.Application.Json,
@@ -104,6 +110,7 @@ class McpServer(
         }
         val body = call.receiveText()
         if (body.toByteArray(Charsets.UTF_8).size > MAX_BODY_BYTES) {
+            onRejected(headers, clientIp, 413, "Request body too large")
             call.respondText(
                 rpcError(null, RpcCode.INVALID_REQUEST, "Request body too large").toString(),
                 ContentType.Application.Json,
@@ -115,6 +122,7 @@ class McpServer(
         val presented = TokenAuth.parseBearer(headers.authorization)
         if (!TokenAuth.matches(token, presented)) {
             rateLimiter.recordAuthFailure(clientIp)
+            onRejected(headers, clientIp, 401, "Unauthorized")
             call.response.header(HttpHeaders.WWWAuthenticate, """Bearer realm="fen"""")
             call.respondText(
                 rpcError(null, RpcCode.INVALID_REQUEST, "Unauthorized").toString(),
@@ -127,6 +135,7 @@ class McpServer(
 
         val parsed = parseRpc(body)
         if (parsed is RpcParse.Error) {
+            onRejected(headers, clientIp, 400, parsed.message)
             call.respondText(
                 rpcError(null, parsed.code, parsed.message).toString(),
                 ContentType.Application.Json,
@@ -137,6 +146,7 @@ class McpServer(
         val rpc = (parsed as RpcParse.Ok).call
         val era = detectEra(rpc, headers)
         if (era == null) {
+            onRejected(headers, clientIp, 400, "Missing protocol version")
             call.respondText(
                 rpcError(rpc.id, RpcCode.INVALID_REQUEST, "Missing protocol version").toString(),
                 ContentType.Application.Json,
@@ -147,6 +157,7 @@ class McpServer(
 
         if (era == ProtocolEra.MODERN_2026_07_28) {
             validateModernHeaders(headers, rpc)?.let { rejection ->
+                onRejected(headers, clientIp, rejection.status, rejection.message)
                 respondRejection(call, rejection, rpc.id)
                 return
             }
@@ -233,7 +244,7 @@ class McpServer(
                 } else {
                     call.respondText(
                         outcome.body,
-                        ContentType.Application.Json,
+                        ContentType.Application.Json.withCharset(Charsets.UTF_8),
                         HttpStatusCode.fromValue(outcome.status),
                     )
                 }

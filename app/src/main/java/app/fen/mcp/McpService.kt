@@ -68,7 +68,7 @@ class McpService : Service() {
         )
         val running = (application as FenApp).mcp.state.value
         val address = when (running) {
-            is McpServerState.Running -> running.addresses.firstOrNull()
+            is McpServerState.Running -> running.addresses.firstOrNull()?.let { "$it:${running.port}" }
             else -> null
         }
         return NotificationCompat.Builder(this, CHANNEL_ID)

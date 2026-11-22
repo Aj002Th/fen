@@ -17,6 +17,7 @@ import app.fen.mcp.net.selectLanAddresses
 import app.fen.mcp.protocol.ProtocolDispatcher
 import app.fen.mcp.protocol.SessionStore
 import app.fen.mcp.tools.ReadTools
+import app.fen.mcp.tools.ToolDescriptor
 import app.fen.mcp.tools.ToolRegistry
 import app.fen.mcp.tools.WriteTools
 import app.fen.mcp.write.WriteGate
@@ -87,6 +88,7 @@ class McpController(
     init {
         registerNetworkCallback()
         if (config.enabled) {
+            runCatching { McpService.start(context) }
             scope.launch { startServer() }
         }
     }
@@ -111,6 +113,35 @@ class McpController(
                     handler = handler,
                     allowedHosts = { allowedHosts(port) },
                     deleteSession = dispatcher::endSession,
+                    onRejected = { headers, ip, status, message ->
+                        scope.launch {
+                            runCatching {
+                                auditDb.insert(
+                                    CallRecord(
+                                        tsMs = System.currentTimeMillis(),
+                                        clientIp = ip,
+                                        clientName = null,
+                                        clientVersion = null,
+                                        era = if (headers.sessionId != null) "LEGACY" else "UNKNOWN",
+                                        protocolVersion = headers.protocolVersion,
+                                        method = "transport",
+                                        tool = null,
+                                        argsSummary = null,
+                                        ok = false,
+                                        httpStatus = status,
+                                        errorCode = "REJECTED",
+                                        errorMessage = message,
+                                        durationMs = 0,
+                                        requestId = null,
+                                        batchId = null,
+                                        tokenFp = TokenAuth.fingerprint(config.token),
+                                        bytesIn = 0,
+                                        bytesOut = 0,
+                                    )
+                                )
+                            }
+                        }
+                    },
                 )
                 instance.start()
                 server = instance
@@ -147,6 +178,13 @@ class McpController(
         updateRunning { it.copy(writeUntil = config.writeUntil) }
         scheduleExpiry()
     }
+
+    fun token(): String = config.token
+
+    fun writeUntil(): Long? = config.writeUntil
+
+    fun toolDescriptors(writeEnabled: Boolean = gate.isEnabled(config.writeUntil)): List<ToolDescriptor> =
+        registry.tools(writeEnabled)
 
     fun resetToken() {
         config.resetToken()
