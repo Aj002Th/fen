@@ -261,6 +261,9 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
 
     fun updateCategory(category: app.fen.data.Category) = repository.updateCategory(category)
 
+    fun reorderCategories(type: TxType, orderedIds: List<String>) =
+        repository.reorderCategories(type, orderedIds)
+
     fun deleteCategory(category: app.fen.data.Category) = repository.deleteCategory(category.id)
 
     fun mergeCategory(from: app.fen.data.Category, into: app.fen.data.Category) =
