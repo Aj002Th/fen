@@ -1,27 +1,34 @@
 package app.fen.ui
 
 import android.widget.Toast
-import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -47,12 +54,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -71,11 +80,25 @@ import app.fen.ui.screens.SettingsScreen
 import app.fen.ui.screens.StatsBoardSettingsScreen
 import app.fen.ui.screens.StatsScreen
 import app.fen.ui.theme.Fen
+import app.fen.ui.theme.FenMotion
 import app.fen.ui.theme.FenTheme
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
+
+private fun tabIndex(entry: NavBackStackEntry?): Int? = when (entry?.destination?.route) {
+    "bills" -> 0
+    "stats" -> 1
+    else -> null
+}
+
+private fun tabForward(initial: NavBackStackEntry, target: NavBackStackEntry): Boolean {
+    val from = tabIndex(initial)
+    val to = tabIndex(target)
+    return if (from != null && to != null) to > from else true
+}
 
 private val tabs = listOf(
     Tab("bills", "明细", Icons.Outlined.ReceiptLong),
@@ -97,6 +120,10 @@ fun FenRoot(viewModel: FenViewModel = viewModel()) {
 
 @Composable
 private fun FenContent(viewModel: FenViewModel) {
+    val fenSlide = tween<IntOffset>(FenMotion.navSlideMillis, easing = FastOutSlowInEasing)
+    val fenFadeIn = tween<Float>(FenMotion.navFadeInMillis, easing = FastOutSlowInEasing)
+    val fenFadeOut = tween<Float>(FenMotion.navFadeOutMillis, easing = FastOutSlowInEasing)
+    val fenFloat = tween<Float>(FenMotion.durationMillis, easing = FastOutSlowInEasing)
     val snapshot by viewModel.snapshot.collectAsStateWithLifecycle()
     val month by viewModel.month.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -115,12 +142,29 @@ private fun FenContent(viewModel: FenViewModel) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
-    val showBottomBar = currentRoute == "bills" || currentRoute == "stats"
+    val showBottomBar = currentRoute == null || RootTabs.isRoot(currentRoute)
     var showAdd by remember { mutableStateOf(false) }
     var editingTx by remember { mutableStateOf<Tx?>(null) }
+    val addOffset = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
 
-    BackHandler(enabled = showAdd) { showAdd = false }
+    suspend fun dismissAdd() {
+        addOffset.animateTo(1f, fenFloat)
+        showAdd = false
+    }
+
+    PredictiveBackHandler(enabled = showAdd) { progress ->
+        try {
+            progress.collect { event -> addOffset.snapTo(event.progress) }
+            dismissAdd()
+        } catch (_: CancellationException) {
+            addOffset.animateTo(0f, fenFloat)
+        }
+    }
+
+    LaunchedEffect(showAdd) {
+        if (showAdd) addOffset.animateTo(0f, fenFloat)
+    }
 
     LaunchedEffect(message) {
         message?.let {
@@ -137,9 +181,13 @@ private fun FenContent(viewModel: FenViewModel) {
                     FenBottomBar(
                         currentRoute = currentRoute,
                         onSelect = { route ->
-                            if (currentRoute != route) {
+                            val current = backStackEntry
+                            if (currentRoute != route && RootTabs.isRoot(currentRoute) && current != null) {
                                 navController.navigate(route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    popUpTo(current.destination.id) {
+                                        inclusive = true
+                                        saveState = true
+                                    }
                                     launchSingleTop = true
                                     restoreState = true
                                 }
@@ -155,174 +203,208 @@ private fun FenContent(viewModel: FenViewModel) {
             NavHost(
                 navController = navController,
                 startDestination = "bills",
-                modifier = Modifier.padding(innerPadding).background(Fen.colors.bg),
+                modifier = Modifier.padding(innerPadding),
                 enterTransition = {
-                    slideInHorizontally(tween(260)) { it / 6 } + fadeIn(tween(180))
+                    val dir = if (tabForward(initialState, targetState)) 1 else -1
+                    slideInHorizontally(fenSlide) { dir * it / 5 } + fadeIn(fenFadeIn)
                 },
-                exitTransition = { fadeOut(tween(120)) },
+                exitTransition = { fadeOut(fenFadeOut) },
                 popEnterTransition = {
-                    slideInHorizontally(tween(260)) { -it / 8 } + fadeIn(tween(180))
+                    slideInHorizontally(fenSlide) { -it / 6 } + fadeIn(fenFadeIn)
                 },
                 popExitTransition = {
-                    slideOutHorizontally(tween(260)) { it / 6 } + fadeOut(tween(180))
+                    slideOutHorizontally(fenSlide) { it / 5 } + fadeOut(fenFadeOut)
                 },
             ) {
-                composable("bills") {
-                    BillsScreen(
-                        snapshot = snapshot,
-                        month = month,
-                        onShiftMonth = viewModel::shiftMonth,
-                        onToday = { viewModel.jumpTo(java.time.YearMonth.now()) },
-                        onDelete = viewModel::delete,
-                        onEdit = { tx ->
-                            editingTx = tx
-                            showAdd = true
-                        },
-                        onOpenSearch = { navController.navigate("search") },
-                        onOpenSettings = { navController.navigate("settings") },
-                    )
+                composable(
+                    "bills",
+                    enterTransition = { EnterTransition.None },
+                    exitTransition = { ExitTransition.None },
+                    popEnterTransition = { EnterTransition.None },
+                    popExitTransition = { ExitTransition.None },
+                ) {
+                    FenPage {
+                        BillsScreen(
+                            snapshot = snapshot,
+                            month = month,
+                            onShiftMonth = viewModel::shiftMonth,
+                            onToday = { viewModel.jumpTo(java.time.YearMonth.now()) },
+                            onDelete = viewModel::delete,
+                            onEdit = { tx ->
+                                editingTx = tx
+                                showAdd = true
+                            },
+                            onOpenSearch = { navController.navigate("search") },
+                            onOpenSettings = { navController.navigate("settings") },
+                        )
+                    }
                 }
-                composable("stats") {
-                    StatsScreen(
-                        snapshot = snapshot,
-                        statsMode = statsMode,
-                        statsAnchor = statsAnchor,
-                        customRange = statsCustomRange,
-                        categoryType = statsCategoryType,
-                        boardConfig = statsBoardConfig,
-                        onSetMode = viewModel::setStatsMode,
-                        onShift = viewModel::shiftStatsPeriod,
-                        onSetCustomRange = viewModel::setStatsCustomRange,
-                        onSetCategoryType = viewModel::setStatsCategoryType,
-                        shouldPromptForRange = viewModel::shouldPromptForStatsRange,
-                        onTouchRange = viewModel::touchStatsRange,
-                        onOpenSettings = { navController.navigate("settings") },
-                    )
+                composable(
+                    "stats",
+                    enterTransition = { EnterTransition.None },
+                    exitTransition = { ExitTransition.None },
+                    popEnterTransition = { EnterTransition.None },
+                    popExitTransition = { ExitTransition.None },
+                ) {
+                    FenPage {
+                        StatsScreen(
+                            snapshot = snapshot,
+                            statsMode = statsMode,
+                            statsAnchor = statsAnchor,
+                            customRange = statsCustomRange,
+                            categoryType = statsCategoryType,
+                            boardConfig = statsBoardConfig,
+                            onSetMode = viewModel::setStatsMode,
+                            onShift = viewModel::shiftStatsPeriod,
+                            onSetCustomRange = viewModel::setStatsCustomRange,
+                            onSetCategoryType = viewModel::setStatsCategoryType,
+                            shouldPromptForRange = viewModel::shouldPromptForStatsRange,
+                            onTouchRange = viewModel::touchStatsRange,
+                            onOpenSettings = { navController.navigate("settings") },
+                        )
+                    }
                 }
                 composable("settings") {
-                    SettingsScreen(
-                        themeMode = themeMode,
-                        onThemeModeChange = viewModel::setThemeMode,
-                        onBack = { navController.popBackStack() },
-                        onOpenCategories = { navController.navigate("categories") },
-                        onOpenStatsBoard = { navController.navigate("stats-board") },
-                        onOpenImport = { navController.navigate("import") },
-                        onOpenExport = { navController.navigate("export") },
-                        onOpenBackup = { navController.navigate("backup") },
-                        showDebug = BuildConfig.DEBUG,
-                        onSeedDemo = {
-                            scope.launch(Dispatchers.IO) { viewModel.seedDemoData(400) }
-                        },
-                        onClearData = {
-                            scope.launch(Dispatchers.IO) { viewModel.clearTransactions() }
-                        },
-                    )
+                    FenPage {
+                        SettingsScreen(
+                            themeMode = themeMode,
+                            onThemeModeChange = viewModel::setThemeMode,
+                            onBack = { navController.popBackStack() },
+                            onOpenCategories = { navController.navigate("categories") },
+                            onOpenStatsBoard = { navController.navigate("stats-board") },
+                            onOpenImport = { navController.navigate("import") },
+                            onOpenExport = { navController.navigate("export") },
+                            onOpenBackup = { navController.navigate("backup") },
+                            showDebug = BuildConfig.DEBUG,
+                            onSeedDemo = {
+                                scope.launch(Dispatchers.IO) { viewModel.seedDemoData(400) }
+                            },
+                            onClearData = {
+                                scope.launch(Dispatchers.IO) { viewModel.clearTransactions() }
+                            },
+                        )
+                    }
                 }
                 composable("search") {
-                    SearchScreen(
-                        snapshot = snapshot,
-                        history = searchHistory,
-                        onSaveHistory = viewModel::addSearchHistory,
-                        onClearHistory = viewModel::clearSearchHistory,
-                        onBack = { navController.popBackStack() },
-                    )
+                    FenPage {
+                        SearchScreen(
+                            snapshot = snapshot,
+                            history = searchHistory,
+                            onSaveHistory = viewModel::addSearchHistory,
+                            onClearHistory = viewModel::clearSearchHistory,
+                            onBack = { navController.popBackStack() },
+                        )
+                    }
                 }
                 composable("stats-board") {
-                    StatsBoardSettingsScreen(
-                        config = statsBoardConfig,
-                        onBack = { navController.popBackStack() },
-                        onToggle = viewModel::setStatsSectionVisible,
-                        onMove = viewModel::moveStatsSection,
-                        onRankingLimit = viewModel::setStatsRankingLimit,
-                        onSummaryShowEmpty = viewModel::setStatsSummaryShowEmpty,
-                        onReset = viewModel::resetStatsBoard,
-                    )
+                    FenPage {
+                        StatsBoardSettingsScreen(
+                            config = statsBoardConfig,
+                            onBack = { navController.popBackStack() },
+                            onToggle = viewModel::setStatsSectionVisible,
+                            onMove = viewModel::moveStatsSection,
+                            onRankingLimit = viewModel::setStatsRankingLimit,
+                            onSummaryShowEmpty = viewModel::setStatsSummaryShowEmpty,
+                            onReset = viewModel::resetStatsBoard,
+                        )
+                    }
                 }
                 composable("categories") {
-                    CategoryManagerScreen(
-                        snapshot = snapshot,
-                        onBack = { navController.popBackStack() },
-                        onAdd = { name, type, icon, color ->
-                            viewModel.addCategory(name, type, icon, color)
-                        },
-                        onUpdate = { category -> viewModel.updateCategory(category) },
-                        onDelete = { category -> viewModel.deleteCategory(category) },
-                        onMerge = { from, into -> viewModel.mergeCategory(from, into) },
-                        onDeleteWithTransactions = { category ->
-                            viewModel.deleteCategoryWithTransactions(category)
-                        },
-                        countFor = { id -> viewModel.categoryUsage(id) },
-                    )
+                    FenPage {
+                        CategoryManagerScreen(
+                            snapshot = snapshot,
+                            onBack = { navController.popBackStack() },
+                            onAdd = { name, type, icon, color ->
+                                viewModel.addCategory(name, type, icon, color)
+                            },
+                            onUpdate = { category -> viewModel.updateCategory(category) },
+                            onDelete = { category -> viewModel.deleteCategory(category) },
+                            onMerge = { from, into -> viewModel.mergeCategory(from, into) },
+                            onDeleteWithTransactions = { category ->
+                                viewModel.deleteCategoryWithTransactions(category)
+                            },
+                            countFor = { id -> viewModel.categoryUsage(id) },
+                        )
+                    }
                 }
                 composable("export") {
-                    ExportScreen(
-                        onBack = { navController.popBackStack() },
-                        onExportCsv = viewModel::exportCsv,
-                        onSaveTemplate = viewModel::saveTemplate,
-                    )
+                    FenPage {
+                        ExportScreen(
+                            onBack = { navController.popBackStack() },
+                            onExportCsv = viewModel::exportCsv,
+                            onSaveTemplate = viewModel::saveTemplate,
+                        )
+                    }
                 }
                 composable("backup") {
-                    BackupScreen(
-                        onBack = { navController.popBackStack() },
-                        onExportBackup = viewModel::exportBackup,
-                        onRestore = {
-                            viewModel.startBackupRestore()
-                            navController.navigate("import")
-                        },
-                    )
+                    FenPage {
+                        BackupScreen(
+                            onBack = { navController.popBackStack() },
+                            onExportBackup = viewModel::exportBackup,
+                            onRestore = {
+                                viewModel.startBackupRestore()
+                                navController.navigate("import")
+                            },
+                        )
+                    }
                 }
                 composable("import") {
-                    ImportScreen(
-                        state = importState,
-                        categories = snapshot.categories,
-                        batchCount = batches.size,
-                        onPickFile = viewModel::pickImportFile,
-                        onSaveTemplate = viewModel::saveTemplate,
-                        onSetSource = viewModel::setImportSource,
-                        onStartParse = viewModel::startParse,
-                        onExit = {
-                            viewModel.cancelImport()
-                            navController.popBackStack()
-                        },
-                        onBackToSetup = viewModel::backToSetup,
-                        onOpenHistory = { navController.navigate("import-history") },
-                        onSetSkipDuplicates = viewModel::setSkipDuplicates,
-                        onSetTransferPolicy = viewModel::setTransferPolicy,
-                        onUpdateMapping = viewModel::updateMapping,
-                        onSetMappingView = viewModel::setMappingView,
-                        onConfirm = viewModel::confirmImport,
-                        onRestore = viewModel::restoreBackup,
-                        onUndo = viewModel::undoImport,
-                        onDone = {
-                            viewModel.cancelImport()
-                            navController.popBackStack()
-                        },
-                    )
+                    FenPage {
+                        ImportScreen(
+                            state = importState,
+                            categories = snapshot.categories,
+                            batchCount = batches.size,
+                            onPickFile = viewModel::pickImportFile,
+                            onSaveTemplate = viewModel::saveTemplate,
+                            onSetSource = viewModel::setImportSource,
+                            onStartParse = viewModel::startParse,
+                            onExit = {
+                                viewModel.cancelImport()
+                                navController.popBackStack()
+                            },
+                            onBackToSetup = viewModel::backToSetup,
+                            onOpenHistory = { navController.navigate("import-history") },
+                            onSetSkipDuplicates = viewModel::setSkipDuplicates,
+                            onSetTransferPolicy = viewModel::setTransferPolicy,
+                            onUpdateMapping = viewModel::updateMapping,
+                            onSetMappingView = viewModel::setMappingView,
+                            onConfirm = viewModel::confirmImport,
+                            onRestore = viewModel::restoreBackup,
+                            onUndo = viewModel::undoImport,
+                            onDone = {
+                                viewModel.cancelImport()
+                                navController.popBackStack()
+                            },
+                        )
+                    }
                 }
                 composable("import-history") {
-                    ImportHistoryScreen(
-                        batches = batches,
-                        onBack = { navController.popBackStack() },
-                        onDelete = viewModel::deleteImportBatch,
-                    )
+                    FenPage {
+                        ImportHistoryScreen(
+                            batches = batches,
+                            onBack = { navController.popBackStack() },
+                            onDelete = viewModel::deleteImportBatch,
+                        )
+                    }
                 }
             }
         }
 
-        AnimatedVisibility(
-            visible = showAdd,
-            enter = slideInVertically(tween(280), initialOffsetY = { it }) + fadeIn(tween(200)),
-            exit = slideOutVertically(tween(220), targetOffsetY = { it }) + fadeOut(tween(160)),
-        ) {
+        if (showAdd || addOffset.value < 1f) {
             AddTransactionScreen(
                 snapshot = snapshot,
                 initial = editingTx,
                 suggestionPenalties = penalties,
                 onPenalizeSuggestion = viewModel::penalizeSuggestion,
-                onClose = { showAdd = false },
+                modifier = Modifier.graphicsLayer {
+                    translationY = addOffset.value * size.height
+                },
+                onClose = { scope.launch { dismissAdd() } },
                 onManageCategories = {
-                    showAdd = false
-                    navController.navigate("categories")
+                    scope.launch {
+                        dismissAdd()
+                        navController.navigate("categories")
+                    }
                 },
                 onSave = { type, amountMinor, categoryId, note, dateTime, andContinue ->
                     val editing = editingTx
@@ -342,10 +424,17 @@ private fun FenContent(viewModel: FenViewModel) {
                             )
                         )
                     }
-                    if (!andContinue) showAdd = false
+                    if (!andContinue) scope.launch { dismissAdd() }
                 },
             )
         }
+    }
+}
+
+@Composable
+private fun FenPage(content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxSize().background(Fen.colors.bg)) {
+        content()
     }
 }
 
@@ -363,33 +452,64 @@ private fun FenBottomBar(currentRoute: String?, onSelect: (String) -> Unit, onAd
             color = Fen.colors.surface,
             modifier = Modifier.weight(1f),
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            val gap = 2.dp
+            BoxWithConstraints(
+                Modifier
+                    .padding(horizontal = 6.dp, vertical = 6.dp)
+                    .height(52.dp),
             ) {
-                tabs.forEach { tab ->
-                    val selected = currentRoute == tab.route
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(20.dp))
-                            .background(if (selected) Fen.colors.surfaceMuted else Color.Transparent)
-                            .clickable { onSelect(tab.route) }
-                            .padding(vertical = 7.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Icon(
-                            imageVector = tab.icon,
-                            contentDescription = tab.label,
-                            tint = if (selected) Fen.colors.ink else Fen.colors.inkSoft,
-                            modifier = Modifier.size(21.dp),
+                val tabWidth = (maxWidth - gap * (tabs.size - 1)) / tabs.size
+                val selectedIndex = tabs.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
+                val slidingIndex by animateFloatAsState(
+                    targetValue = selectedIndex.toFloat(),
+                    animationSpec = tween(260, easing = FastOutSlowInEasing),
+                    label = "tabIndicator",
+                )
+                val accent = Fen.colors.link
+                val pillColor = accent.copy(alpha = if (Fen.colors.isDark) 0.22f else 0.12f)
+                Box(
+                    modifier = Modifier
+                        .offset { IntOffset(((tabWidth + gap) * slidingIndex).roundToPx(), 0) }
+                        .width(tabWidth)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(pillColor),
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().fillMaxHeight(),
+                    horizontalArrangement = Arrangement.spacedBy(gap),
+                ) {
+                    tabs.forEach { tab ->
+                        val selected = currentRoute == tab.route
+                        val tint by animateColorAsState(
+                            targetValue = if (selected) accent else Fen.colors.inkSoft,
+                            animationSpec = tween(200, easing = FastOutSlowInEasing),
+                            label = "tabTint",
                         )
-                        Spacer(Modifier.height(2.dp))
-                        Text(
-                            text = tab.label,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (selected) Fen.colors.ink else Fen.colors.inkSoft,
-                        )
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(20.dp))
+                                .clickable(
+                                    interactionSource = remember(tab.route) { MutableInteractionSource() },
+                                    indication = null,
+                                ) { onSelect(tab.route) }
+                                .padding(vertical = 7.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Icon(
+                                imageVector = tab.icon,
+                                contentDescription = tab.label,
+                                tint = tint,
+                                modifier = Modifier.size(21.dp),
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = tab.label,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = tint,
+                            )
+                        }
                     }
                 }
             }

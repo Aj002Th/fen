@@ -1,5 +1,10 @@
 package app.fen.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -37,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import app.fen.data.CategoryStat
 import app.fen.data.Snapshot
@@ -63,6 +69,7 @@ import app.fen.ui.components.StatsRangePickerSheet
 import app.fen.ui.components.SummaryTable
 import app.fen.ui.components.WeekdayBars
 import app.fen.ui.theme.Fen
+import app.fen.ui.theme.FenMotion
 import app.fen.util.formatMoney
 import app.fen.util.formatSignedMoney
 import app.fen.util.shortDate
@@ -98,6 +105,7 @@ fun StatsScreen(
     var expandedRankingKeys by remember(statsMode, statsAnchor, customRange, categoryType) {
         mutableStateOf<Set<String>>(emptySet())
     }
+    var periodDirection by remember { mutableStateOf(1) }
 
     val today = remember { LocalDate.now() }
     val earliest = remember(snapshot.transactions) {
@@ -156,8 +164,10 @@ fun StatsScreen(
                 Segmented(
                     options = listOf("周", "月", "年", "全部", "范围"),
                     selected = statsMode.ordinal,
+                    accent = Fen.colors.link,
                     onSelect = { index ->
                         val mode = StatsMode.entries[index]
+                        periodDirection = if (index >= statsMode.ordinal) 1 else -1
                         if (mode == StatsMode.RANGE && statsMode != StatsMode.RANGE) {
                             if (shouldPromptForRange()) {
                                 showRangePicker = true
@@ -175,8 +185,15 @@ fun StatsScreen(
                         statsMode == StatsMode.MONTH ||
                         statsMode == StatsMode.YEAR,
                     canNext = period.end < today,
-                    onPrev = { onShift(-1) },
-                    onNext = { onShift(1) },
+                    direction = periodDirection,
+                    onPrev = {
+                        periodDirection = -1
+                        onShift(-1)
+                    },
+                    onNext = {
+                        periodDirection = 1
+                        onShift(1)
+                    },
                     onClick = if (statsMode == StatsMode.RANGE) {
                         { showRangePicker = true }
                     } else {
@@ -302,6 +319,7 @@ private fun PeriodBar(
     label: String,
     showArrows: Boolean,
     canNext: Boolean,
+    direction: Int,
     onPrev: () -> Unit,
     onNext: () -> Unit,
     onClick: (() -> Unit)? = null,
@@ -335,14 +353,29 @@ private fun PeriodBar(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.titleLarge,
-                color = Fen.colors.ink,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            AnimatedContent(
+                targetState = label,
+                transitionSpec = {
+                    val spec = tween<IntOffset>(FenMotion.durationMillis)
+                    if (direction > 0) {
+                        slideInHorizontally(spec) { it } togetherWith slideOutHorizontally(spec) { -it }
+                    } else {
+                        slideInHorizontally(spec) { -it } togetherWith slideOutHorizontally(spec) { it }
+                    }
+                },
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.fillMaxWidth(),
+                label = "period",
+            ) { text ->
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Fen.colors.ink,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             if (onClick != null) {
                 Spacer(Modifier.width(5.dp))
                 Icon(

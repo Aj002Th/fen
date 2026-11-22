@@ -24,12 +24,16 @@ import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +51,7 @@ import app.fen.ui.components.RowDivider
 import app.fen.ui.components.SectionLabel
 import app.fen.ui.theme.Fen
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     themeMode: Int,
@@ -133,7 +138,7 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 SettingItem(
-                    title = "深色模式",
+                    title = "主题",
                     subtitle = when (themeMode) {
                         1 -> "浅色"
                         2 -> "深色"
@@ -246,39 +251,46 @@ fun SettingsScreen(
     }
 
     if (showThemeDialog) {
-        AlertDialog(
+        ModalBottomSheet(
             onDismissRequest = { showThemeDialog = false },
-            title = { Text("深色模式") },
-            text = {
-                Column {
-                    listOf("跟随系统" to 0, "浅色" to 1, "深色" to 2).forEach { (label, mode) ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    onThemeModeChange(mode)
-                                    showThemeDialog = false
-                                }
-                                .padding(vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = if (themeMode == mode) Fen.colors.ink else Fen.colors.inkSoft,
-                                modifier = Modifier.weight(1f),
-                            )
-                            if (themeMode == mode) {
-                                Text("✓", color = Fen.colors.ink)
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            containerColor = Fen.colors.surface,
+        ) {
+            Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+                Text(
+                    text = "主题",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                )
+                listOf("跟随系统" to 0, "浅色" to 1, "深色" to 2).forEach { (label, mode) ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onThemeModeChange(mode)
+                                showThemeDialog = false
                             }
+                            .padding(horizontal = 20.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Fen.colors.ink,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (themeMode == mode) {
+                            Icon(
+                                imageVector = Icons.Rounded.Check,
+                                contentDescription = null,
+                                tint = Fen.colors.link,
+                                modifier = Modifier.size(20.dp),
+                            )
                         }
                     }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { showThemeDialog = false }) { Text("关闭") }
-            },
-        )
+            }
+        }
     }
 
     if (showAbout) {
