@@ -3,13 +3,15 @@ package app.fen.ui
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -48,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -70,6 +73,7 @@ import app.fen.ui.screens.SettingsScreen
 import app.fen.ui.screens.StatsBoardSettingsScreen
 import app.fen.ui.screens.StatsScreen
 import app.fen.ui.theme.Fen
+import app.fen.ui.theme.FenMotion
 import app.fen.ui.theme.FenTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -96,6 +100,7 @@ fun FenRoot(viewModel: FenViewModel = viewModel()) {
 
 @Composable
 private fun FenContent(viewModel: FenViewModel) {
+    val fenSlide = tween<IntOffset>(FenMotion.durationMillis, easing = FastOutSlowInEasing)
     val snapshot by viewModel.snapshot.collectAsStateWithLifecycle()
     val month by viewModel.month.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -160,17 +165,27 @@ private fun FenContent(viewModel: FenViewModel) {
                 startDestination = "bills",
                 modifier = Modifier.padding(innerPadding).background(Fen.colors.bg),
                 enterTransition = {
-                    slideInHorizontally(tween(260)) { it / 6 } + fadeIn(tween(180))
+                    slideIntoContainer(
+                        towards = SlideDirection.Start,
+                        animationSpec = fenSlide,
+                    )
                 },
-                exitTransition = { fadeOut(tween(120)) },
-                popEnterTransition = {
-                    slideInHorizontally(tween(260)) { -it / 8 } + fadeIn(tween(180))
-                },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
                 popExitTransition = {
-                    slideOutHorizontally(tween(260)) { it / 6 } + fadeOut(tween(180))
+                    slideOutOfContainer(
+                        towards = SlideDirection.End,
+                        animationSpec = fenSlide,
+                    )
                 },
             ) {
-                composable("bills") {
+                composable(
+                    "bills",
+                    enterTransition = { EnterTransition.None },
+                    exitTransition = { ExitTransition.None },
+                    popEnterTransition = { EnterTransition.None },
+                    popExitTransition = { ExitTransition.None },
+                ) {
                     BillsScreen(
                         snapshot = snapshot,
                         month = month,
@@ -185,7 +200,13 @@ private fun FenContent(viewModel: FenViewModel) {
                         onOpenSettings = { navController.navigate("settings") },
                     )
                 }
-                composable("stats") {
+                composable(
+                    "stats",
+                    enterTransition = { EnterTransition.None },
+                    exitTransition = { ExitTransition.None },
+                    popEnterTransition = { EnterTransition.None },
+                    popExitTransition = { ExitTransition.None },
+                ) {
                     StatsScreen(
                         snapshot = snapshot,
                         statsMode = statsMode,
