@@ -4,6 +4,7 @@ import android.widget.Toast
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -463,13 +464,15 @@ private fun FenBottomBar(currentRoute: String?, onSelect: (String) -> Unit, onAd
                     animationSpec = tween(260, easing = FastOutSlowInEasing),
                     label = "tabIndicator",
                 )
+                val accent = Fen.colors.link
+                val pillColor = accent.copy(alpha = if (Fen.colors.isDark) 0.22f else 0.12f)
                 Box(
                     modifier = Modifier
                         .offset { IntOffset(((tabWidth + gap) * slidingIndex).roundToPx(), 0) }
                         .width(tabWidth)
                         .fillMaxHeight()
                         .clip(RoundedCornerShape(20.dp))
-                        .background(Fen.colors.surfaceMuted),
+                        .background(pillColor),
                 )
                 Row(
                     modifier = Modifier.fillMaxWidth().fillMaxHeight(),
@@ -477,6 +480,11 @@ private fun FenBottomBar(currentRoute: String?, onSelect: (String) -> Unit, onAd
                 ) {
                     tabs.forEach { tab ->
                         val selected = currentRoute == tab.route
+                        val tint by animateColorAsState(
+                            targetValue = if (selected) accent else Fen.colors.inkSoft,
+                            animationSpec = tween(200, easing = FastOutSlowInEasing),
+                            label = "tabTint",
+                        )
                         Column(
                             modifier = Modifier
                                 .weight(1f)
@@ -488,14 +496,14 @@ private fun FenBottomBar(currentRoute: String?, onSelect: (String) -> Unit, onAd
                             Icon(
                                 imageVector = tab.icon,
                                 contentDescription = tab.label,
-                                tint = if (selected) Fen.colors.ink else Fen.colors.inkSoft,
+                                tint = tint,
                                 modifier = Modifier.size(21.dp),
                             )
                             Spacer(Modifier.height(2.dp))
                             Text(
                                 text = tab.label,
                                 style = MaterialTheme.typography.labelMedium,
-                                color = if (selected) Fen.colors.ink else Fen.colors.inkSoft,
+                                color = tint,
                             )
                         }
                     }
