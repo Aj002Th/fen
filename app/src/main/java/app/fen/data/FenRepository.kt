@@ -73,6 +73,12 @@ class FenRepository(private val db: FenDb) {
         refresh()
     }
 
+    /** 记账页读的就是这个顺序，写完立刻生效。 */
+    fun reorderCategories(type: TxType, orderedIds: List<String>) {
+        db.reorderCategories(type, orderedIds)
+        refresh()
+    }
+
     fun deleteCategory(id: String) {
         db.deleteCategory(id)
         refresh()

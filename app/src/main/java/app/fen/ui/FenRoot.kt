@@ -318,6 +318,7 @@ private fun FenContent(viewModel: FenViewModel) {
                                 viewModel.addCategory(name, type, icon, color)
                             },
                             onUpdate = { category -> viewModel.updateCategory(category) },
+                            onReorder = viewModel::reorderCategories,
                             onDelete = { category -> viewModel.deleteCategory(category) },
                             onMerge = { from, into -> viewModel.mergeCategory(from, into) },
                             onDeleteWithTransactions = { category ->
