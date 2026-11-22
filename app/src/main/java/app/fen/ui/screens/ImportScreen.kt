@@ -26,22 +26,39 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
+import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.FileOpen
+import androidx.compose.material.icons.outlined.Forest
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Park
+import androidx.compose.material.icons.outlined.Restaurant
+import androidx.compose.material.icons.outlined.ShoppingBag
+import androidx.compose.material.icons.outlined.TableChart
+import androidx.compose.material.icons.outlined.Water
 import androidx.compose.material.icons.outlined.WarningAmber
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +68,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -68,6 +86,7 @@ import app.fen.data.exchange.UNCATEGORIZED_NAME
 import app.fen.ui.ImportStage
 import app.fen.ui.ImportUiState
 import app.fen.ui.components.CircleAction
+import app.fen.ui.components.IconBadge
 import app.fen.ui.components.SectionLabel
 import app.fen.ui.components.Segmented
 import app.fen.ui.theme.Fen
@@ -233,7 +252,7 @@ fun ImportScreen(
     }
 
     if (sourcePicker) {
-        SourcePickerDialog(
+        ImportSourceSheet(
             current = state.source,
             onDismiss = { sourcePicker = false },
             onPick = {
@@ -332,6 +351,12 @@ private fun SetupContent(
                     }
                 }
             } else {
+                item {
+                    SectionLabel(
+                        "记录与模板",
+                        modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
+                    )
+                }
                 item {
                     Surface(
                         shape = RoundedCornerShape(22.dp),
@@ -492,79 +517,101 @@ private fun RowDivider() {
 private fun sourceText(source: ImportSource): String = when {
     source == ImportSource.AUTO -> "自动识别（推荐）"
     source == ImportSource.FEN_JSON -> "完整备份"
-    source.group.isBlank() -> source.label
-    else -> "${source.group} · ${source.label}"
+    else -> source.label
 }
 
-/**
- * 二级来源选择：第一层是「自动识别 / Fen / iCost / 平台账单 / 其他」，
- * 第二层才是具体格式。Fen 和 iCost 各自有 CSV/JSON、导出/模板两种。
- */
+/** 平铺的导入来源选择：点一下直接生效，不再做二级菜单。 */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SourcePickerDialog(
+private fun ImportSourceSheet(
     current: ImportSource,
     onDismiss: () -> Unit,
     onPick: (ImportSource) -> Unit,
 ) {
-    var group by remember { mutableStateOf<String?>(null) }
-    val activeGroup = group
-
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (activeGroup != null) {
-                    Text(
-                        "‹",
-                        style = MaterialTheme.typography.headlineSmall,
-                        modifier = Modifier.clickable { group = null }.padding(end = 12.dp),
-                    )
-                }
-                Text(if (activeGroup == null) "选择导入来源" else activeGroup)
-            }
-        },
-        text = {
-            Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState())) {
-                if (activeGroup == null) {
-                    OptionRow(
-                        title = "自动识别",
-                        subtitle = "推荐：按表头自动判断，不用先选来源",
-                        selected = current == ImportSource.AUTO,
-                    ) { onPick(ImportSource.AUTO) }
-                    OptionRow(
-                        title = "Fen 表格",
-                        subtitle = "日期 / 类型 / 金额 / 分类 / 备注",
-                        selected = current == ImportSource.FEN_CSV,
-                    ) { onPick(ImportSource.FEN_CSV) }
-                    ImportSource.groups.forEach { name ->
-                        val children = ImportSource.inGroup(name)
-                        OptionRow(
-                            title = name,
-                            subtitle = children.joinToString(" / ") { it.label },
-                            selected = current.group == name,
-                            trailingChevron = true,
-                        ) { group = name }
-                    }
-                    OptionRow(
-                        title = "通用表格",
-                        subtitle = "只依赖表头：日期 / 金额 / 分类或类型",
-                        selected = current == ImportSource.GENERIC,
-                    ) { onPick(ImportSource.GENERIC) }
-                } else {
-                    ImportSource.inGroup(activeGroup).forEach { source ->
-                        OptionRow(
-                            title = source.label,
-                            subtitle = source.note,
-                            selected = current == source,
-                        ) { onPick(source) }
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = Fen.colors.surface,
+    ) {
+        Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+            Text(
+                "导入来源",
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+            )
+            LazyColumn(Modifier.heightIn(max = 560.dp)) {
+                items(ImportSource.pickerOrder, key = { it.name }) { source ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPick(source) }
+                            .padding(horizontal = 20.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconBadge(
+                            icon = sourceIcon(source),
+                            color = sourceTint(source),
+                            size = 36.dp,
+                            iconSize = 18.dp,
+                        )
+                        Spacer(Modifier.size(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(source.label, style = MaterialTheme.typography.titleMedium)
+                            if (source.note.isNotBlank()) {
+                                Text(
+                                    source.note,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Fen.colors.inkSoft,
+                                )
+                            }
+                        }
+                        if (source == current) {
+                            Icon(
+                                Icons.Rounded.Check,
+                                contentDescription = null,
+                                tint = Fen.colors.ink,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text("关闭") }
-        },
-    )
+        }
+    }
+}
+
+private fun sourceIcon(source: ImportSource): ImageVector = when (source) {
+    ImportSource.AUTO -> Icons.Outlined.AutoAwesome
+    ImportSource.FEN_CSV -> Icons.Outlined.Description
+    ImportSource.WECHAT -> Icons.Outlined.Chat
+    ImportSource.ALIPAY -> Icons.Outlined.AccountBalanceWallet
+    ImportSource.JD -> Icons.Outlined.ShoppingBag
+    ImportSource.MEITUAN -> Icons.Outlined.Restaurant
+    ImportSource.ICOST -> Icons.AutoMirrored.Outlined.ReceiptLong
+    ImportSource.SHAYU -> Icons.Outlined.Water
+    ImportSource.YIMU -> Icons.Outlined.Park
+    ImportSource.MUMU -> Icons.Outlined.Forest
+    ImportSource.QIANJI -> Icons.AutoMirrored.Outlined.TrendingUp
+    ImportSource.TUANTUAN -> Icons.Outlined.Groups
+    ImportSource.GENERIC -> Icons.Outlined.TableChart
+    ImportSource.FEN_JSON -> Icons.AutoMirrored.Outlined.ReceiptLong
+}
+
+private fun sourceTint(source: ImportSource): Color = when (source) {
+    ImportSource.AUTO -> Color(0xFF7C8794)
+    ImportSource.FEN_CSV -> Color(0xFF17A467)
+    ImportSource.WECHAT -> Color(0xFF07C160)
+    ImportSource.ALIPAY -> Color(0xFF1677FF)
+    ImportSource.JD -> Color(0xFFE1251B)
+    ImportSource.MEITUAN -> Color(0xFFFFB300)
+    ImportSource.ICOST -> Color(0xFF21B8C7)
+    ImportSource.SHAYU -> Color(0xFF3E8BF2)
+    ImportSource.YIMU -> Color(0xFF2E9E5B)
+    ImportSource.MUMU -> Color(0xFF4CAF50)
+    ImportSource.QIANJI -> Color(0xFF2468F2)
+    ImportSource.TUANTUAN -> Color(0xFFF2A93E)
+    ImportSource.GENERIC -> Color(0xFF7C8794)
+    ImportSource.FEN_JSON -> Color(0xFF8B6CF2)
 }
 
 /* ------------------------------- 解析结果 ------------------------------- */

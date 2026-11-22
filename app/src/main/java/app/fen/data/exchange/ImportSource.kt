@@ -8,7 +8,7 @@ package app.fen.data.exchange
  */
 enum class ImportSource(val label: String, val group: String, val note: String = "") {
     AUTO("自动识别", "", "按表头自动判断格式"),
-    FEN_CSV("Fen 表格", "", "CSV / xlsx，可自行编辑"),
+    FEN_CSV("模板文件", "", "日期 / 类型 / 金额 / 分类 / 备注"),
 
     WECHAT("微信账单", "平台账单", "微信导出的 xlsx / csv"),
     ALIPAY("支付宝账单", "平台账单", "支付宝导出的 csv"),
@@ -31,12 +31,12 @@ enum class ImportSource(val label: String, val group: String, val note: String =
     val isBackup: Boolean get() = this == FEN_JSON
 
     companion object {
-        /** 一级菜单里带二级的组 */
-        val groups: List<String> = listOf("平台账单", "记账 App")
-
-        /** 一级菜单里直接可选的来源 */
-        val direct: List<ImportSource> = listOf(FEN_CSV, GENERIC)
-
-        fun inGroup(group: String): List<ImportSource> = entries.filter { it.group == group }
+        /** 来源选择器里的平铺顺序（不做二级菜单）。 */
+        val pickerOrder: List<ImportSource> = listOf(
+            AUTO, FEN_CSV,
+            WECHAT, ALIPAY, JD, MEITUAN,
+            ICOST, SHAYU, YIMU, MUMU, QIANJI, TUANTUAN,
+            GENERIC,
+        )
     }
 }
