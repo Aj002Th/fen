@@ -201,6 +201,25 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
         writableDatabase.update("category", category.toValues(), "id = ?", arrayOf(category.id))
     }
 
+    /** 同一类型内按给定顺序重写 sort_order；另一类型不动。 */
+    fun reorderCategories(type: TxType, orderedIds: List<String>) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            orderedIds.forEachIndexed { index, id ->
+                db.update(
+                    "category",
+                    ContentValues().apply { put("sort_order", index) },
+                    "id = ? AND type = ?",
+                    arrayOf(id, type.name),
+                )
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     fun deleteCategory(id: String) {
         writableDatabase.delete("category", "id = ?", arrayOf(id))
     }
