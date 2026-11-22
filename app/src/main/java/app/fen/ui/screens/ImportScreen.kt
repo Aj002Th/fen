@@ -63,6 +63,7 @@ import app.fen.data.exchange.ImportSource
 import app.fen.data.exchange.MappingKind
 import app.fen.data.exchange.MappingTarget
 import app.fen.data.exchange.TransferPolicy
+import app.fen.data.exchange.UNCATEGORIZED_NAME
 import app.fen.ui.ImportStage
 import app.fen.ui.ImportUiState
 import app.fen.ui.components.CircleAction
@@ -911,14 +912,16 @@ private fun MappingDialog(
                 Spacer(Modifier.height(10.dp))
                 Text("现有分类", style = MaterialTheme.typography.labelLarge, color = Fen.colors.inkSoft)
                 Spacer(Modifier.height(4.dp))
-                categories.filter { it.type == mapping.type }.forEach { category ->
-                    OptionRow(
-                        title = category.name,
-                        subtitle = category.type.label(),
-                        selected = mapping.target.kind == MappingKind.EXISTING &&
-                            mapping.target.categoryId == category.id,
-                    ) { onPick(MappingTarget(MappingKind.EXISTING, categoryId = category.id)) }
-                }
+                categories
+                    .filter { it.type == mapping.type && it.name != UNCATEGORIZED_NAME }
+                    .forEach { category ->
+                        OptionRow(
+                            title = category.name,
+                            subtitle = category.type.label(),
+                            selected = mapping.target.kind == MappingKind.EXISTING &&
+                                mapping.target.categoryId == category.id,
+                        ) { onPick(MappingTarget(MappingKind.EXISTING, categoryId = category.id)) }
+                    }
 
                 Spacer(Modifier.height(10.dp))
                 OptionRow(

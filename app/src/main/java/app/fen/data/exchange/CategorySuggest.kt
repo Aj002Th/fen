@@ -106,7 +106,7 @@ object CategorySuggest {
         records.map { record ->
             if (record.type == TxType.EXPENSE && isGeneric(record.sourceCategory)) {
                 val inferred = keywordCategory(record.note, record.type, categories)?.name
-                    ?: UNCATEGORIZED_NAME
+                    ?: UNBUCKETED_NAME
                 record.copy(sourceCategory = inferred, rawCategory = record.sourceCategory)
             } else {
                 record

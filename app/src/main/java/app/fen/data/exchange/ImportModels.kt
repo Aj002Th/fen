@@ -89,6 +89,9 @@ data class ImportOutcome(
 /** 空分类统一显示为「未分类」，与真实分类同名。 */
 const val UNCATEGORIZED_NAME = "未分类"
 
+/** 按备注归类没命中时的桶名，避免和真实分类「未分类」混淆。 */
+const val UNBUCKETED_NAME = "未归类"
+
 fun sourceLabel(name: String): String = name.trim().ifEmpty { UNCATEGORIZED_NAME }
 
 /** 一次导入会话，UI 直接渲染它。 */

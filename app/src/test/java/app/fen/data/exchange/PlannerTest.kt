@@ -57,7 +57,7 @@ class PlannerTest {
         val bucketed = CategorySuggest.bucketize(records, all)
         assertEquals("交通", bucketed[0].sourceCategory)
         assertEquals("商户消费", bucketed[0].rawCategory)
-        assertEquals("未分类", bucketed[1].sourceCategory)
+        assertEquals("未归类", bucketed[1].sourceCategory)
         assertEquals("商户消费", bucketed[1].rawCategory)
         // 非通用来源保持原样
         assertEquals("餐饮美食", bucketed[2].sourceCategory)
