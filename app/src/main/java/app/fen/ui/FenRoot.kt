@@ -2,12 +2,13 @@ package app.fen.ui
 
 import android.widget.Toast
 import androidx.activity.compose.PredictiveBackHandler
-import androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -180,20 +181,10 @@ private fun FenContent(viewModel: FenViewModel) {
                 navController = navController,
                 startDestination = "bills",
                 modifier = Modifier.padding(innerPadding).background(Fen.colors.bg),
-                enterTransition = {
-                    slideIntoContainer(
-                        towards = SlideDirection.Start,
-                        animationSpec = fenSlide,
-                    )
-                },
+                enterTransition = { slideInHorizontally(fenSlide) { it } },
                 exitTransition = { ExitTransition.None },
                 popEnterTransition = { EnterTransition.None },
-                popExitTransition = {
-                    slideOutOfContainer(
-                        towards = SlideDirection.End,
-                        animationSpec = fenSlide,
-                    )
-                },
+                popExitTransition = { slideOutHorizontally(fenSlide) { it } },
             ) {
                 composable(
                     "bills",
