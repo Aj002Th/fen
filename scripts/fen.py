@@ -774,10 +774,36 @@ def cmd_worktree_new(args: argparse.Namespace) -> int:
     print(f'  cd "{target}"')
     print(f"  {python_cmd()} scripts/fen.py install")
     print()
-    print("完成并通过手机验收后，再合并：")
-    print(f"  git merge --no-ff {branch}")
+    print("完成并通过手机验收后：")
+    print(f"  git push -u origin {branch}")
+    print("  在 GitHub 开 PR，squash merge 并删除远端分支")
     print(f"  {python_cmd()} scripts/fen.py worktree remove {safe}")
+    print("  （如果远端分支还没删除，清理时加 --force）")
     return 0
+
+
+def prune_remotes() -> None:
+    """best effort 同步远端分支状态，用于识别 squash merge 后被删掉的分支。"""
+    try:
+        subprocess.run(
+            ["git", "-C", str(ROOT), "fetch", "--all", "--prune"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=30,
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+        )
+    except Exception:
+        pass
+
+
+def branch_merged(branch: str) -> bool:
+    code, out, _ = git("branch", "--merged", "master", "--format=%(refname:short)")
+    return code == 0 and branch in out.splitlines()
+
+
+def upstream_gone(branch: str) -> bool:
+    code, out, _ = git("for-each-ref", "--format=%(upstream:track)", f"refs/heads/{branch}")
+    return code == 0 and "gone" in out
 
 
 def cmd_worktree_remove(args: argparse.Namespace) -> int:
@@ -787,18 +813,23 @@ def cmd_worktree_remove(args: argparse.Namespace) -> int:
     dev_id = re.sub(r"[^a-z0-9]+", "_", branch).strip("_")[:24] or "dev"
     package = f"app.fen.dev.{dev_id}"
 
-    code, out, err = git("branch", "--merged", "master", "--format=%(refname:short)")
-    if code != 0:
-        raise SystemExit(err or "读取已合并分支失败")
-    if branch not in out.splitlines():
-        raise SystemExit(f"分支 {branch} 还没有合并进 master，已拒绝清理。")
+    prune_remotes()
+    merged = branch_merged(branch)
+    gone = upstream_gone(branch)
+    if not (merged or gone or args.force):
+        raise SystemExit(
+            f"分支 {branch} 还没有合并进 master，已拒绝清理。\n"
+            "如果已经通过 squash merge 合并，请加 --force；"
+            "远端分支删除后重新 fetch 也会自动识别。"
+        )
 
     if target.exists():
         code, out, err = git("worktree", "remove", str(target), "--force")
         if code != 0:
             raise SystemExit(err or out or "git worktree remove 失败")
 
-    code, out, err = git("branch", "-d", branch)
+    delete_flag = "-d" if merged else "-D"
+    code, out, err = git("branch", delete_flag, branch)
     if code != 0:
         raise SystemExit(err or out or "删除分支失败")
 
@@ -957,6 +988,11 @@ def build_parser() -> argparse.ArgumentParser:
     worktree_new.set_defaults(handler=cmd_worktree_new)
     worktree_remove = worktree_sub.add_parser("remove", aliases=["rm"], help="清理已合并的 worktree")
     worktree_remove.add_argument("name")
+    worktree_remove.add_argument(
+        "--force",
+        action="store_true",
+        help="分支未合并时也强制清理（squash merge 后使用）",
+    )
     worktree_remove.set_defaults(handler=cmd_worktree_remove)
 
     release = sub.add_parser("release", help="构建并安装正式版（app.fen）")

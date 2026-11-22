@@ -1,0 +1,160 @@
+name: Release
+
+# 发版流程：
+#   1. 从 master 开 release/<version> 分支
+#   2. 只修改 version.properties（versionCode +1，versionName 改成 x.y.z）
+#   3. 提 PR、人工验收、合并到 master
+#   4. 本 workflow 读取 version.properties，构建签名 release，自动打 tag 并发布 GitHub Release
+#
+# 前置配置：4 个签名 secrets + RELEASES_ENABLED 变量（GitHub 仓库设置里配置一次）。
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - version.properties
+  workflow_dispatch:
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: vars.RELEASES_ENABLED == 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version
+        id: version
+        run: |
+          set -euo pipefail
+          version_name="$(sed -n 's/^versionName=//p' version.properties | head -n1 | tr -d '[:space:]')"
+          version_code="$(sed -n 's/^versionCode=//p' version.properties | head -n1 | tr -d '[:space:]')"
+          [[ "$version_name" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::versionName 必须是 x.y.z 格式，当前为 '$version_name'"
+            exit 1
+          }
+          [[ "$version_code" =~ ^[0-9]+$ ]] || {
+            echo "::error::versionCode 必须是整数，当前为 '$version_code'"
+            exit 1
+          }
+          {
+            echo "name=$version_name"
+            echo "code=$version_code"
+            echo "tag=v$version_name"
+          } >> "$GITHUB_OUTPUT"
+          echo "版本: $version_name ($version_code)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check existing release
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ steps.version.outputs.tag }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "$tag 已发布，跳过本次构建。" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git fetch --tags --force origin >/dev/null 2>&1 || true
+          if git rev-parse --verify --quiet "refs/tags/$tag" >/dev/null; then
+            echo "::error::tag $tag 已存在但没有对应的 GitHub Release，请先删除 tag 或手动补发。"
+            exit 1
+          fi
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+
+      - name: Check signing secrets
+        if: steps.check.outputs.exists == 'false'
+        env:
+          FEN_KEYSTORE_BASE64: ${{ secrets.FEN_KEYSTORE_BASE64 }}
+          FEN_KEYSTORE_PASSWORD: ${{ secrets.FEN_KEYSTORE_PASSWORD }}
+          FEN_KEY_ALIAS: ${{ secrets.FEN_KEY_ALIAS }}
+          FEN_KEY_PASSWORD: ${{ secrets.FEN_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in FEN_KEYSTORE_BASE64 FEN_KEYSTORE_PASSWORD FEN_KEY_ALIAS FEN_KEY_PASSWORD; do
+            value="$(printenv "$name" || true)"
+            if [ -z "$value" ]; then
+              echo "::error::缺少 GitHub secret: $name，无法发布签名 APK。"
+              exit 1
+            fi
+          done
+
+      - name: Set up JDK
+        if: steps.check.outputs.exists == 'false'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Prepare Android SDK
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          set -euo pipefail
+          sdkmanager="$(command -v sdkmanager || true)"
+          if [ -z "$sdkmanager" ]; then
+            sdkmanager="$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools" -name sdkmanager -type f | sort | tail -n1)"
+          fi
+          test -n "$sdkmanager"
+          yes | "$sdkmanager" --licenses >/dev/null || true
+          if ! "$sdkmanager" --install "platforms;android-37.0" "build-tools;37.0.0" >/dev/null 2>&1; then
+            "$sdkmanager" --install "platforms;android-37" "build-tools;37.0.0" >/dev/null
+          fi
+
+      - name: Set up Gradle
+        if: steps.check.outputs.exists == 'false'
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode keystore
+        if: steps.check.outputs.exists == 'false'
+        env:
+          FEN_KEYSTORE_BASE64: ${{ secrets.FEN_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          echo "$FEN_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/fen-release.jks"
+          test -s "$RUNNER_TEMP/fen-release.jks"
+
+      - name: Test and build release
+        if: steps.check.outputs.exists == 'false'
+        env:
+          FEN_KEYSTORE_PATH: ${{ runner.temp }}/fen-release.jks
+          FEN_KEYSTORE_PASSWORD: ${{ secrets.FEN_KEYSTORE_PASSWORD }}
+          FEN_KEY_ALIAS: ${{ secrets.FEN_KEY_ALIAS }}
+          FEN_KEY_PASSWORD: ${{ secrets.FEN_KEY_PASSWORD }}
+          FEN_REQUIRE_RELEASE_SIGNING: 'true'
+        run: ./gradlew :app:testDebugUnitTest :app:assembleRelease --stacktrace
+
+      - name: Prepare assets
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          set -euo pipefail
+          apk="Fen-${{ steps.version.outputs.name }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$apk"
+          sha256sum "$apk" > "$apk.sha256"
+          ls -lh "$apk" "$apk.sha256"
+
+      - name: Publish GitHub Release
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release create "${{ steps.version.outputs.tag }}" \
+            "Fen-${{ steps.version.outputs.name }}.apk" \
+            "Fen-${{ steps.version.outputs.name }}.apk.sha256" \
+            --target "$GITHUB_SHA" \
+            --title "Fen ${{ steps.version.outputs.name }}" \
+            --generate-notes \
+            --latest
+          echo "已发布 ${{ steps.version.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"

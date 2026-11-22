@@ -1,8 +1,60 @@
 import java.io.File
+import java.util.Properties
+import org.gradle.api.GradleException
 
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+}
+
+/* ------------------------------------------------------------------
+ * 版本号统一放在仓库根目录的 version.properties：
+ *   versionCode=17
+ *   versionName=0.7.1
+ * 发版 PR 只改这个文件；Release workflow 读取它并自动打 tag。
+ * ------------------------------------------------------------------ */
+val versionProps = Properties().apply {
+    val file = rootProject.file("version.properties")
+    if (!file.isFile) throw GradleException("缺少 version.properties")
+    file.inputStream().use { load(it) }
+}
+val appVersionCode = versionProps.getProperty("versionCode")?.trim()?.toIntOrNull()
+    ?: throw GradleException("version.properties 缺少有效的 versionCode")
+val appVersionName = versionProps.getProperty("versionName")?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?: throw GradleException("version.properties 缺少 versionName")
+
+/* ------------------------------------------------------------------
+ * 正式版签名：
+ *   本地：keystore.properties（已 gitignore）
+ *   CI ：FEN_KEYSTORE_PATH / FEN_KEYSTORE_PASSWORD / FEN_KEY_ALIAS / FEN_KEY_PASSWORD
+ * 两者都没有时回退 debug 签名，方便本地自测；CI 会设置
+ * FEN_REQUIRE_RELEASE_SIGNING=true，缺配置直接失败。
+ * ------------------------------------------------------------------ */
+val keystoreProps = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.isFile) file.inputStream().use { load(it) }
+}
+fun secret(envName: String, key: String): String? =
+    System.getenv(envName)?.takeIf { it.isNotBlank() }
+        ?: keystoreProps.getProperty(key)?.takeIf { it.isNotBlank() }
+
+val releaseStorePath = secret("FEN_KEYSTORE_PATH", "storeFile")
+val releaseStorePassword = secret("FEN_KEYSTORE_PASSWORD", "storePassword")
+val releaseKeyAlias = secret("FEN_KEY_ALIAS", "keyAlias")
+val releaseKeyPassword = secret("FEN_KEY_PASSWORD", "keyPassword")
+val hasReleaseSigning = listOf(
+    releaseStorePath,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+).all { it != null }
+
+if (System.getenv("FEN_REQUIRE_RELEASE_SIGNING") == "true" && !hasReleaseSigning) {
+    throw GradleException(
+        "缺少 release 签名配置。请设置 FEN_KEYSTORE_PATH / FEN_KEYSTORE_PASSWORD / " +
+            "FEN_KEY_ALIAS / FEN_KEY_PASSWORD，或提供 keystore.properties。"
+    )
 }
 
 /* ------------------------------------------------------------------
@@ -87,8 +139,8 @@ android {
         applicationId = "app.fen"
         minSdk = 26
         targetSdk = 37
-        versionCode = 17
-        versionName = "0.7.1"
+        versionCode = appVersionCode
+        versionName = appVersionName
         buildConfigField("String", "FEN_VARIANT", "\"prod\"")
     }
 
@@ -107,6 +159,17 @@ android {
         res.srcDir(generatedDevResDir)
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(releaseStorePath!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".dev.$devId"
@@ -116,9 +179,13 @@ android {
         }
         release {
             isMinifyEnabled = false
-            // 暂时沿用 debug keystore：这样能和之前装过的 app.fen 直接覆盖升级、保留数据。
-            // 将来要上架或换正式签名时，需要导出/导入一次数据。
-            signingConfig = signingConfigs.getByName("debug")
+            // 已有正式 keystore 时使用正式签名；本地没配置时沿用 debug keystore 便于自测。
+            // CI 发布必须提供正式签名（FEN_REQUIRE_RELEASE_SIGNING=true）。
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
