@@ -451,7 +451,11 @@ private fun FenBottomBar(currentRoute: String?, onSelect: (String) -> Unit, onAd
             modifier = Modifier.weight(1f),
         ) {
             val gap = 2.dp
-            BoxWithConstraints(Modifier.padding(horizontal = 6.dp, vertical = 6.dp)) {
+            BoxWithConstraints(
+                Modifier
+                    .padding(horizontal = 6.dp, vertical = 6.dp)
+                    .height(52.dp),
+            ) {
                 val tabWidth = (maxWidth - gap * (tabs.size - 1)) / tabs.size
                 val selectedIndex = tabs.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
                 val slidingIndex by animateFloatAsState(
@@ -467,7 +471,10 @@ private fun FenBottomBar(currentRoute: String?, onSelect: (String) -> Unit, onAd
                         .clip(RoundedCornerShape(20.dp))
                         .background(Fen.colors.surfaceMuted),
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().fillMaxHeight(),
+                    horizontalArrangement = Arrangement.spacedBy(gap),
+                ) {
                     tabs.forEach { tab ->
                         val selected = currentRoute == tab.route
                         Column(
