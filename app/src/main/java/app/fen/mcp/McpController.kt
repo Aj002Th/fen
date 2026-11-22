@@ -1,21 +1,31 @@
 package app.fen.mcp
 
 import android.content.Context
+import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
 import android.util.Log
 import app.fen.BuildConfig
 import app.fen.data.ledger.LedgerReader
+import app.fen.data.ledger.LedgerWriter
 import app.fen.mcp.audit.CallLogger
 import app.fen.mcp.audit.CallRecord
 import app.fen.mcp.audit.McpAuditDb
 import app.fen.mcp.auth.TokenAuth
+import app.fen.mcp.net.currentLanCandidates
+import app.fen.mcp.net.selectLanAddresses
 import app.fen.mcp.protocol.ProtocolDispatcher
 import app.fen.mcp.protocol.SessionStore
 import app.fen.mcp.tools.ReadTools
 import app.fen.mcp.tools.ToolRegistry
-import app.fen.mcp.tools.ToolResult
+import app.fen.mcp.tools.WriteTools
+import app.fen.mcp.write.WriteGate
+import app.fen.mcp.write.WriteService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,33 +40,39 @@ import java.net.URL
 class McpController(
     private val context: Context,
     private val reader: LedgerReader,
+    private val writer: LedgerWriter,
 ) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _state = MutableStateFlow<McpServerState>(McpServerState.Stopped)
     val state: StateFlow<McpServerState> = _state.asStateFlow()
 
-    private var server: McpServer? = null
-    private val port = 8067
-    private val token = "dev-token"
-
+    private val config = McpConfig(context)
+    private val gate = WriteGate(System::currentTimeMillis)
     private val sessions = SessionStore(System::currentTimeMillis)
     private val auditDb = McpAuditDb(context)
     private val callLogger = CallLogger(
         store = auditDb,
         clock = System::currentTimeMillis,
-        tokenFingerprint = TokenAuth.fingerprint(token),
+        tokenFingerprint = TokenAuth.fingerprint(config.token),
+    )
+    private val writeService = WriteService(
+        reader = reader,
+        writer = writer,
+        clock = System::currentTimeMillis,
     )
     private val registry = ToolRegistry(
-        ReadTools(
+        readTools = ReadTools(
             reader = reader,
             serverVersion = BuildConfig.VERSION_NAME,
-            writeEnabled = { false },
-        )
+            writeEnabled = { gate.isEnabled(config.writeUntil) },
+        ),
+        writeTools = WriteTools(writeService),
+        writeEnabled = { gate.isEnabled(config.writeUntil) },
     )
     private val dispatcher = ProtocolDispatcher(
-        tools = { registry.tools(false) },
-        callTool = { name, args -> registry.call(name, args, false) },
+        tools = { registry.tools() },
+        callTool = { name, args -> registry.call(name, args) },
         sessions = sessions,
         serverVersion = BuildConfig.VERSION_NAME,
     )
@@ -64,39 +80,82 @@ class McpController(
         callLogger.around(requestContext, call) { dispatcher.handle(call, requestContext) }
     }
 
+    private var server: McpServer? = null
+    private var expiryJob: Job? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+
+    init {
+        registerNetworkCallback()
+        if (config.enabled) {
+            scope.launch { startServer() }
+        }
+    }
+
     fun start() {
+        config.enabled = true
+        McpService.start(context)
+        startServer()
+    }
+
+    fun startServer() {
         val current = _state.value
         if (current is McpServerState.Running || current is McpServerState.Starting) return
         _state.value = McpServerState.Starting
-        Log.i("FenMcp", "start requested on $port")
         scope.launch {
             runCatching { auditDb.prune() }
-        }
-        scope.launch {
+            val port = config.port
             try {
                 val instance = McpServer(
                     port = port,
-                    token = token,
+                    token = config.token,
                     handler = handler,
-                    allowedHosts = { setOf("127.0.0.1:$port", "localhost:$port") },
+                    allowedHosts = { allowedHosts(port) },
                     deleteSession = dispatcher::endSession,
                 )
                 instance.start()
                 server = instance
-                _state.value = McpServerState.Running(port = port, addresses = emptyList())
+                _state.value = McpServerState.Running(
+                    port = port,
+                    addresses = currentAddresses(),
+                    writeUntil = config.writeUntil,
+                )
+                scheduleExpiry()
                 Log.i("FenMcp", "running on $port")
             } catch (e: Exception) {
-                Log.e("FenMcp", "start failed", e)
                 server = null
                 _state.value = McpServerState.Error(e.message ?: "服务启动失败")
+                Log.e("FenMcp", "start failed", e)
             }
         }
     }
 
     fun stop() {
+        config.enabled = false
+        stopServer()
+        context.stopService(Intent(context, McpService::class.java))
+    }
+
+    fun stopServer() {
+        expiryJob?.cancel()
         server?.stop()
         server = null
         _state.value = McpServerState.Stopped
+    }
+
+    fun setWriteDuration(durationMs: Long?) {
+        config.writeUntil = durationMs?.let { System.currentTimeMillis() + it }
+        updateRunning { it.copy(writeUntil = config.writeUntil) }
+        scheduleExpiry()
+    }
+
+    fun resetToken() {
+        config.resetToken()
+        sessions.clear()
+        val running = _state.value as? McpServerState.Running
+        if (running != null) {
+            stopServer()
+            startServer()
+        }
     }
 
     suspend fun recentCalls(limit: Int): List<CallRecord> = withContext(Dispatchers.IO) {
@@ -105,6 +164,10 @@ class McpController(
 
     fun clearCallLog() {
         auditDb.clear()
+    }
+
+    suspend fun undo(batchId: String): app.fen.data.ledger.UndoResult = withContext(Dispatchers.IO) {
+        writer.undoBatch(batchId)
     }
 
     suspend fun selfTest(): SelfTestResult = withContext(Dispatchers.IO) {
@@ -138,6 +201,55 @@ class McpController(
         }
     }
 
+    private fun scheduleExpiry() {
+        expiryJob?.cancel()
+        val until = config.writeUntil ?: return
+        val remaining = until - System.currentTimeMillis()
+        if (remaining <= 0) {
+            updateRunning { it.copy(writeUntil = null) }
+            return
+        }
+        expiryJob = scope.launch {
+            delay(remaining + 50)
+            if (!gate.isEnabled(config.writeUntil)) {
+                config.writeUntil = null
+                updateRunning { it.copy(writeUntil = null) }
+            }
+        }
+    }
+
+    private fun updateRunning(block: (McpServerState.Running) -> McpServerState.Running) {
+        val running = _state.value as? McpServerState.Running ?: return
+        _state.value = block(running)
+    }
+
+    private fun currentAddresses(): List<String> =
+        selectLanAddresses(currentLanCandidates())
+
+    private fun allowedHosts(port: Int): Set<String> =
+        buildSet {
+            add("127.0.0.1:$port")
+            add("localhost:$port")
+            currentAddresses().forEach { add("$it:$port") }
+        }
+
+    private fun registerNetworkCallback() {
+        val manager = context.getSystemService(ConnectivityManager::class.java) ?: return
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) = updateAddresses()
+            override fun onLost(network: Network) = updateAddresses()
+            override fun onLinkPropertiesChanged(network: Network, linkProperties: android.net.LinkProperties) =
+                updateAddresses()
+        }
+        runCatching { manager.registerDefaultNetworkCallback(callback) }
+        networkCallback = callback
+    }
+
+    private fun updateAddresses() {
+        val addresses = currentAddresses()
+        updateRunning { it.copy(addresses = addresses) }
+    }
+
     private fun post(port: Int, body: String, modern: Boolean): Pair<Boolean, String?> {
         val connection = URL("http://127.0.0.1:$port/mcp").openConnection() as HttpURLConnection
         return try {
@@ -145,7 +257,7 @@ class McpController(
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "application/json")
             connection.setRequestProperty("Accept", "application/json, text/event-stream")
-            connection.setRequestProperty("Authorization", "Bearer $token")
+            connection.setRequestProperty("Authorization", "Bearer ${config.token}")
             if (modern) {
                 connection.setRequestProperty("MCP-Protocol-Version", "2026-07-28")
                 connection.setRequestProperty("Mcp-Method", "tools/list")
