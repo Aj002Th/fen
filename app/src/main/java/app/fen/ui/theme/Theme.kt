@@ -24,6 +24,7 @@ data class FenColors(
     val income: Color,
     val link: Color,
     val isDark: Boolean,
+    val glass: Boolean = false,
 )
 
 val LocalFenColors = staticCompositionLocalOf {
@@ -83,6 +84,7 @@ private val FenShapes = Shapes(
 @Composable
 fun FenTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    glass: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val colors = if (darkTheme) {
@@ -90,12 +92,14 @@ fun FenTheme(
             bg = BgNight, surface = SurfaceNight, surfaceMuted = SurfaceMutedNight,
             ink = InkNight, inkSoft = InkSoftNight, inkFaint = Color(0xFF6B717B), divider = DividerNight,
             expense = ExpenseNight, income = IncomeNight, link = LinkNight, isDark = true,
+            glass = glass,
         )
     } else {
         FenColors(
             bg = Bg, surface = Surface, surfaceMuted = SurfaceMuted,
             ink = Ink, inkSoft = InkSoft, inkFaint = InkFaint, divider = Divider,
             expense = Expense, income = Income, link = Link, isDark = false,
+            glass = glass,
         )
     }
     CompositionLocalProvider(LocalFenColors provides colors) {

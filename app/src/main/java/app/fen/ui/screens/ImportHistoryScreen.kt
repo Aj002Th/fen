@@ -31,6 +31,7 @@ import app.fen.data.ImportBatch
 import app.fen.ui.components.CircleAction
 import app.fen.ui.components.EmptyState
 import app.fen.ui.theme.Fen
+import app.fen.ui.theme.glassContainer
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -116,6 +117,7 @@ fun ImportHistoryScreen(
 
     pendingDelete?.let { batch ->
         AlertDialog(
+            containerColor = glassContainer(),
             onDismissRequest = { pendingDelete = null },
             title = { Text("删除这次导入？") },
             text = {

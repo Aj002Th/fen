@@ -90,6 +90,7 @@ import app.fen.ui.components.IconBadge
 import app.fen.ui.components.SectionLabel
 import app.fen.ui.components.Segmented
 import app.fen.ui.theme.Fen
+import app.fen.ui.theme.glassContainer
 import app.fen.util.formatMoney
 import java.time.Instant
 import java.time.ZoneId
@@ -235,6 +236,7 @@ fun ImportScreen(
 
     if (showHelp) {
         AlertDialog(
+            containerColor = glassContainer(),
             onDismissRequest = { showHelp = false },
             title = { Text("导入说明") },
             text = {
@@ -276,6 +278,7 @@ fun ImportScreen(
 
     if (confirmRestore) {
         AlertDialog(
+            containerColor = glassContainer(),
             onDismissRequest = { confirmRestore = false },
             title = { Text("恢复这个备份？") },
             text = { Text("会先清空当前所有分类和流水，再写回备份内容。此操作不可撤销。") },
@@ -293,6 +296,7 @@ fun ImportScreen(
 
     if (confirmUndo) {
         AlertDialog(
+            containerColor = glassContainer(),
             onDismissRequest = { confirmUndo = false },
             title = { Text("撤销这次导入？") },
             text = { Text("会删除这次导入写入的全部流水（包括后来改过金额或分类的）。导入时新建的分类会保留。") },
@@ -531,7 +535,7 @@ private fun ImportSourceSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = Fen.colors.surface,
+        containerColor = glassContainer(),
     ) {
         Column(Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
             Text(
@@ -947,6 +951,7 @@ private fun MappingDialog(
     onPick: (MappingTarget) -> Unit,
 ) {
     AlertDialog(
+        containerColor = glassContainer(),
         onDismissRequest = onDismiss,
         title = { Text("「${mapping.source}」归到哪一类？") },
         text = {

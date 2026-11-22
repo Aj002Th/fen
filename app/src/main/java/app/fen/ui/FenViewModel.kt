@@ -54,6 +54,9 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
     private val _themeMode = MutableStateFlow(prefs.themeMode)
     val themeMode: StateFlow<Int> = _themeMode.asStateFlow()
 
+    private val _themeMaterial = MutableStateFlow(prefs.themeMaterial)
+    val themeMaterial: StateFlow<Int> = _themeMaterial.asStateFlow()
+
     private val _hiddenSuggestions = MutableStateFlow(prefs.hiddenSuggestions)
     val hiddenSuggestions: StateFlow<Set<String>> = _hiddenSuggestions.asStateFlow()
 
@@ -89,6 +92,11 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
     fun setThemeMode(mode: Int) {
         prefs.themeMode = mode
         _themeMode.value = mode
+    }
+
+    fun setThemeMaterial(material: Int) {
+        prefs.themeMaterial = material
+        _themeMaterial.value = material
     }
 
     fun hideSuggestion(categoryId: String) {

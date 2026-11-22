@@ -13,6 +13,11 @@ class AppPrefs(context: Context) {
         get() = sp.getInt(KEY_THEME_MODE, 0)
         set(value) = sp.edit().putInt(KEY_THEME_MODE, value).apply()
 
+    /** 0 = 纯色，1 = 玻璃 */
+    var themeMaterial: Int
+        get() = sp.getInt(KEY_THEME_MATERIAL, 0)
+        set(value) = sp.edit().putInt(KEY_THEME_MATERIAL, value).apply()
+
     /** 被用户长按隐藏的「常用」分类 */
     var hiddenSuggestions: Set<String>
         get() = sp.getStringSet(KEY_HIDDEN_SUGGESTIONS, emptySet()) ?: emptySet()
@@ -121,6 +126,7 @@ class AppPrefs(context: Context) {
 
     private companion object {
         const val KEY_THEME_MODE = "theme_mode"
+        const val KEY_THEME_MATERIAL = "theme_material"
         const val KEY_HIDDEN_SUGGESTIONS = "hidden_suggestions"
         const val KEY_PENALTIES = "suggestion_penalties"
         const val KEY_SEARCH_HISTORY = "search_history"
