@@ -37,6 +37,10 @@ google-services.json
 # Reverse-engineering workspace (APK dumps, evidence)
 _reverse/
 
+# Python cache
+__pycache__/
+*.pyc
+
 # Local dev/design notes (not committed)
 docs/
 
