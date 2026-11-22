@@ -114,7 +114,9 @@ fun FenRoot(viewModel: FenViewModel = viewModel()) {
 
 @Composable
 private fun FenContent(viewModel: FenViewModel) {
-    val fenSlide = tween<IntOffset>(FenMotion.durationMillis, easing = FastOutSlowInEasing)
+    val fenSlide = tween<IntOffset>(FenMotion.navSlideMillis, easing = FastOutSlowInEasing)
+    val fenFadeIn = tween<Float>(FenMotion.navFadeInMillis, easing = FastOutSlowInEasing)
+    val fenFadeOut = tween<Float>(FenMotion.navFadeOutMillis, easing = FastOutSlowInEasing)
     val fenFloat = tween<Float>(FenMotion.durationMillis, easing = FastOutSlowInEasing)
     val snapshot by viewModel.snapshot.collectAsStateWithLifecycle()
     val month by viewModel.month.collectAsStateWithLifecycle()
@@ -195,23 +197,18 @@ private fun FenContent(viewModel: FenViewModel) {
             NavHost(
                 navController = navController,
                 startDestination = "bills",
-                modifier = Modifier.padding(innerPadding).background(Fen.colors.bg),
+                modifier = Modifier.padding(innerPadding),
                 enterTransition = {
-                    if (tabForward(initialState, targetState)) {
-                        slideInHorizontally(fenSlide) { it }
-                    } else {
-                        slideInHorizontally(fenSlide) { -it }
-                    }
+                    val dir = if (tabForward(initialState, targetState)) 1 else -1
+                    slideInHorizontally(fenSlide) { dir * it / 5 } + fadeIn(fenFadeIn)
                 },
-                exitTransition = {
-                    if (tabForward(initialState, targetState)) {
-                        slideOutHorizontally(fenSlide) { -it }
-                    } else {
-                        slideOutHorizontally(fenSlide) { it }
-                    }
+                exitTransition = { fadeOut(fenFadeOut) },
+                popEnterTransition = {
+                    slideInHorizontally(fenSlide) { -it / 6 } + fadeIn(fenFadeIn)
                 },
-                popEnterTransition = { slideInHorizontally(fenSlide) { -it } },
-                popExitTransition = { slideOutHorizontally(fenSlide) { it } },
+                popExitTransition = {
+                    slideOutHorizontally(fenSlide) { it / 5 } + fadeOut(fenFadeOut)
+                },
             ) {
                 composable("bills") {
                     FenPage {

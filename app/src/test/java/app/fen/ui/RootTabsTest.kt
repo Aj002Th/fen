@@ -32,7 +32,15 @@ class RootTabsTest {
     }
 
     @Test
-    fun `shared motion duration is 180 milliseconds`() {
+    fun `navigation motion is a short slide with a faster fade out`() {
+        assertEquals(260, FenMotion.navSlideMillis)
+        assertEquals(180, FenMotion.navFadeInMillis)
+        assertEquals(120, FenMotion.navFadeOutMillis)
+        assertTrue(FenMotion.navFadeOutMillis < FenMotion.navSlideMillis)
+    }
+
+    @Test
+    fun `in-page motion stays short`() {
         assertEquals(180, FenMotion.durationMillis)
     }
 }
