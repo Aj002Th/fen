@@ -18,8 +18,10 @@ import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.FileUpload
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.Restore
+import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -50,7 +52,9 @@ fun SettingsScreen(
     onThemeModeChange: (Int) -> Unit,
     onBack: () -> Unit,
     onOpenCategories: () -> Unit,
-    onOpenData: () -> Unit,
+    onOpenImport: () -> Unit,
+    onOpenExport: () -> Unit,
+    onOpenBackup: () -> Unit,
     showDebug: Boolean = false,
     onSeedDemo: () -> Unit = {},
     onClearData: () -> Unit = {},
@@ -131,11 +135,43 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 SettingItem(
-                    title = "数据",
-                    subtitle = "账单导入、模板、导出与完整备份",
-                    icon = Icons.Outlined.Storage,
-                    tint = Color(0xFF21B8C7),
-                    onClick = onOpenData,
+                    title = "导入",
+                    subtitle = "iCost / 微信 / 支付宝 / 京东 / 美团 / 记账 App",
+                    icon = Icons.Outlined.FileUpload,
+                    tint = Color(0xFFF2A93E),
+                    onClick = onOpenImport,
+                )
+            }
+        }
+        item { Spacer(Modifier.height(8.dp)) }
+        item {
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = Fen.colors.surface,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                SettingItem(
+                    title = "导出",
+                    subtitle = "CSV 表格与导入模板",
+                    icon = Icons.Outlined.TableChart,
+                    tint = Color(0xFF3E8BF2),
+                    onClick = onOpenExport,
+                )
+            }
+        }
+        item { Spacer(Modifier.height(8.dp)) }
+        item {
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = Fen.colors.surface,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                SettingItem(
+                    title = "备份",
+                    subtitle = "完整备份与恢复（JSON）",
+                    icon = Icons.Outlined.Restore,
+                    tint = Color(0xFF8B6CF2),
+                    onClick = onOpenBackup,
                 )
             }
         }

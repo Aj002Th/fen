@@ -107,11 +107,15 @@ object FileDecode {
     }
 
     private fun parsedSheet(table: Table, source: ImportSource): ParsedFile.Sheet {
-        val label = if (source == ImportSource.AUTO) "自动识别" else "${source.group} · ${source.label}"
+        val label = when {
+            source == ImportSource.AUTO -> "自动识别"
+            source.group.isBlank() -> source.label
+            else -> "${source.group} · ${source.label}"
+        }
         val result = SheetImport.parse(table, source = label)
         val warnings = result.warnings.toMutableList()
         when (source) {
-            ImportSource.ICOST_EXPORT, ImportSource.ICOST_TEMPLATE ->
+            ImportSource.ICOST ->
                 if (result.records.isNotEmpty() && result.records.all { it.sourceCategory.isBlank() }) {
                     warnings += "没有读到「一级分类/分类」列，可能不是 iCost 账单。"
                 }
@@ -119,8 +123,15 @@ object FileDecode {
                 if (result.records.isEmpty()) warnings += "没有读到微信账单记录，请确认导出的是「账单明细」。"
             ImportSource.ALIPAY ->
                 if (result.records.isEmpty()) warnings += "没有读到支付宝账单记录，请确认导出的是「交易明细」。"
+            ImportSource.JD ->
+                if (result.records.isEmpty()) warnings += "没有读到京东账单记录，请确认导出的是「账单明细」。"
+            ImportSource.MEITUAN ->
+                if (result.records.isEmpty()) warnings += "没有读到美团账单记录，请确认导出的是「账单明细」。"
             ImportSource.FEN_CSV ->
                 if (result.records.isEmpty()) warnings += "没有读到 Fen 表格记录，表头应为 日期/类型/金额/分类/备注。"
+            ImportSource.SHAYU, ImportSource.YIMU, ImportSource.MUMU,
+            ImportSource.QIANJI, ImportSource.TUANTUAN ->
+                if (result.records.isEmpty()) warnings += "没有读到 ${source.label} 记录，请确认导出的表头包含日期和金额。"
             else -> Unit
         }
         return ParsedFile.Sheet(result.copy(warnings = warnings))

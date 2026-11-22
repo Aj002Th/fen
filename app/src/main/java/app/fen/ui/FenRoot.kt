@@ -60,9 +60,10 @@ import androidx.navigation.compose.rememberNavController
 import app.fen.BuildConfig
 import app.fen.data.Tx
 import app.fen.ui.screens.AddTransactionScreen
+import app.fen.ui.screens.BackupScreen
 import app.fen.ui.screens.BillsScreen
 import app.fen.ui.screens.CategoryManagerScreen
-import app.fen.ui.screens.DataScreen
+import app.fen.ui.screens.ExportScreen
 import app.fen.ui.screens.ImportHistoryScreen
 import app.fen.ui.screens.ImportScreen
 import app.fen.ui.screens.SearchScreen
@@ -189,7 +190,9 @@ private fun FenContent(viewModel: FenViewModel) {
                         onThemeModeChange = viewModel::setThemeMode,
                         onBack = { navController.popBackStack() },
                         onOpenCategories = { navController.navigate("categories") },
-                        onOpenData = { navController.navigate("data") },
+                        onOpenImport = { navController.navigate("import") },
+                        onOpenExport = { navController.navigate("export") },
+                        onOpenBackup = { navController.navigate("backup") },
                         showDebug = BuildConfig.DEBUG,
                         onSeedDemo = {
                             scope.launch(Dispatchers.IO) { viewModel.seedDemoData(400) }
@@ -224,19 +227,21 @@ private fun FenContent(viewModel: FenViewModel) {
                         countFor = { id -> viewModel.categoryUsage(id) },
                     )
                 }
-                composable("data") {
-                    DataScreen(
-                        batchCount = batches.size,
+                composable("export") {
+                    ExportScreen(
                         onBack = { navController.popBackStack() },
-                        onOpenImport = { navController.navigate("import") },
-                        onOpenRestore = {
+                        onExportCsv = viewModel::exportCsv,
+                        onSaveTemplate = viewModel::saveTemplate,
+                    )
+                }
+                composable("backup") {
+                    BackupScreen(
+                        onBack = { navController.popBackStack() },
+                        onExportBackup = viewModel::exportBackup,
+                        onRestore = {
                             viewModel.startBackupRestore()
                             navController.navigate("import")
                         },
-                        onOpenHistory = { navController.navigate("import-history") },
-                        onExportCsv = viewModel::exportCsv,
-                        onExportBackup = viewModel::exportBackup,
-                        onSaveTemplate = viewModel::saveTemplate,
                     )
                 }
                 composable("import") {

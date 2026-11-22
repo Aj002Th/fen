@@ -134,7 +134,9 @@ fun ImportScreen(
             Text(
                 text = when {
                     state.stage == ImportStage.READY && state.mapping -> "调整分类"
-                    state.stage == ImportStage.READY || state.stage == ImportStage.PARSING -> "导入预览"
+                    state.stage == ImportStage.READY || state.stage == ImportStage.PARSING ->
+                        if (state.source.isBackup) "恢复预览" else "导入预览"
+                    state.source.isBackup -> "恢复备份"
                     else -> "账单导入"
                 },
                 style = MaterialTheme.typography.headlineLarge,
@@ -287,61 +289,108 @@ private fun SetupContent(
 ) {
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 16.dp)) {
-            item {
-                Surface(
-                    shape = RoundedCornerShape(22.dp),
-                    color = Fen.colors.surface,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Row(Modifier.padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        QuickAction(
-                            title = "导入记录",
-                            badge = if (batchCount > 0) batchCount.toString() else null,
-                            icon = Icons.Outlined.History,
-                            onClick = onOpenHistory,
-                            modifier = Modifier.weight(1f),
-                        )
-                        QuickAction(
-                            title = "下载模板文件",
-                            badge = null,
-                            icon = Icons.Outlined.FileOpen,
-                            onClick = onDownloadTemplate,
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
+            if (state.source.isBackup) {
+                item {
+                    WarningCard(
+                        title = "正在恢复完整备份",
+                        body = "会先清空当前所有分类和流水，再写回备份。请选择 .json 备份文件。",
+                        modifier = Modifier.padding(top = 12.dp),
+                        color = Fen.colors.expense,
+                    )
                 }
-            }
-
-            item {
-                SectionLabel(
-                    "按步骤操作",
-                    modifier = Modifier.padding(top = 20.dp, bottom = 8.dp),
-                )
-            }
-
-            item {
-                Surface(
-                    shape = RoundedCornerShape(22.dp),
-                    color = Fen.colors.surface,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column {
+                item {
+                    SectionLabel("按步骤操作", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
+                }
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(22.dp),
+                        color = Fen.colors.surface,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
                         StepRow(
-                            label = "选择数据文件",
+                            label = "选择备份文件",
                             value = state.fileName.ifBlank { "点此选择" },
                             valueStrong = state.fileName.isNotBlank(),
                             placeholder = state.fileName.isBlank(),
                             onClick = onPickFile,
                         )
-                        RowDivider()
-                        StepRow(
-                            label = "选择导入来源",
-                            value = sourceText(state.source),
-                            valueStrong = true,
-                            placeholder = false,
-                            onClick = onPickSource,
-                        )
                     }
+                }
+                item {
+                    Text(
+                        "完整备份是 JSON，保留分类图标、颜色、id 和精确时间；恢复后与导出前一致。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Fen.colors.inkSoft,
+                        modifier = Modifier.padding(top = 14.dp, start = 4.dp, end = 4.dp),
+                    )
+                }
+            } else {
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(22.dp),
+                        color = Fen.colors.surface,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(Modifier.padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            QuickAction(
+                                title = "导入记录",
+                                badge = if (batchCount > 0) batchCount.toString() else null,
+                                icon = Icons.Outlined.History,
+                                onClick = onOpenHistory,
+                                modifier = Modifier.weight(1f),
+                            )
+                            QuickAction(
+                                title = "下载模板文件",
+                                badge = null,
+                                icon = Icons.Outlined.FileOpen,
+                                onClick = onDownloadTemplate,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    SectionLabel(
+                        "按步骤操作",
+                        modifier = Modifier.padding(top = 20.dp, bottom = 8.dp),
+                    )
+                }
+
+                item {
+                    Surface(
+                        shape = RoundedCornerShape(22.dp),
+                        color = Fen.colors.surface,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column {
+                            StepRow(
+                                label = "选择数据文件",
+                                value = state.fileName.ifBlank { "点此选择" },
+                                valueStrong = state.fileName.isNotBlank(),
+                                placeholder = state.fileName.isBlank(),
+                                onClick = onPickFile,
+                            )
+                            RowDivider()
+                            StepRow(
+                                label = "选择导入来源",
+                                value = sourceText(state.source),
+                                valueStrong = true,
+                                placeholder = false,
+                                onClick = onPickSource,
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    Text(
+                        "xlsx / xls / csv 都可以。来源不确定时保持「自动识别」；" +
+                            "如果选了具体来源，Fen 会按该来源的列名再确认一次。",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Fen.colors.inkSoft,
+                        modifier = Modifier.padding(top = 14.dp, start = 4.dp, end = 4.dp),
+                    )
                 }
             }
 
@@ -354,16 +403,6 @@ private fun SetupContent(
                         color = Fen.colors.expense,
                     )
                 }
-            }
-
-            item {
-                Text(
-                    "xlsx / xls / csv 都可以。来源不确定时保持「自动识别」；" +
-                        "如果选了具体来源，Fen 会按该来源的列名再确认一次。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Fen.colors.inkSoft,
-                    modifier = Modifier.padding(top = 14.dp, start = 4.dp, end = 4.dp),
-                )
             }
         }
 
@@ -453,8 +492,12 @@ private fun RowDivider() {
     Box(Modifier.fillMaxWidth().padding(start = 16.dp).height(1.dp).background(Fen.colors.divider))
 }
 
-private fun sourceText(source: ImportSource): String =
-    if (source.group.isBlank()) "自动识别（推荐）" else "${source.group} · ${source.label}"
+private fun sourceText(source: ImportSource): String = when {
+    source == ImportSource.AUTO -> "自动识别（推荐）"
+    source == ImportSource.FEN_JSON -> "完整备份"
+    source.group.isBlank() -> source.label
+    else -> "${source.group} · ${source.label}"
+}
 
 /**
  * 二级来源选择：第一层是「自动识别 / Fen / iCost / 平台账单 / 其他」，
@@ -491,16 +534,25 @@ private fun SourcePickerDialog(
                         subtitle = "推荐：按表头自动判断，不用先选来源",
                         selected = current == ImportSource.AUTO,
                     ) { onPick(ImportSource.AUTO) }
-                    ImportSource.groups().filter { it.isNotBlank() }.forEach { name ->
+                    OptionRow(
+                        title = "Fen 表格",
+                        subtitle = "日期 / 类型 / 金额 / 分类 / 备注",
+                        selected = current == ImportSource.FEN_CSV,
+                    ) { onPick(ImportSource.FEN_CSV) }
+                    ImportSource.groups.forEach { name ->
                         val children = ImportSource.inGroup(name)
-                        val selected = current.group == name
                         OptionRow(
                             title = name,
                             subtitle = children.joinToString(" / ") { it.label },
-                            selected = selected,
+                            selected = current.group == name,
                             trailingChevron = true,
                         ) { group = name }
                     }
+                    OptionRow(
+                        title = "通用表格",
+                        subtitle = "按表头尽量识别",
+                        selected = current == ImportSource.GENERIC,
+                    ) { onPick(ImportSource.GENERIC) }
                 } else {
                     ImportSource.inGroup(activeGroup).forEach { source ->
                         OptionRow(
