@@ -700,7 +700,7 @@ private fun BalanceCard(stats: StatsBundle, selectedIndex: Int?, onSelect: (Int?
             val value = stats.cumulative.getOrNull(selectedIndex) ?: 0L
             "${bucket?.tableLabel ?: "区间起点"} · 累计 ${formatSignedMoney(value)}"
         } else {
-            "区间起点为 0，仅统计收入 − 支出"
+            "点按曲线查看累计值 · 起点为 0"
         }
         Text(
             text = detail,
