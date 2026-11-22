@@ -3,7 +3,9 @@ package app.fen.mcp
 import android.content.Context
 import android.util.Log
 import app.fen.BuildConfig
-import app.fen.mcp.protocol.modernResult
+import app.fen.mcp.protocol.ProtocolDispatcher
+import app.fen.mcp.protocol.SessionStore
+import app.fen.mcp.tools.ToolResult
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -12,10 +14,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -29,35 +27,14 @@ class McpController(private val context: Context) {
     private val port = 8067
     private val token = "dev-token"
 
-    private val handler = RpcHandler { call, _ ->
-        val body = if (call.method == "initialize") {
-            buildJsonObject {
-                put("jsonrpc", "2.0")
-                put("id", call.id ?: JsonNull)
-                put(
-                    "result",
-                    buildJsonObject {
-                        put("protocolVersion", "2025-11-25")
-                        put("capabilities", buildJsonObject { put("tools", buildJsonObject { }) })
-                        put(
-                            "serverInfo",
-                            buildJsonObject {
-                                put("name", "fen")
-                                put("version", BuildConfig.VERSION_NAME)
-                            },
-                        )
-                    },
-                )
-            }.toString()
-        } else {
-            val payload = buildJsonObject {
-                put("tools", buildJsonArray { })
-                put("server", "fen")
-            }
-            modernResult(call.id, payload, BuildConfig.VERSION_NAME).toString()
-        }
-        RpcOutcome.Json(body)
-    }
+    private val sessions = SessionStore(System::currentTimeMillis)
+    private val dispatcher = ProtocolDispatcher(
+        tools = { emptyList() },
+        callTool = { _, _ -> ToolResult.Error("NOT_IMPLEMENTED", "Tool not implemented yet") },
+        sessions = sessions,
+        serverVersion = BuildConfig.VERSION_NAME,
+    )
+    private val handler = dispatcher
 
     fun start() {
         val current = _state.value
@@ -71,6 +48,7 @@ class McpController(private val context: Context) {
                     token = token,
                     handler = handler,
                     allowedHosts = { setOf("127.0.0.1:$port", "localhost:$port") },
+                    deleteSession = dispatcher::endSession,
                 )
                 instance.start()
                 server = instance
