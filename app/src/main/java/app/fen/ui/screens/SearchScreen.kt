@@ -58,6 +58,9 @@ import app.fen.data.Category
 import app.fen.data.Snapshot
 import app.fen.data.Tx
 import app.fen.data.TxType
+import app.fen.data.query.Sort
+import app.fen.data.query.TxFilter
+import app.fen.data.query.query
 import app.fen.ui.components.CircleAction
 import app.fen.ui.components.EmptyState
 import app.fen.ui.components.IconBadge
@@ -137,47 +140,38 @@ fun SearchScreen(
         val now = System.currentTimeMillis()
         val startOfMonth = YearMonth.now().atDay(1)
             .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        val q = query.trim().lowercase()
 
-        snapshot.transactions
-            .asSequence()
-            .filter { tx ->
-                when (typeFilter) {
-                    TypeFilter.ALL -> true
-                    TypeFilter.EXPENSE -> tx.type == TxType.EXPENSE
-                    TypeFilter.INCOME -> tx.type == TxType.INCOME
-                }
-            }
-            .filter { tx ->
-                when (timeFilter) {
-                    TimeFilter.ALL -> true
-                    TimeFilter.THIS_MONTH -> tx.occurredAt >= startOfMonth
-                    TimeFilter.LAST_30 -> tx.occurredAt >= now - 30L * 24 * 60 * 60 * 1000
-                }
-            }
-            .filter { tx ->
-                when (amountFilter) {
-                    AmountFilter.ANY -> true
-                    AmountFilter.LT100 -> tx.amount < 10_000
-                    AmountFilter.M100_500 -> tx.amount in 10_000..50_000
-                    AmountFilter.GT500 -> tx.amount > 50_000
-                }
-            }
-            .filter { tx ->
-                if (q.isEmpty()) {
-                    true
-                } else {
-                    val categoryName = tx.categoryId?.let { categories[it] }?.name.orEmpty()
-                    tx.note.lowercase().contains(q) ||
-                        categoryName.lowercase().contains(q) ||
-                        formatMoney(tx.amount).contains(q)
-                }
-            }
-            .toList()
-            .let { list ->
-                if (sortFilter == SortFilter.AMOUNT) list.sortedByDescending { it.amount }
-                else list.sortedByDescending { it.occurredAt }
-            }
+        val filter = TxFilter(
+            fromMillis = when (timeFilter) {
+                TimeFilter.ALL -> null
+                TimeFilter.THIS_MONTH -> startOfMonth
+                TimeFilter.LAST_30 -> now - 30L * 24 * 60 * 60 * 1000
+            },
+            type = when (typeFilter) {
+                TypeFilter.ALL -> null
+                TypeFilter.EXPENSE -> TxType.EXPENSE
+                TypeFilter.INCOME -> TxType.INCOME
+            },
+            keyword = query,
+            minMinor = when (amountFilter) {
+                AmountFilter.ANY -> null
+                AmountFilter.LT100 -> null
+                AmountFilter.M100_500 -> 10_000
+                AmountFilter.GT500 -> 50_001
+            },
+            maxMinor = when (amountFilter) {
+                AmountFilter.ANY -> null
+                AmountFilter.LT100 -> 9_999
+                AmountFilter.M100_500 -> 50_000
+                AmountFilter.GT500 -> null
+            },
+        )
+
+        snapshot.transactions.query(
+            filter = filter,
+            categories = categories,
+            sort = if (sortFilter == SortFilter.AMOUNT) Sort.AMOUNT_DESC else Sort.TIME_DESC,
+        )
     }
 
     val expense = results.filter { it.type == TxType.EXPENSE }.sumOf { it.amount }
