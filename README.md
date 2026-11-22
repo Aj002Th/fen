@@ -118,7 +118,7 @@ app/src/main/java/app/fen/
 - [ ] 滑动删除 + 撤销
 - [ ] 预算设置页
 - [ ] 日历视图
-- [ ] 导出 / 导入（CSV、JSON）、本地备份
+- [x] 导出 / 导入（JSON 备份、CSV、iCost xlsx/csv）、导入预览与整批撤销
 - [ ] 主题色自定义、字号设置
 - [ ] 单元测试（Analytics、金额解析）与截图回归
 

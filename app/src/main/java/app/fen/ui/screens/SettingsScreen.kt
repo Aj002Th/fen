@@ -18,7 +18,10 @@ import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Restore
+import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -49,6 +52,9 @@ fun SettingsScreen(
     onThemeModeChange: (Int) -> Unit,
     onBack: () -> Unit,
     onOpenCategories: () -> Unit,
+    onOpenImport: () -> Unit,
+    onOpenExport: () -> Unit,
+    onOpenBackup: () -> Unit,
     showDebug: Boolean = false,
     onSeedDemo: () -> Unit = {},
     onClearData: () -> Unit = {},
@@ -117,6 +123,55 @@ fun SettingsScreen(
                     icon = Icons.Outlined.DarkMode,
                     tint = Color(0xFF7C8794),
                     onClick = { showThemeDialog = true },
+                )
+            }
+        }
+
+        item { SectionLabel("数据", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp)) }
+        item {
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = Fen.colors.surface,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                SettingItem(
+                    title = "导入",
+                    subtitle = "账单导入与来源选择",
+                    icon = Icons.Outlined.Download,
+                    tint = Color(0xFFF2A93E),
+                    onClick = onOpenImport,
+                )
+            }
+        }
+        item { Spacer(Modifier.height(8.dp)) }
+        item {
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = Fen.colors.surface,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                SettingItem(
+                    title = "导出",
+                    subtitle = "CSV 表格与导入模板",
+                    icon = Icons.Outlined.Upload,
+                    tint = Color(0xFF3E8BF2),
+                    onClick = onOpenExport,
+                )
+            }
+        }
+        item { Spacer(Modifier.height(8.dp)) }
+        item {
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = Fen.colors.surface,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                SettingItem(
+                    title = "备份",
+                    subtitle = "完整备份与恢复（JSON）",
+                    icon = Icons.Outlined.Restore,
+                    tint = Color(0xFF8B6CF2),
+                    onClick = onOpenBackup,
                 )
             }
         }

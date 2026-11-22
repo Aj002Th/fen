@@ -1,5 +1,6 @@
 package app.fen.data
 
+import app.fen.data.exchange.ImportPlan
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -91,6 +92,33 @@ class FenRepository(private val db: FenDb) {
     }
 
     fun transactionCount(categoryId: String): Int = db.countTransactions(categoryId)
+
+    fun nextCategoryOrder(): Int = db.nextCategoryOrder()
+
+    /** 写入一次导入（分类 + 流水 + 批次），单事务完成。 */
+    fun applyImport(plan: ImportPlan, batch: ImportBatch) {
+        if (plan.transactions.isEmpty()) return
+        db.insertImport(plan.newCategories, plan.transactions, batch)
+        refresh()
+    }
+
+    /** 恢复 Fen JSON 备份：整体替换（覆盖）现有分类与流水。 */
+    fun restoreBackup(backup: FenBackup) {
+        db.replaceAll(backup.categories, backup.transactions)
+        refresh()
+    }
+
+    fun importBatches(): List<ImportBatch> = db.importBatches()
+
+    fun hasImportHash(hash: String): Boolean = db.hasImportHash(hash)
+
+    fun ensureUncategorized(type: TxType): String = db.ensureUncategorized(type)
+
+    /** 撤销一次导入：删除该批次写入的流水与批次记录（保留导入时新建的空分类）。 */
+    fun deleteImportBatch(id: String) {
+        db.deleteImportBatch(id)
+        refresh()
+    }
 
     /** 开发/验收用：生成演示数据 */
     fun seedDemoData(count: Int = 400) {
