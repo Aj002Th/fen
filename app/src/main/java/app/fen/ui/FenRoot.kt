@@ -9,6 +9,8 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -53,6 +55,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -79,6 +82,18 @@ import kotlinx.coroutines.launch
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
+private fun tabIndex(entry: NavBackStackEntry?): Int? = when (entry?.destination?.route) {
+    "bills" -> 0
+    "stats" -> 1
+    else -> null
+}
+
+private fun tabForward(initial: NavBackStackEntry, target: NavBackStackEntry): Boolean {
+    val from = tabIndex(initial)
+    val to = tabIndex(target)
+    return if (from != null && to != null) to > from else true
+}
+
 private val tabs = listOf(
     Tab("bills", "明细", Icons.Outlined.ReceiptLong),
     Tab("stats", "统计", Icons.Outlined.PieChart),
@@ -99,12 +114,7 @@ fun FenRoot(viewModel: FenViewModel = viewModel()) {
 
 @Composable
 private fun FenContent(viewModel: FenViewModel) {
-    val fenExit = tween<Float>(FenMotion.durationMillis / 2, easing = FastOutSlowInEasing)
-    val fenEnter = tween<Float>(
-        FenMotion.durationMillis / 2,
-        delayMillis = FenMotion.durationMillis / 2,
-        easing = FastOutSlowInEasing,
-    )
+    val fenSlide = tween<IntOffset>(FenMotion.durationMillis, easing = FastOutSlowInEasing)
     val fenFloat = tween<Float>(FenMotion.durationMillis, easing = FastOutSlowInEasing)
     val snapshot by viewModel.snapshot.collectAsStateWithLifecycle()
     val month by viewModel.month.collectAsStateWithLifecycle()
@@ -186,20 +196,24 @@ private fun FenContent(viewModel: FenViewModel) {
                 navController = navController,
                 startDestination = "bills",
                 modifier = Modifier.padding(innerPadding).background(Fen.colors.bg),
-                enterTransition = { fadeIn(fenEnter) },
-                exitTransition = { fadeOut(fenExit) },
-                popEnterTransition = { fadeIn(fenEnter) },
-                popExitTransition = { fadeOut(fenExit) },
-                predictivePopEnterTransition = { fadeIn(fenEnter) },
-                predictivePopExitTransition = { fadeOut(fenExit) },
+                enterTransition = {
+                    if (tabForward(initialState, targetState)) {
+                        slideInHorizontally(fenSlide) { it }
+                    } else {
+                        slideInHorizontally(fenSlide) { -it }
+                    }
+                },
+                exitTransition = {
+                    if (tabForward(initialState, targetState)) {
+                        slideOutHorizontally(fenSlide) { -it / 4 }
+                    } else {
+                        slideOutHorizontally(fenSlide) { it / 4 }
+                    }
+                },
+                popEnterTransition = { slideInHorizontally(fenSlide) { -it / 4 } },
+                popExitTransition = { slideOutHorizontally(fenSlide) { it } },
             ) {
-                composable(
-                    "bills",
-                    enterTransition = { EnterTransition.None },
-                    exitTransition = { ExitTransition.None },
-                    popEnterTransition = { EnterTransition.None },
-                    popExitTransition = { ExitTransition.None },
-                ) {
+                composable("bills") {
                     BillsScreen(
                         snapshot = snapshot,
                         month = month,
@@ -214,13 +228,7 @@ private fun FenContent(viewModel: FenViewModel) {
                         onOpenSettings = { navController.navigate("settings") },
                     )
                 }
-                composable(
-                    "stats",
-                    enterTransition = { EnterTransition.None },
-                    exitTransition = { ExitTransition.None },
-                    popEnterTransition = { EnterTransition.None },
-                    popExitTransition = { ExitTransition.None },
-                ) {
+                composable("stats") {
                     StatsScreen(
                         snapshot = snapshot,
                         statsMode = statsMode,
