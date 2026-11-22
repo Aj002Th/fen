@@ -7,6 +7,8 @@ import android.os.Build
 object IntentImageReader {
     fun firstImage(intent: Intent): String? = SharePayloadParser.firstImage(toPayload(intent))
 
+    fun allImages(intent: Intent): List<String> = SharePayloadParser.allImages(toPayload(intent))
+
     fun toPayload(intent: Intent): SharePayload = SharePayload(
         action = intent.action,
         type = intent.type,

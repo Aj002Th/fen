@@ -16,4 +16,15 @@ object SharePayloadParser {
                 ?: payload.dataUri
         }
     }
+
+    fun allImages(payload: SharePayload): List<String> {
+        if (payload.type?.startsWith("image/") != true) return emptyList()
+        val uris = when (payload.action) {
+            ACTION_SEND -> payload.streamUris + payload.clipUris
+            ACTION_SEND_MULTIPLE -> payload.clipUris + payload.streamUris
+            ACTION_VIEW -> listOfNotNull(payload.dataUri)
+            else -> payload.streamUris + payload.clipUris + listOfNotNull(payload.dataUri)
+        }
+        return uris.distinct()
+    }
 }

@@ -31,8 +31,15 @@ class MainActivity : ComponentActivity() {
 
     private fun handleImportIntent(intent: Intent?) {
         if (intent == null) return
-        val uri = IntentImageReader.firstImage(intent) ?: return
-        (application as FenApp).imageImport.submit(Uri.parse(uri))
+        val uris = IntentImageReader.allImages(intent)
+        if (uris.isEmpty()) return
+        val parsed = uris.map(Uri::parse)
+        val imageImport = (application as FenApp).imageImport
+        if (parsed.size == 1) {
+            imageImport.submit(parsed.first())
+        } else {
+            imageImport.submitAll(parsed)
+        }
     }
 
     /**

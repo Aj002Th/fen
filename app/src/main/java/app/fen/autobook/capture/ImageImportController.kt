@@ -23,6 +23,7 @@ sealed interface ImageImportState {
     data object Idle : ImageImportState
     data object Loading : ImageImportState
     data class Ready(val bill: ParsedBill, val preview: Bitmap?) : ImageImportState
+    data class ReadyBatch(val bills: List<ParsedBill>) : ImageImportState
     data class Error(val message: String) : ImageImportState
 }
 
@@ -42,23 +43,47 @@ class ImageImportController(
         scope.launch {
             _state.value = ImageImportState.Loading
             try {
-                val bitmap = decode(uri) ?: error("无法读取图片")
-                val ocrResult = ocr.recognize(bitmap)
-                val bill = engine.recognize(
-                    lines = ocrResult.lines,
-                    nowMillis = System.currentTimeMillis(),
-                    zone = ZoneId.systemDefault(),
-                )
-                val classified = classifier.apply(bill, categories())
-                _state.value = ImageImportState.Ready(classified, bitmap)
+                val bill = recognize(uri) ?: error("无法读取图片")
+                _state.value = ImageImportState.Ready(bill, null)
             } catch (error: Exception) {
                 _state.value = ImageImportState.Error(error.message ?: "识别失败")
             }
         }
     }
 
+    fun submitAll(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        scope.launch {
+            _state.value = ImageImportState.Loading
+            val bills = mutableListOf<ParsedBill>()
+            for (uri in uris.take(MAX_BATCH)) {
+                runCatching { recognize(uri) }.getOrNull()?.let { bills += it }
+            }
+            _state.value = if (bills.isEmpty()) {
+                ImageImportState.Error("未识别到账单")
+            } else {
+                ImageImportState.ReadyBatch(bills)
+            }
+        }
+    }
+
     fun consume() {
         _state.value = ImageImportState.Idle
+    }
+
+    private suspend fun recognize(uri: Uri): ParsedBill? {
+        val bitmap = decode(uri) ?: return null
+        return try {
+            val ocrResult = ocr.recognize(bitmap)
+            val bill = engine.recognize(
+                lines = ocrResult.lines,
+                nowMillis = System.currentTimeMillis(),
+                zone = ZoneId.systemDefault(),
+            )
+            classifier.apply(bill, categories())
+        } finally {
+            bitmap.recycle()
+        }
     }
 
     private fun decode(uri: Uri): Bitmap? {
@@ -77,5 +102,6 @@ class ImageImportController(
 
     private companion object {
         const val MAX_EDGE = 2048
+        const val MAX_BATCH = 9
     }
 }
