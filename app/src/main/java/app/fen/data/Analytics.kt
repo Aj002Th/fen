@@ -340,8 +340,9 @@ private val UncategorizedIncome = Category(
     sortOrder = Int.MAX_VALUE,
 )
 
-private fun uncategorized(type: TxType): Category =
-    if (type == TxType.EXPENSE) UncategorizedExpense else UncategorizedIncome
+private fun uncategorized(type: TxType, categories: List<Category>): Category =
+    categories.firstOrNull { it.type == type && it.name == "未分类" }
+        ?: if (type == TxType.EXPENSE) UncategorizedExpense else UncategorizedIncome
 
 fun List<Tx>.categoryStats(
     type: TxType,
@@ -355,7 +356,7 @@ fun List<Tx>.categoryStats(
 
     for (tx in this) {
         if (tx.type != type) continue
-        val category = tx.categoryId?.let { byId[it] } ?: uncategorized(type)
+        val category = tx.categoryId?.let { byId[it] } ?: uncategorized(type, categories)
         resolved[category.id] = category
         amounts[category.id] = (amounts[category.id] ?: 0L) + tx.amount
         counts[category.id] = (counts[category.id] ?: 0) + 1
@@ -364,13 +365,13 @@ fun List<Tx>.categoryStats(
     val previousAmounts = linkedMapOf<String, Long>()
     for (tx in previous) {
         if (tx.type != type) continue
-        val category = tx.categoryId?.let { byId[it] } ?: uncategorized(type)
+        val category = tx.categoryId?.let { byId[it] } ?: uncategorized(type, categories)
         previousAmounts[category.id] = (previousAmounts[category.id] ?: 0L) + tx.amount
     }
 
     val total = amounts.values.sum()
     return amounts.map { (id, amount) ->
-        val category = resolved[id] ?: uncategorized(type)
+        val category = resolved[id] ?: uncategorized(type, categories)
         CategoryStat(
             category = category,
             amount = amount,

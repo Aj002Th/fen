@@ -5,6 +5,7 @@ import android.content.Context
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import app.fen.data.exchange.UNCATEGORIZED_NAME
 import java.util.UUID
 
 /**
@@ -38,11 +39,25 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
                 amount INTEGER NOT NULL,
                 category_id TEXT,
                 note TEXT NOT NULL DEFAULT '',
-                occurred_at INTEGER NOT NULL
+                occurred_at INTEGER NOT NULL,
+                import_batch TEXT
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            CREATE TABLE import_batch(
+                id TEXT PRIMARY KEY,
+                source TEXT NOT NULL,
+                label TEXT NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL,
+                rows INTEGER NOT NULL,
+                file_hash TEXT
             )
             """.trimIndent()
         )
         db.execSQL("CREATE INDEX idx_tx_occurred ON tx(occurred_at)")
+        db.execSQL("CREATE INDEX idx_tx_batch ON tx(import_batch)")
         seed(db)
     }
 
@@ -89,6 +104,37 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
             db.execSQL("DROP TABLE category")
             db.execSQL("ALTER TABLE category_new RENAME TO category")
         }
+        if (oldVersion < 6) {
+            db.execSQL("ALTER TABLE tx ADD COLUMN import_batch TEXT")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS import_batch(
+                    id TEXT PRIMARY KEY,
+                    source TEXT NOT NULL,
+                    label TEXT NOT NULL DEFAULT '',
+                    created_at INTEGER NOT NULL,
+                    rows INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_tx_batch ON tx(import_batch)")
+        }
+        if (oldVersion < 7) {
+            db.execSQL("ALTER TABLE import_batch ADD COLUMN file_hash TEXT")
+        }
+        if (oldVersion < 8) {
+            // 「未分类」成为真实分类；NULL / 已删除分类的流水一并归进去
+            for (type in TxType.entries) {
+                val id = ensureUncategorized(db, type)
+                db.execSQL(
+                    """
+                    UPDATE tx SET category_id = ?
+                    WHERE type = ? AND (category_id IS NULL OR category_id NOT IN (SELECT id FROM category))
+                    """.trimIndent(),
+                    arrayOf(id, type.name),
+                )
+            }
+        }
     }
 
     private fun seed(db: SQLiteDatabase) {
@@ -117,6 +163,10 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
         income.forEachIndexed { index, (name, icon) ->
             add(name, TxType.INCOME, icon, IncomePaletteColors[index % IncomePaletteColors.size])
         }
+
+        // 「未分类」是一个真实分类，手工记账时也能直接选
+        ensureUncategorized(db, TxType.EXPENSE)
+        ensureUncategorized(db, TxType.INCOME)
     }
 
     fun categories(): List<Category> = readableDatabase.query(
@@ -127,7 +177,7 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
 
     fun transactions(): List<Tx> = readableDatabase.query(
         "tx",
-        arrayOf("id", "type", "amount", "category_id", "note", "occurred_at"),
+        arrayOf("id", "type", "amount", "category_id", "note", "occurred_at", "import_batch"),
         null, null, null, null, "occurred_at DESC",
     ).use { c -> c.mapAll { it.toTx() } }
 
@@ -287,7 +337,147 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
     }
 
     fun clearTransactions() {
-        writableDatabase.delete("tx", null, null)
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("tx", null, null)
+            db.delete("import_batch", null, null)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * 单事务写入一次导入：先补分类，再写流水和批次记录。
+     * 任何一行失败都整体回滚，不会留下半批数据。
+     */
+    fun insertImport(newCategories: List<Category>, txs: List<Tx>, batch: ImportBatch) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            newCategories.forEach { db.insertOrThrow("category", null, it.toValues()) }
+            txs.forEach { db.insertOrThrow("tx", null, it.toValues()) }
+            db.insertOrThrow("import_batch", null, ContentValues().apply {
+                put("id", batch.id)
+                put("source", batch.source)
+                put("label", batch.label)
+                put("created_at", batch.createdAt)
+                put("rows", batch.rows)
+                put("file_hash", batch.fileHash)
+            })
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    fun importBatches(): List<ImportBatch> = readableDatabase.rawQuery(
+        """
+        SELECT b.id, b.source, b.label, b.created_at, b.rows,
+               (SELECT COUNT(*) FROM tx t WHERE t.import_batch = b.id) AS remaining,
+               b.file_hash
+        FROM import_batch b
+        ORDER BY b.created_at DESC
+        """.trimIndent(),
+        null,
+    ).use { c ->
+        buildList {
+            while (c.moveToNext()) {
+                add(
+                    ImportBatch(
+                        id = c.getString(0),
+                        source = c.getString(1),
+                        label = c.getString(2),
+                        createdAt = c.getLong(3),
+                        rows = c.getInt(4),
+                        remaining = c.getInt(5),
+                        fileHash = c.getString(6),
+                    )
+                )
+            }
+        }
+    }
+
+    /** 是否还有未删除的批次导入过同一个文件。 */
+    fun hasImportHash(hash: String): Boolean {
+        if (hash.isBlank()) return false
+        readableDatabase.rawQuery(
+            "SELECT 1 FROM import_batch WHERE file_hash = ? LIMIT 1",
+            arrayOf(hash),
+        ).use { return it.moveToFirst() }
+    }
+
+    /** 删除一次导入以及它写入的全部流水 */
+    fun deleteImportBatch(id: String) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("tx", "import_batch = ?", arrayOf(id))
+            db.delete("import_batch", "id = ?", arrayOf(id))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** 备份恢复：整体替换分类与流水（批次记录一并清空） */
+    fun replaceAll(categories: List<Category>, txs: List<Tx>) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("tx", null, null)
+            db.delete("category", null, null)
+            db.delete("import_batch", null, null)
+            categories.forEach { db.insertOrThrow("category", null, it.toValues()) }
+            txs.forEach { db.insertOrThrow("tx", null, it.toValues()) }
+            // 备份里如果还有 category_id = NULL 的流水，也归到真实的「未分类」
+            for (type in TxType.entries) {
+                val hasNull = db.rawQuery(
+                    "SELECT 1 FROM tx WHERE type = ? AND category_id IS NULL LIMIT 1",
+                    arrayOf(type.name),
+                ).use { it.moveToFirst() }
+                if (hasNull) {
+                    val id = ensureUncategorized(db, type)
+                    db.execSQL(
+                        "UPDATE tx SET category_id = ? WHERE type = ? AND category_id IS NULL",
+                        arrayOf(id, type.name),
+                    )
+                }
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** 确保「未分类」是一个真实分类，返回它的 id。 */
+    fun ensureUncategorized(type: TxType): String = ensureUncategorized(writableDatabase, type)
+
+    private fun ensureUncategorized(db: SQLiteDatabase, type: TxType): String {
+        db.rawQuery(
+            "SELECT id FROM category WHERE name = ? AND type = ? LIMIT 1",
+            arrayOf(UNCATEGORIZED_NAME, type.name),
+        ).use { cursor ->
+            if (cursor.moveToFirst()) return cursor.getString(0)
+        }
+        val id = UUID.randomUUID().toString()
+        val order = db.rawQuery("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM category", null).use {
+            if (it.moveToFirst()) it.getInt(0) else 0
+        }
+        db.insertOrThrow(
+            "category",
+            null,
+            Category(
+                id = id,
+                name = UNCATEGORIZED_NAME,
+                type = type,
+                icon = if (type == TxType.INCOME) "other_income" else "other",
+                color = 0xFF7C8794,
+                sortOrder = order,
+            ).toValues(),
+        )
+        return id
     }
 
     private fun Tx.toValues() = ContentValues().apply {
@@ -297,6 +487,7 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
         put("category_id", categoryId)
         put("note", note)
         put("occurred_at", occurredAt)
+        put("import_batch", importBatch)
     }
 
     private fun Category.toValues() = ContentValues().apply {
@@ -309,7 +500,7 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
     }
 
     private companion object {
-        const val DB_VERSION = 5
+        const val DB_VERSION = 8
 
         val CategoryPaletteColors = listOf(
             0xFFF2583E, 0xFF3E8BF2, 0xFF17A467, 0xFFF2A93E,
@@ -341,4 +532,5 @@ private fun Cursor.toTx() = Tx(
     categoryId = getString(3),
     note = getString(4),
     occurredAt = getLong(5),
+    importBatch = getString(6),
 )

@@ -196,6 +196,31 @@ class AnalyticsTest {
     }
 
     @Test
+    fun `null category reuses real uncategorized category`() {
+        val period = statsPeriod(
+            StatsMode.RANGE,
+            LocalDate.of(2026, 11, 1),
+            LocalDate.of(2026, 11, 1),
+            LocalDate.of(2026, 11, 30),
+            LocalDate.of(2026, 11, 30),
+        )
+        val realNone = Category("real-none", "未分类", TxType.EXPENSE, "other", 0xFF7C8794, 0)
+        val categories = listOf(realNone, category("food", TxType.EXPENSE))
+        val txs = listOf(
+            tx(TxType.EXPENSE, 100, LocalDate.of(2026, 11, 2), null),
+            tx(TxType.EXPENSE, 200, LocalDate.of(2026, 11, 3), "food"),
+        )
+
+        val stats = buildStats(txs, categories, period)
+
+        assertEquals(2, stats.expenseCategories.size)
+        assertEquals(
+            "real-none",
+            stats.expenseCategories.first { it.category.name == "未分类" }.category.id,
+        )
+    }
+
+    @Test
     fun `income categories are separate from expense categories`() {
         val period = statsPeriod(
             StatsMode.RANGE,
