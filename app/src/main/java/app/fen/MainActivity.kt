@@ -1,10 +1,12 @@
 package app.fen
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import app.fen.autobook.capture.IntentImageReader
 import app.fen.ui.FenRoot
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -15,6 +17,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         handleDebugIntent(intent)
+        handleImportIntent(intent)
         setContent {
             FenRoot()
         }
@@ -23,6 +26,13 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleDebugIntent(intent)
+        handleImportIntent(intent)
+    }
+
+    private fun handleImportIntent(intent: Intent?) {
+        if (intent == null) return
+        val uri = IntentImageReader.firstImage(intent) ?: return
+        (application as FenApp).imageImport.submit(Uri.parse(uri))
     }
 
     /**
