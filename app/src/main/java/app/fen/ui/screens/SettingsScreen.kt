@@ -21,7 +21,6 @@ import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Restore
-import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Upload
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -47,12 +46,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import app.fen.BuildConfig
 import app.fen.ui.components.CircleAction
+import app.fen.ui.components.DotBadge
 import app.fen.ui.components.IconBadge
 import app.fen.ui.components.RowDivider
 import app.fen.ui.components.SectionLabel
 import app.fen.ui.theme.Fen
-import app.fen.update.UpdateUiState
-import app.fen.update.updateRowSubtitle
+import app.fen.update.UpdateVersion
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,27 +64,16 @@ fun SettingsScreen(
     onOpenImport: () -> Unit,
     onOpenExport: () -> Unit,
     onOpenBackup: () -> Unit,
-    updateState: UpdateUiState,
-    isDevBuild: Boolean,
-    onCheckUpdate: () -> Unit,
-    onCloseUpdate: () -> Unit,
-    onDownloadUpdate: () -> Unit,
-    onCancelUpdate: () -> Unit,
-    onRetryUpdate: () -> Unit,
-    onOpenInstallPermission: () -> Unit,
-    onResumeUpdatePermission: () -> Unit,
-    onRecheckUpdate: () -> Unit,
+    devUnlocked: Boolean,
+    hasUpdate: Boolean,
+    onOpenAbout: () -> Unit,
     showDebug: Boolean = false,
     onSeedDemo: () -> Unit = {},
     onClearData: () -> Unit = {},
 ) {
     var showThemeDialog by remember { mutableStateOf(false) }
-    var showAbout by remember { mutableStateOf(false) }
     var showSeedConfirm by remember { mutableStateOf(false) }
     var showClearConfirm by remember { mutableStateOf(false) }
-    // 开发选项默认隐藏：在「关于」弹窗里连点标题 10 次才出现；进程退出后重置
-    var devUnlocked by remember { mutableStateOf(false) }
-    var aboutTaps by remember { mutableStateOf(0) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -220,26 +208,14 @@ fun SettingsScreen(
                 color = Fen.colors.surface,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Column {
-                    SettingItem(
-                        title = "Fen",
-                        subtitle = "版本 ${BuildConfig.VERSION_NAME} · " + if (BuildConfig.FEN_VARIANT == "prod") "开源" else "开发版",
-                        icon = Icons.Outlined.Info,
-                        tint = Color(0xFFF2583E),
-                        onClick = {
-                            aboutTaps = 0
-                            showAbout = true
-                        },
-                    )
-                    RowDivider(startInset = 64.dp)
-                    SettingItem(
-                        title = "检查更新",
-                        subtitle = updateRowSubtitle(updateState),
-                        icon = Icons.Outlined.SystemUpdate,
-                        tint = Color(0xFF2F6BFF),
-                        onClick = onCheckUpdate,
-                    )
-                }
+                SettingItem(
+                    title = "Fen",
+                    subtitle = "版本 ${UpdateVersion.normalize(BuildConfig.VERSION_NAME)}",
+                    icon = Icons.Outlined.Info,
+                    tint = Color(0xFFF2583E),
+                    onClick = onOpenAbout,
+                    trailingDot = hasUpdate,
+                )
             }
         }
 
@@ -316,36 +292,6 @@ fun SettingsScreen(
         }
     }
 
-    if (showAbout) {
-        AlertDialog(
-            onDismissRequest = { showAbout = false },
-            title = {
-                Text(
-                    text = "Fen · 分",
-                    modifier = Modifier.clickable {
-                        aboutTaps += 1
-                        if (aboutTaps >= 10) {
-                            devUnlocked = true
-                            aboutTaps = 0
-                            showAbout = false
-                        }
-                    },
-                )
-            },
-            text = {
-                Text(
-                    "一个开源、克制的 Android 记账应用。\n" +
-                        "数据只保存在本机，没有账号。\n" +
-                        "唯一的联网是检查更新：启动时最多每小时一次，\n" +
-                        "或你点击检查更新时访问 GitHub 获取版本信息，不上传任何数据。\n\n" +
-                        "版本 ${BuildConfig.VERSION_NAME}"
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { showAbout = false }) { Text("好的") }
-            },
-        )
-    }
     if (showSeedConfirm) {
         AlertDialog(
             onDismissRequest = { showSeedConfirm = false },
@@ -379,20 +325,6 @@ fun SettingsScreen(
             },
         )
     }
-
-    if (updateState.sheetVisible) {
-        UpdateSheet(
-            state = updateState,
-            isDevBuild = isDevBuild,
-            onDismiss = onCloseUpdate,
-            onDownload = onDownloadUpdate,
-            onCancel = onCancelUpdate,
-            onRetry = onRetryUpdate,
-            onOpenPermission = onOpenInstallPermission,
-            onResumeAfterPermission = onResumeUpdatePermission,
-            onRecheck = onRecheckUpdate,
-        )
-    }
 }
 
 @Composable
@@ -402,6 +334,7 @@ private fun SettingItem(
     icon: ImageVector,
     tint: Color,
     onClick: () -> Unit,
+    trailingDot: Boolean = false,
 ) {
     Row(
         modifier = Modifier
@@ -419,6 +352,10 @@ private fun SettingItem(
                 style = MaterialTheme.typography.bodyMedium,
                 color = Fen.colors.inkSoft,
             )
+        }
+        if (trailingDot) {
+            DotBadge()
+            Spacer(Modifier.size(8.dp))
         }
         Icon(
             Icons.Rounded.ChevronRight,

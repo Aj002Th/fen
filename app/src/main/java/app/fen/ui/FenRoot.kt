@@ -70,6 +70,7 @@ import androidx.navigation.compose.rememberNavController
 import app.fen.BuildConfig
 import app.fen.data.Tx
 import app.fen.ui.screens.AddTransactionScreen
+import app.fen.ui.screens.AboutScreen
 import app.fen.ui.screens.BackupScreen
 import app.fen.ui.screens.BillsScreen
 import app.fen.ui.screens.CategoryManagerScreen
@@ -80,10 +81,12 @@ import app.fen.ui.screens.SearchScreen
 import app.fen.ui.screens.SettingsScreen
 import app.fen.ui.screens.StatsBoardSettingsScreen
 import app.fen.ui.screens.StatsScreen
+import app.fen.ui.screens.UpdateSheet
 import app.fen.ui.theme.Fen
 import app.fen.ui.theme.FenMotion
 import app.fen.ui.theme.FenTheme
 import app.fen.update.UpdateViewModel
+import app.fen.update.hasAvailableUpdate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -165,6 +168,7 @@ private fun FenContent(viewModel: FenViewModel) {
     val showBottomBar = currentRoute == null || RootTabs.isRoot(currentRoute)
     var showAdd by remember { mutableStateOf(false) }
     var editingTx by remember { mutableStateOf<Tx?>(null) }
+    var devUnlocked by remember { mutableStateOf(false) }
     val addOffset = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
 
@@ -299,16 +303,9 @@ private fun FenContent(viewModel: FenViewModel) {
                             onOpenImport = { navController.navigate("import") },
                             onOpenExport = { navController.navigate("export") },
                             onOpenBackup = { navController.navigate("backup") },
-                            updateState = updateState,
-                            isDevBuild = updateViewModel.isDevBuild,
-                            onCheckUpdate = updateViewModel::openAndCheck,
-                            onCloseUpdate = updateViewModel::closeSheet,
-                            onDownloadUpdate = updateViewModel::downloadAndInstall,
-                            onCancelUpdate = updateViewModel::cancelDownload,
-                            onRetryUpdate = updateViewModel::retry,
-                            onOpenInstallPermission = updateViewModel::openInstallPermission,
-                            onResumeUpdatePermission = updateViewModel::resumeAfterPermission,
-                            onRecheckUpdate = updateViewModel::openAndCheck,
+                            devUnlocked = devUnlocked,
+                            hasUpdate = hasAvailableUpdate(updateState),
+                            onOpenAbout = { navController.navigate("about") },
                             showDebug = BuildConfig.DEBUG,
                             onSeedDemo = {
                                 scope.launch(Dispatchers.IO) { viewModel.seedDemoData(400) }
@@ -423,6 +420,20 @@ private fun FenContent(viewModel: FenViewModel) {
                         )
                     }
                 }
+                composable("about") {
+                    FenPage {
+                        AboutScreen(
+                            versionName = BuildConfig.VERSION_NAME,
+                            updateState = updateState,
+                            onBack = { navController.popBackStack() },
+                            onCheckUpdate = updateViewModel::openAndCheck,
+                            onUnlockDev = {
+                                devUnlocked = true
+                                navController.popBackStack()
+                            },
+                        )
+                    }
+                }
             }
         }
 
@@ -462,6 +473,20 @@ private fun FenContent(viewModel: FenViewModel) {
                     }
                     if (!andContinue) scope.launch { dismissAdd() }
                 },
+            )
+        }
+
+        if (updateState.sheetVisible) {
+            UpdateSheet(
+                state = updateState,
+                isDevBuild = updateViewModel.isDevBuild,
+                onDismiss = updateViewModel::closeSheet,
+                onDownload = updateViewModel::downloadAndInstall,
+                onCancel = updateViewModel::cancelDownload,
+                onRetry = updateViewModel::retry,
+                onOpenPermission = updateViewModel::openInstallPermission,
+                onResumeAfterPermission = updateViewModel::resumeAfterPermission,
+                onRecheck = updateViewModel::openAndCheck,
             )
         }
     }
