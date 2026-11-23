@@ -2,7 +2,6 @@ package app.fen.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.border
@@ -12,6 +11,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -81,7 +83,7 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun AddTransactionScreen(
     snapshot: Snapshot,
@@ -141,6 +143,19 @@ fun AddTransactionScreen(
     val gridState = rememberLazyGridState()
     val focusManager = LocalFocusManager.current
     val view = LocalView.current
+    val imeVisible = WindowInsets.isImeVisible
+    var imeWasVisible by remember { mutableStateOf(false) }
+
+    // 用户按返回键收起系统键盘时，备注框可能仍持有焦点；清掉焦点让数字键盘回来。
+    LaunchedEffect(imeVisible) {
+        if (imeVisible) {
+            imeWasVisible = true
+        } else if (imeWasVisible) {
+            imeWasVisible = false
+            focusManager.clearFocus()
+            noteFocused = false
+        }
+    }
 
     LaunchedEffect(hint) {
         if (hint != null) {
@@ -159,6 +174,12 @@ fun AddTransactionScreen(
 
     val amountMinor = parseAmountToMinor(amountText)
     val canSave = amountMinor > 0 && selectedCategoryId != null
+
+    // 点金额、分类、日期等区域时收起系统键盘，恢复自带数字键盘。
+    fun dismissNoteFocus() {
+        if (noteFocused) noteFocused = false
+        focusManager.clearFocus()
+    }
 
     fun key(input: String) {
         if (!amountTouched) {
@@ -213,6 +234,7 @@ fun AddTransactionScreen(
                 options = listOf("支出", "收入"),
                 selected = if (type == TxType.EXPENSE) 0 else 1,
                 onSelect = { index ->
+                    dismissNoteFocus()
                     val next = if (index == 0) TxType.EXPENSE else TxType.INCOME
                     if (next != type) {
                         type = next
@@ -243,13 +265,21 @@ fun AddTransactionScreen(
                         key = { index -> if (index == categories.size) "manage" else categories[index].id },
                     ) { index ->
                         if (index == categories.size) {
-                            ManageCategoriesTile(onClick = onManageCategories)
+                            ManageCategoriesTile(
+                                onClick = {
+                                    dismissNoteFocus()
+                                    onManageCategories()
+                                }
+                            )
                         } else {
                             val category = categories[index]
                             CategoryTile(
                                 category = category,
                                 selected = category.id == selectedCategoryId,
-                                onClick = { categoryId = category.id },
+                                onClick = {
+                                    dismissNoteFocus()
+                                    categoryId = category.id
+                                },
                             )
                         }
                     }
@@ -328,7 +358,13 @@ fun AddTransactionScreen(
             Surface(
                 shape = RoundedCornerShape(22.dp),
                 color = Fen.colors.surface,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) { dismissNoteFocus() }
+                    .padding(horizontal = 16.dp),
             ) {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
                     Row(verticalAlignment = Alignment.Bottom) {
@@ -360,7 +396,13 @@ fun AddTransactionScreen(
                         modifier = Modifier.fillMaxWidth().height(32.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        DateTimeChip(dateTime = dateTime, onClick = { showPicker = true })
+                        DateTimeChip(
+                            dateTime = dateTime,
+                            onClick = {
+                                dismissNoteFocus()
+                                showPicker = true
+                            },
+                        )
                         Spacer(Modifier.width(10.dp))
                         BasicTextField(
                             value = note,
@@ -370,7 +412,7 @@ fun AddTransactionScreen(
                             cursorBrush = SolidColor(accent),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                             keyboardActions = KeyboardActions(
-                                onDone = { focusManager.clearFocus() }
+                                onDone = { dismissNoteFocus() }
                             ),
                             modifier = Modifier
                                 .weight(1f)
@@ -392,22 +434,30 @@ fun AddTransactionScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            if (!noteFocused) {
-                AmountKeypad(
-                    onDigit = ::key,
-                    onDot = { key(".") },
-                    onBackspace = {
-                        amountTouched = true
-                        amountText = amountText.dropLast(1)
-                    },
-                    onRecord = { submit(andContinue = true) },
-                    onDone = { submit(andContinue = false) },
-                    canSave = canSave,
-                    accent = accent,
-                    showRecord = initial == null,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-                Spacer(Modifier.height(12.dp))
+            AnimatedVisibility(
+                visible = !noteFocused,
+                enter = androidx.compose.animation.fadeIn() +
+                    androidx.compose.animation.expandVertically(),
+                exit = androidx.compose.animation.fadeOut() +
+                    androidx.compose.animation.shrinkVertically(),
+            ) {
+                Column {
+                    AmountKeypad(
+                        onDigit = ::key,
+                        onDot = { key(".") },
+                        onBackspace = {
+                            amountTouched = true
+                            amountText = amountText.dropLast(1)
+                        },
+                        onRecord = { submit(andContinue = true) },
+                        onDone = { submit(andContinue = false) },
+                        canSave = canSave,
+                        accent = accent,
+                        showRecord = initial == null,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
             }
         }
 
