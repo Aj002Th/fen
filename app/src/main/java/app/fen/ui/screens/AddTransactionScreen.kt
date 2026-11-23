@@ -1,7 +1,9 @@
 package app.fen.ui.screens
 
+import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.border
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -52,6 +55,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.runtime.LaunchedEffect
@@ -59,6 +64,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import app.fen.autobook.model.ParsedBill
+import app.fen.autobook.ui.SourceLabels
 import app.fen.data.Category
 import app.fen.data.Snapshot
 import app.fen.data.Tx
@@ -83,6 +90,8 @@ import java.util.Locale
 fun AddTransactionScreen(
     snapshot: Snapshot,
     initial: Tx? = null,
+    draft: ParsedBill? = null,
+    draftPreview: Bitmap? = null,
     suggestionPenalties: Map<String, Int> = emptyMap(),
     onPenalizeSuggestion: (String) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -97,17 +106,24 @@ fun AddTransactionScreen(
         andContinue: Boolean,
     ) -> Unit,
 ) {
-    val initialCategory = remember(snapshot.categories, initial) {
-        initial?.categoryId?.let { id -> snapshot.categories.firstOrNull { it.id == id } }
+    val baseType = initial?.type ?: draft?.type ?: TxType.EXPENSE
+    val baseAmount = initial?.amount ?: draft?.amountMinor ?: 0L
+    val baseNote = initial?.note ?: draft?.merchant ?: ""
+    val baseTime = initial?.occurredAt ?: draft?.occurredAt
+    val baseCategoryId = initial?.categoryId ?: draft?.categoryId
+    val initialCategory = remember(snapshot.categories, initial, draft) {
+        baseCategoryId?.let { id -> snapshot.categories.firstOrNull { it.id == id } }
     }
-    var type by remember(initial) { mutableStateOf(initial?.type ?: TxType.EXPENSE) }
-    var amountText by remember(initial) { mutableStateOf(initial?.amount?.toAmountInput() ?: "") }
-    var amountTouched by remember(initial) { mutableStateOf(false) }
-    var note by remember(initial) { mutableStateOf(initial?.note ?: "") }
-    var dateTime by remember(initial) {
-        mutableStateOf(initial?.occurredAt?.toLocalDateTime() ?: LocalDateTime.now())
+    var type by remember(initial, draft) { mutableStateOf(baseType) }
+    var amountText by remember(initial, draft) {
+        mutableStateOf(if (baseAmount > 0) baseAmount.toAmountInput() else "")
     }
-    var categoryId by remember(initial) { mutableStateOf(initialCategory?.id) }
+    var amountTouched by remember(initial, draft) { mutableStateOf(false) }
+    var note by remember(initial, draft) { mutableStateOf(baseNote) }
+    var dateTime by remember(initial, draft) {
+        mutableStateOf(baseTime?.toLocalDateTime() ?: LocalDateTime.now())
+    }
+    var categoryId by remember(initial, draft) { mutableStateOf(initialCategory?.id) }
     var showPicker by remember { mutableStateOf(false) }
     var noteFocused by remember { mutableStateOf(false) }
     var hint by remember { mutableStateOf<String?>(null) }
@@ -117,9 +133,15 @@ fun AddTransactionScreen(
         snapshot.categories.filter { it.type == type }.sortedBy { it.sortOrder }
     }
     val selectedCategoryId = categories.firstOrNull { it.id == categoryId }?.id
-        ?: categories.firstOrNull()?.id
-    val suggestions = remember(snapshot.transactions, snapshot.categories, type, suggestionPenalties) {
-        buildSuggestions(snapshot, type, suggestionPenalties)
+        ?: if (initial == null && draft == null) categories.firstOrNull()?.id else null
+    val suggestions = remember(
+        snapshot.transactions,
+        snapshot.categories,
+        type,
+        suggestionPenalties,
+        draft,
+    ) {
+        if (draft != null) emptyList() else buildSuggestions(snapshot, type, suggestionPenalties)
     }
     val gridState = rememberLazyGridState()
     val focusManager = LocalFocusManager.current
@@ -190,6 +212,41 @@ fun AddTransactionScreen(
                     onClick = onClose,
                     tint = Fen.colors.ink,
                 )
+                if (draft != null) {
+                    Spacer(Modifier.width(12.dp))
+                    Text("确认账单", style = MaterialTheme.typography.headlineSmall)
+                }
+            }
+
+            if (draft != null) {
+                val source = SourceLabels.source(draft.sourceId)
+                if (source != null) {
+                    Text(
+                        text = buildString {
+                            append("来源：")
+                            append(source)
+                            SourceLabels.page(draft.sourcePage)?.let { append(" / $it") }
+                            append(" · 图片 · 置信度 ")
+                            append((draft.confidence * 100).toInt())
+                            append("%")
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Fen.colors.inkSoft,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                }
+                if (draftPreview != null) {
+                    Image(
+                        bitmap = draftPreview.asImageBitmap(),
+                        contentDescription = "账单截图",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 120.dp)
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                            .clip(RoundedCornerShape(16.dp)),
+                        contentScale = ContentScale.Fit,
+                    )
+                }
             }
 
             Segmented(
@@ -387,7 +444,7 @@ fun AddTransactionScreen(
                     onDone = { submit(andContinue = false) },
                     canSave = canSave,
                     accent = accent,
-                    showRecord = initial == null,
+                    showRecord = initial == null && draft == null,
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
                 Spacer(Modifier.height(12.dp))

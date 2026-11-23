@@ -1,6 +1,8 @@
 package app.fen.ui
 
+import android.graphics.Bitmap
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -42,12 +44,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.PieChart
 import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -74,8 +78,9 @@ import androidx.navigation.compose.rememberNavController
 import app.fen.BuildConfig
 import app.fen.FenApp
 import app.fen.autobook.capture.ImageImportState
+import app.fen.autobook.classify.DuplicateDetector
+import app.fen.autobook.model.ParsedBill
 import app.fen.autobook.ui.BatchConfirmSheet
-import app.fen.autobook.ui.ConfirmBillSheet
 import app.fen.data.Tx
 import app.fen.data.TxType
 import app.fen.ui.screens.AddTransactionScreen
@@ -97,6 +102,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
+
+private data class DraftSave(
+    val type: TxType,
+    val amountMinor: Long,
+    val categoryId: String?,
+    val note: String,
+    val occurredAt: Long,
+)
 
 private fun tabIndex(entry: NavBackStackEntry?): Int? = when (entry?.destination?.route) {
     "bills" -> 0
@@ -171,6 +184,10 @@ private fun FenContent(viewModel: FenViewModel) {
     val showBottomBar = currentRoute == null || RootTabs.isRoot(currentRoute)
     var showAdd by remember { mutableStateOf(false) }
     var editingTx by remember { mutableStateOf<Tx?>(null) }
+    var draftBill by remember { mutableStateOf<ParsedBill?>(null) }
+    var draftPreview by remember { mutableStateOf<Bitmap?>(null) }
+    var pendingDraftSave by remember { mutableStateOf<DraftSave?>(null) }
+    var showDuplicateDialog by remember { mutableStateOf(false) }
     val addOffset = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
     val smartImport = remember(context) { (context.applicationContext as FenApp).imageImport }
@@ -186,11 +203,38 @@ private fun FenContent(viewModel: FenViewModel) {
     }
 
     LaunchedEffect(smartImportState) {
-        val current = smartImportState
-        if (current is ImageImportState.Error) {
-            Toast.makeText(context, current.message, Toast.LENGTH_SHORT).show()
-            smartImport.consume()
+        when (val current = smartImportState) {
+            is ImageImportState.Error -> {
+                Toast.makeText(context, current.message, Toast.LENGTH_SHORT).show()
+                smartImport.consume()
+            }
+
+            is ImageImportState.Ready -> {
+                draftBill = current.bill
+                draftPreview = current.preview
+                smartImport.consume()
+            }
+
+            else -> Unit
         }
+    }
+
+    fun saveDraft(save: DraftSave) {
+        viewModel.addTransactionAt(
+            type = save.type,
+            amountMinor = save.amountMinor,
+            categoryId = save.categoryId,
+            note = save.note,
+            occurredAtMillis = save.occurredAt,
+        )
+        if (save.categoryId != null) {
+            viewModel.rememberMerchant(save.note, save.type, save.categoryId)
+        }
+        draftBill = null
+        draftPreview?.recycle()
+        draftPreview = null
+        pendingDraftSave = null
+        showDuplicateDialog = false
     }
 
     suspend fun dismissAdd() {
@@ -205,6 +249,12 @@ private fun FenContent(viewModel: FenViewModel) {
         } catch (_: CancellationException) {
             addOffset.animateTo(0f, fenFloat)
         }
+    }
+
+    BackHandler(enabled = draftBill != null) {
+        draftBill = null
+        draftPreview?.recycle()
+        draftPreview = null
     }
 
     LaunchedEffect(showAdd) {
@@ -442,16 +492,26 @@ private fun FenContent(viewModel: FenViewModel) {
             }
         }
 
-        if (showAdd || addOffset.value < 1f) {
+        if (showAdd || draftBill != null || addOffset.value < 1f) {
             AddTransactionScreen(
                 snapshot = snapshot,
                 initial = editingTx,
+                draft = draftBill,
+                draftPreview = draftPreview,
                 suggestionPenalties = penalties,
                 onPenalizeSuggestion = viewModel::penalizeSuggestion,
                 modifier = Modifier.graphicsLayer {
                     translationY = addOffset.value * size.height
                 },
-                onClose = { scope.launch { dismissAdd() } },
+                onClose = {
+                    if (draftBill != null) {
+                        draftBill = null
+                        draftPreview?.recycle()
+                        draftPreview = null
+                    } else {
+                        scope.launch { dismissAdd() }
+                    }
+                },
                 onManageCategories = {
                     scope.launch {
                         dismissAdd()
@@ -459,43 +519,76 @@ private fun FenContent(viewModel: FenViewModel) {
                     }
                 },
                 onSave = { type, amountMinor, categoryId, note, dateTime, andContinue ->
-                    val editing = editingTx
-                    if (editing == null) {
-                        viewModel.addTransaction(type, amountMinor, categoryId, note, dateTime)
-                    } else {
-                        viewModel.updateTransaction(
-                            editing.copy(
-                                type = type,
-                                amount = amountMinor,
-                                categoryId = categoryId,
-                                note = note.trim(),
-                                occurredAt = dateTime
-                                    .atZone(java.time.ZoneId.systemDefault())
-                                    .toInstant()
-                                    .toEpochMilli(),
-                            )
+                    if (draftBill != null) {
+                        val occurredAt = dateTime
+                            .atZone(java.time.ZoneId.systemDefault())
+                            .toInstant()
+                            .toEpochMilli()
+                        val candidate = draftBill!!.copy(
+                            type = type,
+                            amountMinor = amountMinor,
+                            categoryId = categoryId,
+                            merchant = note.trim(),
+                            occurredAt = occurredAt,
                         )
+                        val save = DraftSave(
+                            type = type,
+                            amountMinor = amountMinor,
+                            categoryId = categoryId,
+                            note = note.trim(),
+                            occurredAt = occurredAt,
+                        )
+                        if (DuplicateDetector.find(candidate, snapshot.transactions) != null) {
+                            pendingDraftSave = save
+                            showDuplicateDialog = true
+                        } else {
+                            saveDraft(save)
+                        }
+                    } else {
+                        val editing = editingTx
+                        if (editing == null) {
+                            viewModel.addTransaction(type, amountMinor, categoryId, note, dateTime)
+                        } else {
+                            viewModel.updateTransaction(
+                                editing.copy(
+                                    type = type,
+                                    amount = amountMinor,
+                                    categoryId = categoryId,
+                                    note = note.trim(),
+                                    occurredAt = dateTime
+                                        .atZone(java.time.ZoneId.systemDefault())
+                                        .toInstant()
+                                        .toEpochMilli(),
+                                )
+                            )
+                        }
+                        if (!andContinue) scope.launch { dismissAdd() }
                     }
-                    if (!andContinue) scope.launch { dismissAdd() }
                 },
             )
         }
 
-        val ready = smartImportState as? ImageImportState.Ready
-        if (ready != null) {
-            ConfirmBillSheet(
-                bill = ready.bill,
-                categories = snapshot.categories,
-                existing = snapshot.transactions,
-                preview = ready.preview,
-                onSave = { type, amountMinor, categoryId, note, occurredAt ->
-                    viewModel.addTransactionAt(type, amountMinor, categoryId, note, occurredAt)
-                    if (categoryId != null) {
-                        viewModel.rememberMerchant(note, type, categoryId)
-                    }
-                    smartImport.consume()
+        if (showDuplicateDialog && pendingDraftSave != null) {
+            AlertDialog(
+                onDismissRequest = {
+                    showDuplicateDialog = false
+                    pendingDraftSave = null
                 },
-                onDismiss = { smartImport.consume() },
+                title = { Text("可能重复") },
+                text = { Text("已有一笔金额和时间相近的记录，仍要保存吗？") },
+                confirmButton = {
+                    TextButton(
+                        onClick = { pendingDraftSave?.let { saveDraft(it) } }
+                    ) { Text("继续保存") }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showDuplicateDialog = false
+                            pendingDraftSave = null
+                        }
+                    ) { Text("取消") }
+                },
             )
         }
 
