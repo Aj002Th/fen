@@ -98,6 +98,17 @@ class ClassifierTest {
     }
 
     @Test
+    fun `unknown merchant falls back to uncategorized`() {
+        val uncategorized = category("cat-none", "未分类", TxType.EXPENSE)
+        val classifier = Classifier(InMemoryAutoMapStore(), RuleClassifier(emptyMap()))
+
+        val result = classifier.classify(bill(merchant = "某某商户"), listOf(food, uncategorized))
+
+        assertEquals(uncategorized.id, result.categoryId)
+        assertEquals(0.3f, result.confidence)
+    }
+
+    @Test
     fun `apply sets category id`() {
         val store = InMemoryAutoMapStore()
         store.upsert(MerchantKey.of("某某餐厅", TxType.EXPENSE), food.id)

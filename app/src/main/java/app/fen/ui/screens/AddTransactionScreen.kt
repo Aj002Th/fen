@@ -70,6 +70,7 @@ import app.fen.data.Category
 import app.fen.data.Snapshot
 import app.fen.data.Tx
 import app.fen.data.TxType
+import app.fen.data.exchange.UNCATEGORIZED_NAME
 import app.fen.ui.components.AmountKeypad
 import app.fen.ui.components.CircleAction
 import app.fen.ui.components.DateTimePickerSheet
@@ -133,7 +134,13 @@ fun AddTransactionScreen(
         snapshot.categories.filter { it.type == type }.sortedBy { it.sortOrder }
     }
     val selectedCategoryId = categories.firstOrNull { it.id == categoryId }?.id
-        ?: if (initial == null && draft == null) categories.firstOrNull()?.id else null
+        ?: if (initial != null || draft != null) {
+            // 编辑/确认账单时分类可能已删除或识别不出来，落到「未分类」，
+            // 保证完成键可用；用户仍可再点别的分类。
+            categories.firstOrNull { it.name == UNCATEGORIZED_NAME }?.id
+        } else {
+            categories.firstOrNull()?.id
+        }
     val suggestions = remember(
         snapshot.transactions,
         snapshot.categories,

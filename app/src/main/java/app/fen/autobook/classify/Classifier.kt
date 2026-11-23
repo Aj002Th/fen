@@ -3,6 +3,7 @@ package app.fen.autobook.classify
 import app.fen.autobook.model.ParsedBill
 import app.fen.data.Category
 import app.fen.data.TxType
+import app.fen.data.exchange.UNCATEGORIZED_NAME
 
 enum class ClassificationSource { MAPPING, RULE, AI, USER }
 
@@ -33,7 +34,10 @@ class Classifier(
         val ruled = rules.match(bill.rawText.ifBlank { bill.merchant }, candidates)
         if (ruled != null) return Classification(ruled.id, ClassificationSource.RULE, 0.8f)
 
-        return Classification(null, ClassificationSource.RULE, 0.3f)
+        // 拿不准就落到「未分类」。这是一条真实的分类，确认页能直接保存，
+        // 用户也可以像手工记账一样再点别的分类覆盖它。
+        val fallback = candidates.firstOrNull { it.name == UNCATEGORIZED_NAME }
+        return Classification(fallback?.id, ClassificationSource.RULE, 0.3f)
     }
 
     fun apply(bill: ParsedBill, categories: List<Category>): ParsedBill {
