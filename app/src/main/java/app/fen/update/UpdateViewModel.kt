@@ -39,13 +39,14 @@ data class UpdateUiState(
     val error: String? = null,
 )
 
-/** 设置页「检查更新」那一行的副标题。 */
-fun updateRowSubtitle(state: UpdateUiState): String = when (state.phase) {
+/** 关于页「检查更新」的副标题：静止状态不复述版本号，避免同一页出现两次版本。 */
+fun aboutUpdateSubtitle(state: UpdateUiState): String = when (state.phase) {
     UpdatePhase.Checking -> "正在检查…"
-    UpdatePhase.Error -> "检查失败，点此重试"
     UpdatePhase.Available ->
-        state.release?.let { "发现新版本 ${it.version}" } ?: "当前版本 ${state.currentVersion}"
-    else -> "当前版本 ${state.currentVersion}"
+        state.release?.let { "发现新版本 ${it.version}" } ?: "检查是否有新版本"
+    UpdatePhase.Error -> "检查失败，点此重试"
+    UpdatePhase.UpToDate -> "已是最新版本"
+    else -> "检查是否有新版本"
 }
 
 /** 设置页与关于页的红点：只在已发现可下载的新版本时亮。 */

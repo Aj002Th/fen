@@ -41,6 +41,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -165,12 +167,17 @@ fun RowDivider(modifier: Modifier = Modifier, startInset: Dp = 66.dp) {
 
 /** 8dp 小红点，用于「有新版本」。 */
 @Composable
-fun DotBadge(modifier: Modifier = Modifier, size: Dp = 8.dp) {
+fun DotBadge(
+    modifier: Modifier = Modifier,
+    size: Dp = 8.dp,
+    contentDescription: String = "有新版本",
+) {
     Box(
         modifier
             .size(size)
             .clip(CircleShape)
             .background(Fen.colors.expense)
+            .semantics { this.contentDescription = contentDescription }
     )
 }
 

@@ -51,8 +51,8 @@ import app.fen.ui.components.RowDivider
 import app.fen.ui.theme.Fen
 import app.fen.update.UpdateUiState
 import app.fen.update.UpdateVersion
+import app.fen.update.aboutUpdateSubtitle
 import app.fen.update.hasAvailableUpdate
-import app.fen.update.updateRowSubtitle
 
 private const val GITHUB_URL = "https://github.com/Aj002Th/fen"
 private const val DEV_UNLOCK_TAPS = 10
@@ -143,7 +143,7 @@ fun AboutScreen(
                 Column {
                     AboutRow(
                         title = "检查更新",
-                        subtitle = updateRowSubtitle(updateState),
+                        subtitle = aboutUpdateSubtitle(updateState),
                         onClick = onCheckUpdate,
                         showDot = hasAvailableUpdate(updateState),
                         leading = {
