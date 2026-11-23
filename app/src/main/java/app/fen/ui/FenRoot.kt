@@ -1,6 +1,5 @@
 package app.fen.ui
 
-import android.graphics.Bitmap
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
@@ -185,7 +184,6 @@ private fun FenContent(viewModel: FenViewModel) {
     var showAdd by remember { mutableStateOf(false) }
     var editingTx by remember { mutableStateOf<Tx?>(null) }
     var draftBill by remember { mutableStateOf<ParsedBill?>(null) }
-    var draftPreview by remember { mutableStateOf<Bitmap?>(null) }
     var draftOpenedAt by remember { mutableStateOf(0L) }
     var pendingDraftSave by remember { mutableStateOf<DraftSave?>(null) }
     var showDuplicateDialog by remember { mutableStateOf(false) }
@@ -217,7 +215,6 @@ private fun FenContent(viewModel: FenViewModel) {
                     "ready amount=${current.bill.amountMinor} merchant=${current.bill.merchant}",
                 )
                 draftBill = current.bill
-                draftPreview = current.preview
                 draftOpenedAt = System.currentTimeMillis()
                 smartImport.consume()
             }
@@ -226,7 +223,7 @@ private fun FenContent(viewModel: FenViewModel) {
         }
     }
 
-    fun saveDraft(save: DraftSave) {
+    fun saveDraft(save: DraftSave, andContinue: Boolean = false) {
         viewModel.addTransactionAt(
             type = save.type,
             amountMinor = save.amountMinor,
@@ -237,11 +234,12 @@ private fun FenContent(viewModel: FenViewModel) {
         if (save.categoryId != null) {
             viewModel.rememberMerchant(save.note, save.type, save.categoryId)
         }
-        draftBill = null
-        draftPreview?.recycle()
-        draftPreview = null
         pendingDraftSave = null
         showDuplicateDialog = false
+        // 「再记一笔」保留当前确认页继续录，与手工记账一致；正常保存才关闭。
+        if (!andContinue) {
+            draftBill = null
+        }
     }
 
     suspend fun dismissAdd() {
@@ -264,8 +262,6 @@ private fun FenContent(viewModel: FenViewModel) {
         // 相册/分享返回时可能补发一次 BACK，刚打开时忽略，避免把 draft 立刻清掉。
         if (age >= 800) {
             draftBill = null
-            draftPreview?.recycle()
-            draftPreview = null
         }
     }
 
@@ -509,7 +505,6 @@ private fun FenContent(viewModel: FenViewModel) {
                 snapshot = snapshot,
                 initial = editingTx,
                 draft = draftBill,
-                draftPreview = draftPreview,
                 suggestionPenalties = penalties,
                 onPenalizeSuggestion = viewModel::penalizeSuggestion,
                 modifier = Modifier.graphicsLayer {
@@ -518,8 +513,6 @@ private fun FenContent(viewModel: FenViewModel) {
                 onClose = {
                     if (draftBill != null) {
                         draftBill = null
-                        draftPreview?.recycle()
-                        draftPreview = null
                     } else {
                         scope.launch { dismissAdd() }
                     }
@@ -554,7 +547,7 @@ private fun FenContent(viewModel: FenViewModel) {
                             pendingDraftSave = save
                             showDuplicateDialog = true
                         } else {
-                            saveDraft(save)
+                            saveDraft(save, andContinue)
                         }
                     } else {
                         val editing = editingTx

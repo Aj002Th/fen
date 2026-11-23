@@ -1,6 +1,5 @@
 package app.fen.ui.screens
 
-import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -55,8 +54,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.runtime.LaunchedEffect
@@ -65,12 +62,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.fen.autobook.model.ParsedBill
-import app.fen.autobook.ui.SourceLabels
 import app.fen.data.Category
 import app.fen.data.Snapshot
 import app.fen.data.Tx
 import app.fen.data.TxType
-import app.fen.data.exchange.UNCATEGORIZED_NAME
 import app.fen.ui.components.AmountKeypad
 import app.fen.ui.components.CircleAction
 import app.fen.ui.components.DateTimePickerSheet
@@ -92,7 +87,6 @@ fun AddTransactionScreen(
     snapshot: Snapshot,
     initial: Tx? = null,
     draft: ParsedBill? = null,
-    draftPreview: Bitmap? = null,
     suggestionPenalties: Map<String, Int> = emptyMap(),
     onPenalizeSuggestion: (String) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -133,22 +127,16 @@ fun AddTransactionScreen(
     val categories = remember(snapshot.categories, type) {
         snapshot.categories.filter { it.type == type }.sortedBy { it.sortOrder }
     }
+    // 与手工记账完全一致：分类为空时默认选中第一个，保证「完成」始终可用。
     val selectedCategoryId = categories.firstOrNull { it.id == categoryId }?.id
-        ?: if (initial != null || draft != null) {
-            // 编辑/确认账单时分类可能已删除或识别不出来，落到「未分类」，
-            // 保证完成键可用；用户仍可再点别的分类。
-            categories.firstOrNull { it.name == UNCATEGORIZED_NAME }?.id
-        } else {
-            categories.firstOrNull()?.id
-        }
+        ?: categories.firstOrNull()?.id
     val suggestions = remember(
         snapshot.transactions,
         snapshot.categories,
         type,
         suggestionPenalties,
-        draft,
     ) {
-        if (draft != null) emptyList() else buildSuggestions(snapshot, type, suggestionPenalties)
+        buildSuggestions(snapshot, type, suggestionPenalties)
     }
     val gridState = rememberLazyGridState()
     val focusManager = LocalFocusManager.current
@@ -219,48 +207,6 @@ fun AddTransactionScreen(
                     onClick = onClose,
                     tint = Fen.colors.ink,
                 )
-                if (draft != null) {
-                    Spacer(Modifier.width(12.dp))
-                    Text("确认账单", style = MaterialTheme.typography.headlineSmall)
-                }
-            }
-
-            if (draft != null) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        val source = SourceLabels.source(draft.sourceId)
-                        if (source != null) {
-                            Text(
-                                text = buildString {
-                                    append("来源：")
-                                    append(source)
-                                    SourceLabels.page(draft.sourcePage)?.let { append(" / $it") }
-                                    append(" · 图片 · 置信度 ")
-                                    append((draft.confidence * 100).toInt())
-                                    append("%")
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Fen.colors.inkSoft,
-                            )
-                        }
-                    }
-                    if (draftPreview != null) {
-                        Spacer(Modifier.width(8.dp))
-                        Image(
-                            bitmap = draftPreview.asImageBitmap(),
-                            contentDescription = "账单截图",
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(RoundedCornerShape(12.dp)),
-                            contentScale = ContentScale.Crop,
-                        )
-                    }
-                }
             }
 
             Segmented(
@@ -458,7 +404,7 @@ fun AddTransactionScreen(
                     onDone = { submit(andContinue = false) },
                     canSave = canSave,
                     accent = accent,
-                    showRecord = initial == null && draft == null,
+                    showRecord = initial == null,
                     modifier = Modifier.padding(horizontal = 16.dp),
                 )
                 Spacer(Modifier.height(12.dp))

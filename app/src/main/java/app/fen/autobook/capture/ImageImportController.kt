@@ -25,7 +25,7 @@ import java.time.ZoneId
 sealed interface ImageImportState {
     data object Idle : ImageImportState
     data class Loading(val completed: Int = 0, val total: Int = 0) : ImageImportState
-    data class Ready(val bill: ParsedBill, val preview: Bitmap?) : ImageImportState
+    data class Ready(val bill: ParsedBill) : ImageImportState
     data class ReadyBatch(val items: List<BatchItem>) : ImageImportState
     data class Error(val message: String) : ImageImportState
 }
@@ -49,13 +49,14 @@ class ImageImportController(
             android.util.Log.d("SmartImport", "submit uri=$uri")
             _state.value = ImageImportState.Loading()
             try {
-                val result = withTimeout(OCR_TIMEOUT_MS) { recognize(uri, keepBitmap = true) }
+                val bill = withTimeout(OCR_TIMEOUT_MS) { recognize(uri) }
                     ?: error("无法读取图片")
                 android.util.Log.d(
                     "SmartImport",
-                    "recognized amount=${result.bill.amountMinor} merchant=${result.bill.merchant}",
+                    "recognized amount=${bill.amountMinor} merchant=${bill.merchant} " +
+                        "category=${bill.categoryId}",
                 )
-                _state.value = ImageImportState.Ready(result.bill, result.bitmap)
+                _state.value = ImageImportState.Ready(bill)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
@@ -73,14 +74,13 @@ class ImageImportController(
             _state.value = ImageImportState.Loading(0, limited.size)
             val items = mutableListOf<BatchItem>()
             for ((index, uri) in limited.withIndex()) {
-                val result = try {
-                    withTimeout(OCR_TIMEOUT_MS) { recognize(uri, keepBitmap = false) }
+                val bill = try {
+                    withTimeout(OCR_TIMEOUT_MS) { recognize(uri) }
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
                     null
                 }
-                val bill = result?.bill
                 if (bill != null && bill.amountMinor > 0) {
                     items += BatchItem(bill, null)
                 } else {
@@ -98,9 +98,7 @@ class ImageImportController(
         _state.value = ImageImportState.Idle
     }
 
-    private data class Recognized(val bill: ParsedBill, val bitmap: Bitmap?)
-
-    private suspend fun recognize(uri: Uri, keepBitmap: Boolean): Recognized? {
+    private suspend fun recognize(uri: Uri): ParsedBill? {
         val bitmap = decode(uri) ?: return null
         return try {
             val ocrResult = ocr.recognize(bitmap)
@@ -109,10 +107,9 @@ class ImageImportController(
                 nowMillis = System.currentTimeMillis(),
                 zone = ZoneId.systemDefault(),
             )
-            val classified = classifier.apply(bill, categories())
-            Recognized(classified, if (keepBitmap) bitmap else null)
+            classifier.apply(bill, categories())
         } finally {
-            if (!keepBitmap) bitmap.recycle()
+            bitmap.recycle()
         }
     }
 
