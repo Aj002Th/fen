@@ -29,6 +29,7 @@ class ReadTools(
     private val reader: LedgerReader,
     private val serverVersion: String,
     private val writeEnabled: () -> Boolean,
+    private val defaultLimit: () -> Int = { 100 },
     private val zone: ZoneId = ZoneId.systemDefault(),
 ) {
 
@@ -137,7 +138,7 @@ class ReadTools(
         val maxMinor = args.stringOrNull("max_amount")?.let {
             Money.parseYuanToMinor(it) ?: return ToolResult.Error("VALIDATION", "Invalid max_amount")
         }
-        val limit = args.intOrNull("limit") ?: 50
+        val limit = args.intOrNull("limit") ?: defaultLimit()
         if (limit !in 1..200) return ToolResult.Error("VALIDATION", "limit must be 1..200")
 
         val filter = TxFilter(
@@ -330,7 +331,7 @@ class ReadTools(
                         put("type", "integer")
                         put("minimum", 1)
                         put("maximum", 200)
-                        put("default", 50)
+                        put("default", 100)
                     },
                 )
                 put("cursor", stringProperty("上一页返回的 next_cursor"))

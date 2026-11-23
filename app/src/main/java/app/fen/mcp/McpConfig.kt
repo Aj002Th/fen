@@ -13,6 +13,22 @@ class McpConfig(private val context: Context) {
         get() = prefs.getBoolean("enabled", false)
         set(value) = prefs.edit().putBoolean("enabled", value).apply()
 
+    var autoStart: Boolean
+        get() = prefs.getBoolean("auto_start", false)
+        set(value) = prefs.edit().putBoolean("auto_start", value).apply()
+
+    var localOnly: Boolean
+        get() = prefs.getBoolean("local_only", false)
+        set(value) = prefs.edit().putBoolean("local_only", value).apply()
+
+    var idleMinutes: Int
+        get() = prefs.getInt("idle_minutes", 30)
+        set(value) = prefs.edit().putInt("idle_minutes", value.coerceIn(0, 240)).apply()
+
+    var queryLimit: Int
+        get() = prefs.getInt("query_limit", 100)
+        set(value) = prefs.edit().putInt("query_limit", value.coerceIn(1, 200)).apply()
+
     var port: Int
         get() = prefs.getInt("port", defaultPort())
         set(value) = prefs.edit().putInt("port", value.coerceIn(1024, 65535)).apply()

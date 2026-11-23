@@ -102,5 +102,9 @@ class McpService : Service() {
         fun start(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, McpService::class.java))
         }
+
+        fun stop(context: Context) {
+            context.stopService(Intent(context, McpService::class.java))
+        }
     }
 }

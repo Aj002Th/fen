@@ -12,8 +12,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,14 +26,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Key
-import androidx.compose.material.icons.outlined.Lan
 import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material.icons.outlined.Stop
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -50,20 +45,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.fen.mcp.McpServerState
 import app.fen.mcp.SelfTestResult
-import app.fen.mcp.audit.CallRecord
-import app.fen.mcp.config.ClientKind
-import app.fen.mcp.config.aiSetupPrompt
-import app.fen.mcp.config.configText
+import app.fen.mcp.config.setupInstruction
 import app.fen.mcp.config.toolDocsMarkdown
 import app.fen.ui.McpViewModel
 import app.fen.ui.components.CircleAction
+import app.fen.ui.components.RowDivider
 import app.fen.ui.components.SectionLabel
 import app.fen.ui.theme.Fen
 import kotlinx.coroutines.delay
@@ -81,8 +73,14 @@ fun McpScreen(
     val scope = rememberCoroutineScope()
 
     var token by remember { mutableStateOf(viewModel.token()) }
-    var selectedClient by remember { mutableStateOf(ClientKind.CLAUDE_CODE) }
+    var autoStart by remember { mutableStateOf(viewModel.autoStartEnabled()) }
+    var localOnly by remember { mutableStateOf(viewModel.localOnly()) }
+    var idleMinutes by remember { mutableStateOf(viewModel.idleMinutes()) }
+    var queryLimit by remember { mutableStateOf(viewModel.queryLimit()) }
     var showReset by remember { mutableStateOf(false) }
+    var showIdle by remember { mutableStateOf(false) }
+    var showLimit by remember { mutableStateOf(false) }
+    var showFaq by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<SelfTestResult?>(null) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
@@ -98,12 +96,8 @@ fun McpScreen(
     val address = running?.let { r -> r.addresses.firstOrNull()?.let { "$it:${r.port}" } }
     val writeUntil = running?.writeUntil
     val writeEnabled = writeUntil != null && writeUntil > now
-    val remainingMinutes = if (writeUntil != null) {
-        ((writeUntil - now).coerceAtLeast(0) / 60_000).toInt()
-    } else {
-        0
-    }
-    val config = configText(selectedClient, address ?: "手机IP:端口", token)
+    val maskedToken = "Bearer ${mask(token)}"
+    val setup = setupInstruction(address ?: "手机IP:端口", token)
     val docs = toolDocsMarkdown(viewModel.toolDescriptors(writeEnabled))
 
     val notificationPermission = rememberLauncherForActivityResult(
@@ -122,7 +116,7 @@ fun McpScreen(
     }
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 32.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 36.dp),
     ) {
         Row(
             Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 10.dp),
@@ -157,24 +151,11 @@ fun McpScreen(
                 )
             }
             Text(
-                "电脑需与手机连接同一 WiFi。服务只监听局域网，不会连接互联网。",
+                "电脑需与手机连接同一 WiFi",
                 style = MaterialTheme.typography.bodySmall,
                 color = Fen.colors.inkSoft,
-                modifier = Modifier.padding(top = 10.dp),
+                modifier = Modifier.padding(top = 8.dp),
             )
-            running?.let { server ->
-                server.addresses.forEach { addr ->
-                    ValueRow("地址", "http://$addr:${server.port}/mcp", context)
-                }
-            }
-            if (running != null && running.addresses.isEmpty()) {
-                Text(
-                    "连接 WiFi 后可用；本机自测仍可通过 127.0.0.1。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Fen.colors.inkSoft,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
             (state as? McpServerState.Error)?.let {
                 Text(it.message, style = MaterialTheme.typography.bodySmall, color = Fen.colors.expense)
             }
@@ -183,126 +164,68 @@ fun McpScreen(
         SectionLabel("2. 添加到 AI 客户端", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
         SectionCard {
             Row(
-                Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                Modifier.fillMaxWidth().clickable {
+                    copy(context, setup)
+                    Toast.makeText(context, "已复制配置，粘贴给 AI", Toast.LENGTH_SHORT).show()
+                },
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                ClientKind.values().forEach { kind ->
-                    FilterChip(
-                        selected = selectedClient == kind,
-                        onClick = { selectedClient = kind },
-                        label = { Text(kind.label) },
-                    )
-                }
-            }
-            Spacer(Modifier.size(10.dp))
-            Text(
-                config,
-                style = MaterialTheme.typography.bodySmall,
-                color = Fen.colors.ink,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Fen.colors.surfaceMuted, RoundedCornerShape(12.dp))
-                    .padding(10.dp),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                TextButton(onClick = { copy(context, config) }) {
-                    Icon(Icons.Outlined.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.size(6.dp))
-                    Text("复制配置")
-                }
-                TextButton(onClick = { share(context, "Fen MCP 配置", config) }) {
-                    Icon(Icons.Outlined.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.size(6.dp))
-                    Text("分享到电脑")
-                }
-                TextButton(onClick = {
-                    copy(context, aiSetupPrompt(selectedClient, address ?: "手机IP:端口", token))
-                }) {
-                    Text("让 AI 帮我配置")
-                }
-            }
-            ValueRow(
-                label = "Authorization",
-                value = "Bearer ${mask(token)}",
-                context = context,
-                copyValue = "Bearer $token",
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { copy(context, "Bearer $token") }) {
-                    Icon(Icons.Outlined.Key, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.size(6.dp))
-                    Text("复制")
-                }
-                TextButton(onClick = { showReset = true }) {
-                    Text("重置", color = Fen.colors.expense)
-                }
-            }
-        }
-
-        SectionLabel("3. 写入权限", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
-        SectionCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("允许 AI 写入", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        if (writeEnabled) "还可写入约 $remainingMinutes 分钟" else "默认关闭，关闭时写工具不可见",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (writeEnabled) Fen.colors.expense else Fen.colors.inkSoft,
-                    )
-                }
-                Switch(
-                    checked = writeEnabled,
-                    onCheckedChange = { enabled ->
-                        viewModel.setWriteDuration(if (enabled) 15L * 60_000 else null)
-                    },
+                Text("客户端", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                Text("让 AI 帮我配置", style = MaterialTheme.typography.bodyMedium, color = Fen.colors.link)
+                Icon(
+                    Icons.Rounded.ChevronRight,
+                    contentDescription = null,
+                    tint = Fen.colors.inkFaint,
+                    modifier = Modifier.size(18.dp),
                 )
             }
-            Row(
-                Modifier.horizontalScroll(rememberScrollState()).padding(top = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                listOf(5L, 15L, 30L, 60L).forEach { minutes ->
-                    TextButton(onClick = { viewModel.setWriteDuration(minutes * 60_000) }) {
-                        Text("${minutes} 分钟")
-                    }
-                }
-            }
             Text(
-                "开启后，任何持有 token 的客户端都能新增、修改、删除流水；所有操作都会留档，可在调用记录里整批撤销。",
+                "复制后发给 AI 助手，让它帮你配置",
                 style = MaterialTheme.typography.bodySmall,
                 color = Fen.colors.inkSoft,
                 modifier = Modifier.padding(top = 4.dp),
             )
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 12.dp)) {
+                WideButton("复制配置", Modifier.weight(1f)) { copy(context, setup) }
+                WideButton("分享到电脑", Modifier.weight(1f)) { share(context, "Fen MCP 配置", setup) }
+            }
+            InfoRow(
+                label = "地址",
+                value = address?.let { "http://$it/mcp" } ?: "连接 WiFi 后可用",
+                action = "复制",
+                onAction = { if (address != null) copy(context, "http://$address/mcp") },
+            )
+            InfoRow(
+                label = "Authorization",
+                value = maskedToken,
+                action = "复制",
+                onAction = { copy(context, "Bearer $token") },
+                secondaryAction = "重置",
+                onSecondary = { showReset = true },
+            )
         }
 
-        SectionLabel("4. 接口说明（可选）", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
+        SectionLabel("3. 发送接口说明（可选）", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
         SectionCard {
             Text(
-                "AI 不会调用或查错数据时，把这份说明发给它。",
+                "AI 不会调用或查错数据时，发给它参考",
                 style = MaterialTheme.typography.bodySmall,
                 color = Fen.colors.inkSoft,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                TextButton(onClick = { copy(context, docs) }) { Text("复制") }
-                TextButton(onClick = { share(context, "Fen MCP 接口说明", docs) }) { Text("分享") }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 12.dp)) {
+                WideButton("复制", Modifier.weight(1f)) { copy(context, docs) }
+                WideButton("分享", Modifier.weight(1f)) { share(context, "Fen MCP 接口说明", docs) }
             }
         }
 
-        SectionLabel("5. 测试", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
+        SectionLabel("4. 测试", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
         SectionCard {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(
-                    enabled = running != null,
-                    onClick = {
-                        scope.launch { testResult = viewModel.selfTest() }
-                    },
-                ) {
-                    Icon(Icons.Outlined.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.size(6.dp))
-                    Text("本机自测")
-                }
-                TextButton(onClick = { viewModel.refreshCalls() }) { Text("刷新记录") }
-                TextButton(onClick = onOpenLog) { Text("全部记录") }
+            WideButton(
+                text = "本机自测",
+                modifier = Modifier.fillMaxWidth(),
+                enabled = running != null,
+            ) {
+                scope.launch { testResult = viewModel.selfTest() }
             }
             testResult?.let { result ->
                 Text(
@@ -313,22 +236,87 @@ fun McpScreen(
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = if (result.modernOk && result.legacyOk) Fen.colors.income else Fen.colors.expense,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
-            if (calls.isEmpty()) {
-                Text(
-                    "还没有 AI 调用过",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Fen.colors.inkSoft,
                     modifier = Modifier.padding(top = 10.dp),
                 )
-            } else {
-                calls.take(5).forEach { call ->
-                    CallRow(call)
+            }
+            RowDivider(startInset = 0.dp, modifier = Modifier.padding(top = 12.dp))
+            Row(
+                Modifier.fillMaxWidth().clickable { onOpenLog() }.padding(top = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("调用记录", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        calls.firstOrNull()?.let { call ->
+                            "${call.tool ?: call.method} · ${if (call.ok) "成功" else "失败"}"
+                        } ?: "暂无",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Fen.colors.inkSoft,
+                    )
                 }
+                Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = Fen.colors.inkFaint, modifier = Modifier.size(18.dp))
             }
         }
+
+        SectionLabel("偏好设置", modifier = Modifier.padding(top = 24.dp, bottom = 8.dp))
+        SectionCard {
+            PreferenceSwitch(
+                title = "软件重启后保持开启",
+                subtitle = "关闭时需每次手动开启",
+                checked = autoStart,
+                onCheckedChange = {
+                    autoStart = it
+                    viewModel.setAutoStart(it)
+                },
+            )
+            RowDivider(startInset = 0.dp)
+            PreferenceSwitch(
+                title = "仅允许本机访问",
+                subtitle = "电脑将无法连接",
+                checked = localOnly,
+                onCheckedChange = {
+                    localOnly = it
+                    viewModel.setLocalOnly(it)
+                },
+            )
+            RowDivider(startInset = 0.dp)
+            PreferenceSwitch(
+                title = "允许 AI 记账",
+                subtitle = "关闭时 AI 只能查询",
+                checked = writeEnabled,
+                onCheckedChange = { enabled ->
+                    viewModel.setWriteDuration(if (enabled) 30L * 60_000 else null)
+                },
+            )
+            RowDivider(startInset = 0.dp)
+            PreferenceValue(
+                title = "闲置自动关闭",
+                subtitle = "无调用时自动关闭服务",
+                value = if (idleMinutes <= 0) "不自动关闭" else "$idleMinutes 分钟",
+                onClick = { showIdle = true },
+            )
+            RowDivider(startInset = 0.dp)
+            PreferenceValue(
+                title = "单次查询上限",
+                subtitle = "单次最多返回的账单条数",
+                value = "$queryLimit 条",
+                onClick = { showLimit = true },
+            )
+            RowDivider(startInset = 0.dp)
+            PreferenceValue(
+                title = "常见问题",
+                subtitle = "连接失败、数据不对怎么办",
+                value = "",
+                onClick = { showFaq = true },
+            )
+        }
+
+        Text(
+            "数据仅在本机处理，不会上传。请勿泄露令牌，避免在公共 WiFi 下使用。",
+            style = MaterialTheme.typography.bodySmall,
+            color = Fen.colors.inkSoft,
+            modifier = Modifier.padding(top = 16.dp),
+        )
     }
 
     if (showReset) {
@@ -349,6 +337,53 @@ fun McpScreen(
             },
         )
     }
+
+    if (showIdle) {
+        OptionDialog(
+            title = "闲置自动关闭",
+            options = listOf(15 to "15 分钟", 30 to "30 分钟", 60 to "60 分钟", 0 to "不自动关闭"),
+            selected = idleMinutes,
+            onSelect = {
+                idleMinutes = it
+                viewModel.setIdleMinutes(it)
+                showIdle = false
+            },
+            onDismiss = { showIdle = false },
+        )
+    }
+
+    if (showLimit) {
+        OptionDialog(
+            title = "单次查询上限",
+            options = listOf(50 to "50 条", 100 to "100 条", 200 to "200 条"),
+            selected = queryLimit,
+            onSelect = {
+                queryLimit = it
+                viewModel.setQueryLimit(it)
+                showLimit = false
+            },
+            onDismiss = { showLimit = false },
+        )
+    }
+
+    if (showFaq) {
+        AlertDialog(
+            onDismissRequest = { showFaq = false },
+            title = { Text("常见问题") },
+            text = {
+                Column {
+                    Text("连接失败：确认电脑和手机在同一 WiFi；关闭手机 VPN 或允许局域网；确认地址和端口与手机上显示一致。")
+                    Spacer(Modifier.size(8.dp))
+                    Text("401：token 被重置或复制不完整，重新复制 Authorization。")
+                    Spacer(Modifier.size(8.dp))
+                    Text("数据不对：AI 应先调用 get_overview；统计口径和 App 一致，未分类会单独列出。")
+                    Spacer(Modifier.size(8.dp))
+                    Text("写入失败：确认“允许 AI 记账”已开启，且分类 id 来自 list_categories。")
+                }
+            },
+            confirmButton = { TextButton(onClick = { showFaq = false }) { Text("知道了") } },
+        )
+    }
 }
 
 @Composable
@@ -363,48 +398,123 @@ private fun SectionCard(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun ValueRow(
-    label: String,
-    value: String,
-    context: Context,
-    copyValue: String = value,
+private fun WideButton(
+    text: String,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
 ) {
-    Row(
-        Modifier.fillMaxWidth().padding(top = 10.dp).clickable { copy(context, copyValue) },
-        verticalAlignment = Alignment.CenterVertically,
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = Fen.colors.surfaceMuted,
+        modifier = modifier.clickable(enabled = enabled, onClick = onClick),
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.bodySmall, color = Fen.colors.inkSoft)
-            Text(value, style = MaterialTheme.typography.bodyMedium, color = Fen.colors.ink)
+        Box(Modifier.fillMaxWidth().padding(vertical = 14.dp), contentAlignment = Alignment.Center) {
+            Text(
+                text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (enabled) Fen.colors.ink else Fen.colors.inkFaint,
+            )
         }
-        Icon(Icons.Outlined.ContentCopy, contentDescription = "复制", tint = Fen.colors.link, modifier = Modifier.size(18.dp))
     }
 }
 
 @Composable
-private fun CallRow(call: CallRecord) {
+private fun InfoRow(
+    label: String,
+    value: String,
+    action: String,
+    onAction: () -> Unit,
+    secondaryAction: String? = null,
+    onSecondary: (() -> Unit)? = null,
+) {
     Row(
-        Modifier.fillMaxWidth().padding(top = 10.dp),
+        Modifier.fillMaxWidth().padding(top = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(
-                call.tool ?: call.method,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Fen.colors.ink,
-            )
-            Text(
-                "${call.clientName ?: call.clientIp} · ${call.durationMs}ms",
-                style = MaterialTheme.typography.bodySmall,
-                color = Fen.colors.inkSoft,
-            )
+            Text(label, style = MaterialTheme.typography.titleSmall)
+            Text(value, style = MaterialTheme.typography.bodyMedium, color = Fen.colors.inkSoft)
         }
-        Text(
-            if (call.ok) "成功" else "失败",
-            style = MaterialTheme.typography.bodySmall,
-            color = if (call.ok) Fen.colors.income else Fen.colors.expense,
-        )
+        TextButton(onClick = onAction) { Text(action, color = Fen.colors.link) }
+        if (secondaryAction != null && onSecondary != null) {
+            TextButton(onClick = onSecondary) { Text(secondaryAction, color = Fen.colors.link) }
+        }
     }
+}
+
+@Composable
+private fun PreferenceSwitch(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Fen.colors.inkSoft)
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun PreferenceValue(
+    title: String,
+    subtitle: String,
+    value: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Fen.colors.inkSoft)
+        }
+        if (value.isNotEmpty()) {
+            Text(value, style = MaterialTheme.typography.bodyMedium, color = Fen.colors.inkSoft)
+        }
+        Icon(Icons.Rounded.ChevronRight, contentDescription = null, tint = Fen.colors.inkFaint, modifier = Modifier.size(18.dp))
+    }
+}
+
+@Composable
+private fun OptionDialog(
+    title: String,
+    options: List<Pair<Int, String>>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                options.forEach { (value, label) ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { onSelect(value) }.padding(vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (selected == value) Fen.colors.ink else Fen.colors.inkSoft,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (selected == value) Text("✓", color = Fen.colors.ink)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
+    )
 }
 
 private fun statusText(state: McpServerState): String = when (state) {

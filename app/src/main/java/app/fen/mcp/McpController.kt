@@ -27,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -67,6 +68,7 @@ class McpController(
             reader = reader,
             serverVersion = BuildConfig.VERSION_NAME,
             writeEnabled = { gate.isEnabled(config.writeUntil) },
+            defaultLimit = { config.queryLimit },
         ),
         writeTools = WriteTools(writeService),
         writeEnabled = { gate.isEnabled(config.writeUntil) },
@@ -78,16 +80,21 @@ class McpController(
         serverVersion = BuildConfig.VERSION_NAME,
     )
     private val handler = RpcHandler { call, requestContext ->
+        lastActivity = System.currentTimeMillis()
         callLogger.around(requestContext, call) { dispatcher.handle(call, requestContext) }
     }
 
     private var server: McpServer? = null
     private var expiryJob: Job? = null
+    private var idleJob: Job? = null
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
+
+    @Volatile
+    private var lastActivity = System.currentTimeMillis()
 
     init {
         registerNetworkCallback()
-        if (config.enabled) {
+        if (config.enabled && config.autoStart) {
             runCatching { McpService.start(context) }
             scope.launch { startServer() }
         }
@@ -112,6 +119,7 @@ class McpController(
                     token = config.token,
                     handler = handler,
                     allowedHosts = { allowedHosts(port) },
+                    host = if (config.localOnly) "127.0.0.1" else "0.0.0.0",
                     deleteSession = dispatcher::endSession,
                     onRejected = { headers, ip, status, message ->
                         scope.launch {
@@ -151,6 +159,7 @@ class McpController(
                     writeUntil = config.writeUntil,
                 )
                 scheduleExpiry()
+                startIdleWatch()
                 Log.i("FenMcp", "running on $port")
             } catch (e: Exception) {
                 server = null
@@ -168,6 +177,7 @@ class McpController(
 
     fun stopServer() {
         expiryJob?.cancel()
+        idleJob?.cancel()
         server?.stop()
         server = null
         _state.value = McpServerState.Stopped
@@ -182,6 +192,32 @@ class McpController(
     fun token(): String = config.token
 
     fun writeUntil(): Long? = config.writeUntil
+
+    fun autoStartEnabled(): Boolean = config.autoStart
+    fun localOnly(): Boolean = config.localOnly
+    fun idleMinutes(): Int = config.idleMinutes
+    fun queryLimit(): Int = config.queryLimit
+
+    fun setAutoStart(value: Boolean) {
+        config.autoStart = value
+    }
+
+    fun setLocalOnly(value: Boolean) {
+        config.localOnly = value
+        if (_state.value is McpServerState.Running) {
+            stopServer()
+            startServer()
+        }
+    }
+
+    fun setIdleMinutes(value: Int) {
+        config.idleMinutes = value
+        startIdleWatch()
+    }
+
+    fun setQueryLimit(value: Int) {
+        config.queryLimit = value
+    }
 
     fun toolDescriptors(writeEnabled: Boolean = gate.isEnabled(config.writeUntil)): List<ToolDescriptor> =
         registry.tools(writeEnabled)
@@ -256,6 +292,22 @@ class McpController(
         }
     }
 
+    private fun startIdleWatch() {
+        idleJob?.cancel()
+        idleJob = scope.launch {
+            while (isActive) {
+                delay(60_000)
+                val minutes = config.idleMinutes
+                if (minutes <= 0) continue
+                if (System.currentTimeMillis() - lastActivity >= minutes * 60_000L) {
+                    Log.i("FenMcp", "idle timeout, stopping service")
+                    stop()
+                    break
+                }
+            }
+        }
+    }
+
     private fun updateRunning(block: (McpServerState.Running) -> McpServerState.Running) {
         val running = _state.value as? McpServerState.Running ?: return
         _state.value = block(running)
@@ -268,7 +320,9 @@ class McpController(
         buildSet {
             add("127.0.0.1:$port")
             add("localhost:$port")
-            currentAddresses().forEach { add("$it:$port") }
+            if (!config.localOnly) {
+                currentAddresses().forEach { add("$it:$port") }
+            }
         }
 
     private fun registerNetworkCallback() {

@@ -34,6 +34,16 @@ class McpViewModel(app: Application) : AndroidViewModel(app) {
     fun toolDescriptors(writeEnabled: Boolean): List<ToolDescriptor> =
         controller.toolDescriptors(writeEnabled)
 
+    fun autoStartEnabled(): Boolean = controller.autoStartEnabled()
+    fun localOnly(): Boolean = controller.localOnly()
+    fun idleMinutes(): Int = controller.idleMinutes()
+    fun queryLimit(): Int = controller.queryLimit()
+
+    fun setAutoStart(value: Boolean) = controller.setAutoStart(value)
+    fun setLocalOnly(value: Boolean) = controller.setLocalOnly(value)
+    fun setIdleMinutes(value: Int) = controller.setIdleMinutes(value)
+    fun setQueryLimit(value: Int) = controller.setQueryLimit(value)
+
     fun refreshCalls() {
         scope.launch { _calls.value = controller.recentCalls(100) }
     }
