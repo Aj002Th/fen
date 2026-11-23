@@ -115,24 +115,9 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
             db.execSQL("DROP TABLE category")
             db.execSQL("ALTER TABLE category_new RENAME TO category")
         }
-        if (oldVersion < 6) {
-            db.execSQL("ALTER TABLE tx ADD COLUMN import_batch TEXT")
-            db.execSQL(
-                """
-                CREATE TABLE IF NOT EXISTS import_batch(
-                    id TEXT PRIMARY KEY,
-                    source TEXT NOT NULL,
-                    label TEXT NOT NULL DEFAULT '',
-                    created_at INTEGER NOT NULL,
-                    rows INTEGER NOT NULL
-                )
-                """.trimIndent()
-            )
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_tx_batch ON tx(import_batch)")
-        }
-        if (oldVersion < 7) {
-            db.execSQL("ALTER TABLE import_batch ADD COLUMN file_hash TEXT")
-        }
+        // v6 在 master 上是导入批次；本分支曾把 v6 用作 auto_map，
+        // 因此这里按「缺什么补什么」幂等迁移，避免版本号撞车。
+        ensureImportBatchSchema(db)
         if (oldVersion < 8) {
             // 「未分类」成为真实分类；NULL / 已删除分类的流水一并归进去
             for (type in TxType.entries) {
@@ -162,6 +147,43 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
                 """.trimIndent()
             )
         }
+    }
+
+    private fun ensureImportBatchSchema(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS import_batch(
+                id TEXT PRIMARY KEY,
+                source TEXT NOT NULL,
+                label TEXT NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL,
+                rows INTEGER NOT NULL,
+                file_hash TEXT
+            )
+            """.trimIndent()
+        )
+        addColumnIfMissing(db, "tx", "import_batch", "TEXT")
+        addColumnIfMissing(db, "import_batch", "file_hash", "TEXT")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_tx_batch ON tx(import_batch)")
+    }
+
+    private fun addColumnIfMissing(
+        db: SQLiteDatabase,
+        table: String,
+        column: String,
+        type: String,
+    ) {
+        val exists = db.rawQuery("PRAGMA table_info($table)", null).use { cursor ->
+            var found = false
+            while (cursor.moveToNext()) {
+                if (cursor.getString(cursor.getColumnIndexOrThrow("name")) == column) {
+                    found = true
+                    break
+                }
+            }
+            found
+        }
+        if (!exists) db.execSQL("ALTER TABLE $table ADD COLUMN $column $type")
     }
 
     /** 补上 v9 新增的转账 / 退款。缺哪个补哪个，已有的不改。 */

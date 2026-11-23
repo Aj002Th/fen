@@ -10,7 +10,9 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 class MlKitOcrEngine : OcrEngine {
-    private val client = TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
+    private val client by lazy {
+        TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
+    }
 
     override suspend fun recognize(bitmap: Bitmap): OcrResult =
         suspendCancellableCoroutine { continuation ->
