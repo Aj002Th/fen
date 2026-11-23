@@ -76,6 +76,8 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import app.fen.BuildConfig
 import app.fen.FenApp
+import app.fen.autobook.capture.BatchItem
+import app.fen.autobook.capture.BatchSelection
 import app.fen.autobook.capture.ImageImportState
 import app.fen.autobook.classify.DuplicateDetector
 import app.fen.autobook.model.ParsedBill
@@ -185,6 +187,9 @@ private fun FenContent(viewModel: FenViewModel) {
     var editingTx by remember { mutableStateOf<Tx?>(null) }
     var draftBill by remember { mutableStateOf<ParsedBill?>(null) }
     var draftOpenedAt by remember { mutableStateOf(0L) }
+    var batchItems by remember { mutableStateOf<List<BatchItem>>(emptyList()) }
+    var batchSelected by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var batchEditIndex by remember { mutableStateOf<Int?>(null) }
     var pendingDraftSave by remember { mutableStateOf<DraftSave?>(null) }
     var showDuplicateDialog by remember { mutableStateOf(false) }
     val addOffset = remember { Animatable(1f) }
@@ -214,9 +219,22 @@ private fun FenContent(viewModel: FenViewModel) {
                     "SmartImport",
                     "ready amount=${current.bill.amountMinor} merchant=${current.bill.merchant}",
                 )
+                batchItems = emptyList()
+                batchSelected = emptySet()
+                batchEditIndex = null
                 draftBill = current.bill
                 draftOpenedAt = System.currentTimeMillis()
                 smartImport.consume()
+            }
+
+            is ImageImportState.ReadyBatch -> {
+                draftBill = null
+                batchItems = current.items
+                batchSelected = BatchSelection.initialSelection(
+                    current.items,
+                    snapshot.transactions,
+                )
+                batchEditIndex = null
             }
 
             else -> Unit
@@ -238,8 +256,32 @@ private fun FenContent(viewModel: FenViewModel) {
         showDuplicateDialog = false
         // 「再记一笔」保留当前确认页继续录，与手工记账一致；正常保存才关闭。
         if (!andContinue) {
+            scope.launch {
+                addOffset.animateTo(1f, fenFloat)
+                draftBill = null
+            }
+        }
+    }
+
+    fun dismissDraft() {
+        scope.launch {
+            addOffset.animateTo(1f, fenFloat)
             draftBill = null
         }
+    }
+
+    fun dismissBatchEditor() {
+        scope.launch {
+            addOffset.animateTo(1f, fenFloat)
+            batchEditIndex = null
+        }
+    }
+
+    fun closeBatch() {
+        smartImport.consume()
+        batchItems = emptyList()
+        batchSelected = emptySet()
+        batchEditIndex = null
     }
 
     suspend fun dismissAdd() {
@@ -261,12 +303,18 @@ private fun FenContent(viewModel: FenViewModel) {
         android.util.Log.d("SmartImport", "back draftAge=$age")
         // 相册/分享返回时可能补发一次 BACK，刚打开时忽略，避免把 draft 立刻清掉。
         if (age >= 800) {
-            draftBill = null
+            dismissDraft()
         }
     }
 
-    LaunchedEffect(showAdd, draftBill) {
-        if (showAdd || draftBill != null) addOffset.animateTo(0f, fenFloat)
+    BackHandler(enabled = batchEditIndex != null) {
+        dismissBatchEditor()
+    }
+
+    LaunchedEffect(showAdd, draftBill, batchEditIndex) {
+        if (showAdd || draftBill != null || batchEditIndex != null) {
+            addOffset.animateTo(0f, fenFloat)
+        }
     }
 
     LaunchedEffect(message) {
@@ -500,31 +548,56 @@ private fun FenContent(viewModel: FenViewModel) {
             }
         }
 
-        if (showAdd || draftBill != null || addOffset.value < 1f) {
+        val batchEdit = batchEditIndex?.let { index ->
+            batchItems.getOrNull(index)?.bill?.let { bill -> index to bill }
+        }
+        val editingBatchBill = batchEdit?.second
+        if (showAdd || draftBill != null || editingBatchBill != null || addOffset.value < 1f) {
             AddTransactionScreen(
                 snapshot = snapshot,
                 initial = editingTx,
-                draft = draftBill,
+                draft = draftBill ?: editingBatchBill,
+                allowContinue = editingBatchBill == null,
+                showManageCategories = editingBatchBill == null,
                 suggestionPenalties = penalties,
                 onPenalizeSuggestion = viewModel::penalizeSuggestion,
                 modifier = Modifier.graphicsLayer {
                     translationY = addOffset.value * size.height
                 },
                 onClose = {
-                    if (draftBill != null) {
-                        draftBill = null
-                    } else {
-                        scope.launch { dismissAdd() }
+                    when {
+                        editingBatchBill != null -> dismissBatchEditor()
+                        draftBill != null -> dismissDraft()
+                        else -> scope.launch { dismissAdd() }
                     }
                 },
                 onManageCategories = {
                     scope.launch {
                         dismissAdd()
+                        draftBill = null
+                        batchEditIndex = null
                         navController.navigate("categories")
                     }
                 },
                 onSave = { type, amountMinor, categoryId, note, dateTime, andContinue ->
-                    if (draftBill != null) {
+                    if (batchEdit != null) {
+                        val (index, bill) = batchEdit
+                        val occurredAt = dateTime
+                            .atZone(java.time.ZoneId.systemDefault())
+                            .toInstant()
+                            .toEpochMilli()
+                        val updated = bill.copy(
+                            type = type,
+                            amountMinor = amountMinor,
+                            categoryId = categoryId,
+                            merchant = note.trim(),
+                            occurredAt = occurredAt,
+                        )
+                        val next = batchItems.toMutableList()
+                        next[index] = BatchItem(updated, null)
+                        batchItems = next
+                        dismissBatchEditor()
+                    } else if (draftBill != null) {
                         val occurredAt = dateTime
                             .atZone(java.time.ZoneId.systemDefault())
                             .toInstant()
@@ -598,11 +671,17 @@ private fun FenContent(viewModel: FenViewModel) {
         }
 
         val readyBatch = smartImportState as? ImageImportState.ReadyBatch
-        if (readyBatch != null) {
+        if (readyBatch != null && batchEditIndex == null && batchItems.isNotEmpty()) {
             BatchConfirmSheet(
-                items = readyBatch.items,
+                items = batchItems,
                 categories = snapshot.categories,
                 existing = snapshot.transactions,
+                selected = batchSelected,
+                onSelectedChange = { batchSelected = it },
+                onEdit = { index ->
+                    batchSelected = batchSelected + index
+                    batchEditIndex = index
+                },
                 onSaveAll = { bills ->
                     bills.forEach { bill ->
                         val type = bill.type ?: TxType.EXPENSE
@@ -616,9 +695,9 @@ private fun FenContent(viewModel: FenViewModel) {
                         )
                         viewModel.rememberMerchant(bill.merchant, type, categoryId)
                     }
-                    smartImport.consume()
+                    closeBatch()
                 },
-                onDismiss = { smartImport.consume() },
+                onDismiss = { closeBatch() },
             )
         }
 

@@ -19,10 +19,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -43,12 +39,12 @@ fun BatchConfirmSheet(
     items: List<BatchItem>,
     categories: List<Category>,
     existing: List<Tx>,
+    selected: Set<Int>,
+    onSelectedChange: (Set<Int>) -> Unit,
+    onEdit: (Int) -> Unit,
     onSaveAll: (List<ParsedBill>) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var selected by remember(items) {
-        mutableStateOf(BatchSelection.initialSelection(items, existing))
-    }
     val successCount = items.count { it.bill != null }
 
     ModalBottomSheet(
@@ -85,24 +81,24 @@ fun BatchConfirmSheet(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable {
-                                selected = if (index in selected) {
-                                    selected - index
-                                } else {
-                                    selected + index
-                                }
-                            }
                             .padding(vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(
                             checked = index in selected,
                             onCheckedChange = { checked ->
-                                selected = if (checked) selected + index else selected - index
+                                onSelectedChange(
+                                    if (checked) selected + index else selected - index
+                                )
                             },
                         )
                         Spacer(Modifier.width(8.dp))
-                        Column(Modifier.weight(1f)) {
+                        Column(
+                            Modifier
+                                .weight(1f)
+                                .clickable { onEdit(index) }
+                                .padding(vertical = 2.dp),
+                        ) {
                             Text(
                                 text = formatMoney(bill.amountMinor),
                                 style = MaterialTheme.typography.titleMedium,
@@ -123,6 +119,15 @@ fun BatchConfirmSheet(
                                 color = Fen.colors.inkSoft,
                             )
                         }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "编辑",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Fen.colors.inkSoft,
+                            modifier = Modifier
+                                .clickable { onEdit(index) }
+                                .padding(horizontal = 6.dp, vertical = 8.dp),
+                        )
                     }
                 }
             }

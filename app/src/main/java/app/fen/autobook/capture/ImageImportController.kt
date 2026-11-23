@@ -71,6 +71,7 @@ class ImageImportController(
         job?.cancel()
         job = scope.launch {
             val limited = uris.take(MAX_BATCH)
+            android.util.Log.d("SmartImport", "submitAll count=${limited.size}")
             _state.value = ImageImportState.Loading(0, limited.size)
             val items = mutableListOf<BatchItem>()
             for ((index, uri) in limited.withIndex()) {

@@ -26,6 +26,14 @@ object IntentImageReader {
         }
         if (!list.isNullOrEmpty()) return list.map { it.toString() }
 
+        // 少数分享方会把 EXTRA_STREAM 传成字符串数组，按 URI 兜底处理。
+        intent.getStringArrayListExtra(Intent.EXTRA_STREAM)
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { return it }
+        intent.getStringArrayExtra(Intent.EXTRA_STREAM)
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { return it.toList() }
+
         val single: Uri? = if (Build.VERSION.SDK_INT >= 33) {
             intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
         } else {

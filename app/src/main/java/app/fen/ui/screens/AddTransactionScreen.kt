@@ -89,6 +89,8 @@ fun AddTransactionScreen(
     snapshot: Snapshot,
     initial: Tx? = null,
     draft: ParsedBill? = null,
+    allowContinue: Boolean = true,
+    showManageCategories: Boolean = true,
     suggestionPenalties: Map<String, Int> = emptyMap(),
     onPenalizeSuggestion: (String) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -260,11 +262,18 @@ fun AddTransactionScreen(
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(0.dp, Alignment.CenterVertically),
                 ) {
+                    val count = categories.size + if (showManageCategories) 1 else 0
                     items(
-                        count = categories.size + 1,
-                        key = { index -> if (index == categories.size) "manage" else categories[index].id },
+                        count = count,
+                        key = { index ->
+                            if (showManageCategories && index == categories.size) {
+                                "manage"
+                            } else {
+                                categories[index].id
+                            }
+                        },
                     ) { index ->
-                        if (index == categories.size) {
+                        if (showManageCategories && index == categories.size) {
                             ManageCategoriesTile(
                                 onClick = {
                                     dismissNoteFocus()
@@ -453,7 +462,7 @@ fun AddTransactionScreen(
                         onDone = { submit(andContinue = false) },
                         canSave = canSave,
                         accent = accent,
-                        showRecord = initial == null,
+                        showRecord = initial == null && allowContinue,
                         modifier = Modifier.padding(horizontal = 16.dp),
                     )
                     Spacer(Modifier.height(12.dp))
