@@ -119,6 +119,23 @@ class AppPrefs(context: Context) {
         statsSummaryShowEmpty = config.summaryShowEmpty
     }
 
+    /* ------------------------------ 版本更新 ------------------------------ */
+
+    /** 上一次联网检查更新的时间（毫秒） */
+    var lastUpdateCheckAt: Long
+        get() = sp.getLong(KEY_UPDATE_CHECK_AT, 0L)
+        set(value) = sp.edit().putLong(KEY_UPDATE_CHECK_AT, value).apply()
+
+    /** 最近一次成功检查得到的 release JSON 快照 */
+    var cachedReleaseJson: String
+        get() = sp.getString(KEY_UPDATE_RELEASE_JSON, "") ?: ""
+        set(value) = sp.edit().putString(KEY_UPDATE_RELEASE_JSON, value).apply()
+
+    /** 仅 debug：覆盖 release JSON 地址（验收用） */
+    var updateSourceOverride: String
+        get() = sp.getString(KEY_UPDATE_SOURCE, "") ?: ""
+        set(value) = sp.edit().putString(KEY_UPDATE_SOURCE, value).apply()
+
     private companion object {
         const val KEY_THEME_MODE = "theme_mode"
         const val KEY_HIDDEN_SUGGESTIONS = "hidden_suggestions"
@@ -134,5 +151,8 @@ class AppPrefs(context: Context) {
         const val KEY_STATS_RANGE_END = "stats_range_end_epoch_day"
         const val KEY_STATS_RANGE_SELECTED_AT = "stats_range_selected_at"
         const val KEY_STATS_CATEGORY_TYPE = "stats_category_type"
+        const val KEY_UPDATE_CHECK_AT = "update_check_at"
+        const val KEY_UPDATE_RELEASE_JSON = "update_release_json"
+        const val KEY_UPDATE_SOURCE = "update_source"
     }
 }
