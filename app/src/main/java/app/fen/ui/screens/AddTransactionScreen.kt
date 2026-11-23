@@ -219,33 +219,40 @@ fun AddTransactionScreen(
             }
 
             if (draft != null) {
-                val source = SourceLabels.source(draft.sourceId)
-                if (source != null) {
-                    Text(
-                        text = buildString {
-                            append("来源：")
-                            append(source)
-                            SourceLabels.page(draft.sourcePage)?.let { append(" / $it") }
-                            append(" · 图片 · 置信度 ")
-                            append((draft.confidence * 100).toInt())
-                            append("%")
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Fen.colors.inkSoft,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                    )
-                }
-                if (draftPreview != null) {
-                    Image(
-                        bitmap = draftPreview.asImageBitmap(),
-                        contentDescription = "账单截图",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 120.dp)
-                            .padding(horizontal = 16.dp, vertical = 6.dp)
-                            .clip(RoundedCornerShape(16.dp)),
-                        contentScale = ContentScale.Fit,
-                    )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        val source = SourceLabels.source(draft.sourceId)
+                        if (source != null) {
+                            Text(
+                                text = buildString {
+                                    append("来源：")
+                                    append(source)
+                                    SourceLabels.page(draft.sourcePage)?.let { append(" / $it") }
+                                    append(" · 图片 · 置信度 ")
+                                    append((draft.confidence * 100).toInt())
+                                    append("%")
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Fen.colors.inkSoft,
+                            )
+                        }
+                    }
+                    if (draftPreview != null) {
+                        Spacer(Modifier.width(8.dp))
+                        Image(
+                            bitmap = draftPreview.asImageBitmap(),
+                            contentDescription = "账单截图",
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(RoundedCornerShape(12.dp)),
+                            contentScale = ContentScale.Crop,
+                        )
+                    }
                 }
             }
 

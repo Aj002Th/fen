@@ -10,6 +10,13 @@ object MerchantExtractor {
         "微信", "微信支付", "支付宝", "云闪付", "京东", "京东金融",
         "美团", "美团外卖", "拼多多", "淘宝", "天猫", "抖音",
     )
+    private val pageWords = setOf(
+        "支付成功", "支付完成", "账单详情", "交易详情", "订单详情",
+        "微信支付", "支付宝", "云闪付", "我的账单", "交易记录",
+    )
+    private val labelPrefix = Regex(
+        """^(?:商[户戶]全[称稱]|商[户戶]名[称稱]|收款方|商[户戶])\s*[:：]?\s*"""
+    )
 
     fun extract(lines: List<OcrLine>, anchors: List<String> = defaultAnchors): String {
         for (anchor in anchors) {
@@ -28,7 +35,8 @@ object MerchantExtractor {
                             it.isNotBlank() &&
                                 !looksLikeId(it) &&
                                 !looksLikeAmountOrTime(it) &&
-                                it !in titles
+                                it !in titles &&
+                                it !in pageWords
                         }
                 }
                 if (value != null) return value
@@ -41,7 +49,9 @@ object MerchantExtractor {
                 text.isNotBlank() &&
                     !looksLikeId(text) &&
                     !looksLikeAmountOrTime(text) &&
-                    clean(text) !in titles
+                    text !in pageWords &&
+                    clean(text) !in titles &&
+                    clean(text) !in pageWords
             }
             .maxByOrNull { it.box.height }
             ?.text
@@ -57,6 +67,8 @@ object MerchantExtractor {
         for (word in noise) {
             value = value.removePrefix(word).removeSuffix(word).trim()
         }
+        // OCR 有时把标签和内容连成一行，或输出繁体「商戶全稱」。
+        value = value.replace(labelPrefix, "").trim()
         return value
     }
 

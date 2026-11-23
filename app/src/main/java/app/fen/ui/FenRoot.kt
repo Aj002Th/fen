@@ -186,6 +186,7 @@ private fun FenContent(viewModel: FenViewModel) {
     var editingTx by remember { mutableStateOf<Tx?>(null) }
     var draftBill by remember { mutableStateOf<ParsedBill?>(null) }
     var draftPreview by remember { mutableStateOf<Bitmap?>(null) }
+    var draftOpenedAt by remember { mutableStateOf(0L) }
     var pendingDraftSave by remember { mutableStateOf<DraftSave?>(null) }
     var showDuplicateDialog by remember { mutableStateOf(false) }
     val addOffset = remember { Animatable(1f) }
@@ -205,13 +206,19 @@ private fun FenContent(viewModel: FenViewModel) {
     LaunchedEffect(smartImportState) {
         when (val current = smartImportState) {
             is ImageImportState.Error -> {
+                android.util.Log.w("SmartImport", "state error=${current.message}")
                 Toast.makeText(context, current.message, Toast.LENGTH_SHORT).show()
                 smartImport.consume()
             }
 
             is ImageImportState.Ready -> {
+                android.util.Log.d(
+                    "SmartImport",
+                    "ready amount=${current.bill.amountMinor} merchant=${current.bill.merchant}",
+                )
                 draftBill = current.bill
                 draftPreview = current.preview
+                draftOpenedAt = System.currentTimeMillis()
                 smartImport.consume()
             }
 
@@ -252,13 +259,18 @@ private fun FenContent(viewModel: FenViewModel) {
     }
 
     BackHandler(enabled = draftBill != null) {
-        draftBill = null
-        draftPreview?.recycle()
-        draftPreview = null
+        val age = System.currentTimeMillis() - draftOpenedAt
+        android.util.Log.d("SmartImport", "back draftAge=$age")
+        // 相册/分享返回时可能补发一次 BACK，刚打开时忽略，避免把 draft 立刻清掉。
+        if (age >= 800) {
+            draftBill = null
+            draftPreview?.recycle()
+            draftPreview = null
+        }
     }
 
-    LaunchedEffect(showAdd) {
-        if (showAdd) addOffset.animateTo(0f, fenFloat)
+    LaunchedEffect(showAdd, draftBill) {
+        if (showAdd || draftBill != null) addOffset.animateTo(0f, fenFloat)
     }
 
     LaunchedEffect(message) {

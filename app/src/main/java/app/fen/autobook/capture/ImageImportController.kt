@@ -46,14 +46,20 @@ class ImageImportController(
     fun submit(uri: Uri) {
         job?.cancel()
         job = scope.launch {
+            android.util.Log.d("SmartImport", "submit uri=$uri")
             _state.value = ImageImportState.Loading()
             try {
                 val result = withTimeout(OCR_TIMEOUT_MS) { recognize(uri, keepBitmap = true) }
                     ?: error("无法读取图片")
+                android.util.Log.d(
+                    "SmartImport",
+                    "recognized amount=${result.bill.amountMinor} merchant=${result.bill.merchant}",
+                )
                 _state.value = ImageImportState.Ready(result.bill, result.bitmap)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
+                android.util.Log.w("SmartImport", "recognize failed", error)
                 _state.value = ImageImportState.Error("识别失败，请重试")
             }
         }

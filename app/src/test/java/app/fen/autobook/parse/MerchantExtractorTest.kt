@@ -62,6 +62,20 @@ class MerchantExtractorTest {
     }
 
     @Test
+    fun `strips merchant label without space`() {
+        val lines = listOf(line("商户全称测试餐厅", 40))
+
+        assertEquals("测试餐厅", MerchantExtractor.extract(lines))
+    }
+
+    @Test
+    fun `strips traditional merchant label`() {
+        val lines = listOf(line("商戶全稱测试餐厅", 40))
+
+        assertEquals("测试餐厅", MerchantExtractor.extract(lines))
+    }
+
+    @Test
     fun `skips merchant id lines`() {
         val lines = listOf(
             line("商户单号 4200001234", 40),
