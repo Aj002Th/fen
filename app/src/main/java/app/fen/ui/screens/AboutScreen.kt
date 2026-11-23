@@ -1,4 +1,4 @@
-package app.fen.ui.screens
+﻿package app.fen.ui.screens
 
 import android.content.Context
 import android.content.Intent
@@ -55,7 +55,10 @@ import app.fen.update.aboutUpdateSubtitle
 import app.fen.update.hasAvailableUpdate
 
 private const val GITHUB_URL = "https://github.com/Aj002Th/fen"
-private const val DEV_UNLOCK_TAPS = 10
+internal const val DEV_UNLOCK_TAPS = 10
+
+/** 连点图标第 10 次解锁开发选项。 */
+internal fun shouldUnlockDev(taps: Int): Boolean = taps >= DEV_UNLOCK_TAPS
 
 @Composable
 fun AboutScreen(
@@ -68,7 +71,7 @@ fun AboutScreen(
     val context = LocalContext.current
     val version = UpdateVersion.normalize(versionName)
     var showPrivacy by remember { mutableStateOf(false) }
-    var versionTaps by remember { mutableStateOf(0) }
+    var iconTaps by remember { mutableStateOf(0) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -97,12 +100,19 @@ fun AboutScreen(
                     modifier = Modifier
                         .size(76.dp)
                         .clip(RoundedCornerShape(20.dp))
-                        .background(Color(0xFF15171B)),
+                        .background(Color(0xFF15171B))
+                        .clickable {
+                            iconTaps += 1
+                            if (shouldUnlockDev(iconTaps)) {
+                                iconTaps = 0
+                                onUnlockDev()
+                            }
+                        },
                     contentAlignment = Alignment.Center,
                 ) {
                     Image(
                         painter = painterResource(R.drawable.ic_launcher_foreground),
-                        contentDescription = null,
+                        contentDescription = "Fen",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -118,16 +128,7 @@ fun AboutScreen(
                     text = "Version $version",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Fen.colors.inkSoft,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable {
-                            versionTaps += 1
-                            if (versionTaps >= DEV_UNLOCK_TAPS) {
-                                versionTaps = 0
-                                onUnlockDev()
-                            }
-                        }
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                 )
             }
         }
