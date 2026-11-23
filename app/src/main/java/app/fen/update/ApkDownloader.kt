@@ -8,6 +8,8 @@ import java.net.URL
 import java.security.MessageDigest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 /** 下载并算好 SHA-256 的安装包。 */
@@ -36,12 +38,12 @@ class ApkDownloader(
         cleanUpdatesDir(updatesDir)
         updatesDir.mkdirs()
         val target = File(updatesDir, fileName)
+        var succeeded = false
         try {
             val connection = openConnection(url)
             try {
                 val code = connection.responseCode
                 if (code !in 200..299) {
-                    target.delete()
                     return@withContext Result.failure(IOException("下载失败（HTTP $code）"))
                 }
                 val total = connection.contentLengthLong.takeIf { it > 0 }
@@ -51,6 +53,7 @@ class ApkDownloader(
                     FileOutputStream(target).use { output ->
                         val buffer = ByteArray(8 * 1024)
                         while (true) {
+                            currentCoroutineContext().ensureActive()
                             val read = input.read(buffer)
                             if (read < 0) break
                             digest.update(buffer, 0, read)
@@ -60,16 +63,17 @@ class ApkDownloader(
                         }
                     }
                 }
+                succeeded = true
                 Result.success(DownloadedApk(target, digestHex(digest.digest())))
             } finally {
                 connection.disconnect()
             }
         } catch (cancelled: CancellationException) {
-            target.delete()
             throw cancelled
         } catch (error: IOException) {
-            target.delete()
             Result.failure(IOException("下载失败，请检查网络", error))
+        } finally {
+            if (!succeeded) target.delete()
         }
     }
 

@@ -46,10 +46,16 @@ fun UpdateSheet(
     onRecheck: () -> Unit,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, state.phase) {
+    DisposableEffect(lifecycleOwner) {
+        var leftApp = false
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME && state.phase == UpdatePhase.NeedPermission) {
-                onResumeAfterPermission()
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> leftApp = true
+                Lifecycle.Event.ON_RESUME -> if (leftApp) {
+                    leftApp = false
+                    onResumeAfterPermission()
+                }
+                else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)

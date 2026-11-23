@@ -61,15 +61,20 @@ object ApkArchive {
         } else {
             PackageManager.GET_SIGNATURES
         }
-        val info = manager.getPackageArchiveInfo(file.absolutePath, flags) ?: return null
-        val packageName = info.packageName ?: return null
-        val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            info.longVersionCode
-        } else {
-            info.versionCode.toLong()
+        return try {
+            val info = manager.getPackageArchiveInfo(file.absolutePath, flags) ?: return null
+            val packageName = info.packageName ?: return null
+            val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                info.longVersionCode
+            } else {
+                info.versionCode.toLong()
+            }
+            val signers = signerFingerprints(info) ?: return null
+            ApkInspection(packageName, versionCode, signers)
+        } catch (_: RuntimeException) {
+            // 某些 ROM 解析异常安装包时会抛运行时异常，按「读不出来」处理。
+            null
         }
-        val signers = signerFingerprints(info) ?: return null
-        return ApkInspection(packageName, versionCode, signers)
     }
 
     @Suppress("DEPRECATION")

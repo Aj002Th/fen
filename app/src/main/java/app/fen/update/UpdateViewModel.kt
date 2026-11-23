@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import app.fen.BuildConfig
 import app.fen.FenApp
 import java.io.File
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,6 +48,19 @@ fun updateRowSubtitle(state: UpdateUiState): String = when (state.phase) {
     else -> "当前版本 ${state.currentVersion}"
 }
 
+/** 用户离开应用再回来后该做什么。 */
+enum class ResumeAction {
+    ResumeInstall,
+    ResetInstalling,
+    None,
+}
+
+fun resumeAction(phase: UpdatePhase, canInstall: Boolean): ResumeAction = when {
+    phase == UpdatePhase.NeedPermission && canInstall -> ResumeAction.ResumeInstall
+    phase == UpdatePhase.Installing -> ResumeAction.ResetInstalling
+    else -> ResumeAction.None
+}
+
 class UpdateViewModel(app: Application) : AndroidViewModel(app) {
 
     private val prefs = (app as FenApp).prefs
@@ -82,12 +96,30 @@ class UpdateViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 点击「检查更新」：打开弹层并立即联网。 */
+    /** 点击「检查更新」：先秒显缓存结果，再在后台刷新。 */
     fun openAndCheck() {
-        _state.update { it.copy(sheetVisible = true) }
-        if (!canStartCheck()) return
+        val allowed = canStartCheck()
+        val cached = checker.cachedNewer()
+        _state.update { current ->
+            when {
+                !allowed -> current.copy(sheetVisible = true)
+                cached != null -> current.copy(
+                    sheetVisible = true,
+                    phase = UpdatePhase.Available,
+                    release = cached,
+                    stale = false,
+                    error = null,
+                )
+                else -> current.copy(
+                    sheetVisible = true,
+                    phase = UpdatePhase.Checking,
+                    stale = false,
+                    error = null,
+                )
+            }
+        }
+        if (!allowed) return
         viewModelScope.launch {
-            _state.update { it.copy(phase = UpdatePhase.Checking, error = null) }
             applyResult(checker.check(force = true), manual = true)
         }
     }
@@ -100,67 +132,73 @@ class UpdateViewModel(app: Application) : AndroidViewModel(app) {
         val release = _state.value.release ?: return
         if (downloadJob?.isActive == true) return
         downloadJob = viewModelScope.launch {
-            _state.update {
-                it.copy(
-                    phase = UpdatePhase.Downloading,
-                    progress = 0f,
-                    error = null,
-                    stale = false,
-                )
-            }
-            val downloaded = downloader.download(
-                url = release.apk.url,
-                fileName = "Fen-${release.version}.apk",
-            ) { done, total ->
-                val fraction = total?.let { (done.toFloat() / it).coerceIn(0f, 1f) }
-                _state.update { it.copy(progress = fraction) }
-            }.getOrElse { error ->
-                failDownload(error.message ?: "下载失败")
-                return@launch
-            }
+            try {
+                _state.update {
+                    it.copy(
+                        phase = UpdatePhase.Downloading,
+                        progress = 0f,
+                        error = null,
+                        stale = false,
+                    )
+                }
+                val downloaded = downloader.download(
+                    url = release.apk.url,
+                    fileName = "Fen-${release.version}.apk",
+                ) { done, total ->
+                    val fraction = total?.let { (done.toFloat() / it).coerceIn(0f, 1f) }
+                    _state.update { it.copy(progress = fraction) }
+                }.getOrElse { error ->
+                    failDownload(error.message ?: "下载失败")
+                    return@launch
+                }
 
-            _state.update { it.copy(phase = UpdatePhase.Verifying, progress = null) }
-            val expected = when {
-                release.apk.digestSha256 != null -> release.apk.digestSha256
-                release.sha256FileUrl != null -> downloader.fetchExpectedSha256(release.sha256FileUrl)
-                    .getOrElse {
-                        failDownload("无法获取安装包校验值，请稍后重试")
-                        return@launch
-                    }
-                else -> null
-            }
-            if (expected != null && !expected.equals(downloaded.sha256, ignoreCase = true)) {
-                failDownload("安装包校验失败，请重试")
-                return@launch
-            }
+                _state.update { it.copy(phase = UpdatePhase.Verifying, progress = null) }
+                val expected = when {
+                    release.apk.digestSha256 != null -> release.apk.digestSha256
+                    release.sha256FileUrl != null -> downloader.fetchExpectedSha256(release.sha256FileUrl)
+                        .getOrElse {
+                            failDownload("无法获取安装包校验值，请稍后重试")
+                            return@launch
+                        }
+                    else -> null
+                }
+                if (expected != null && !expected.equals(downloaded.sha256, ignoreCase = true)) {
+                    failDownload("安装包校验失败，请重试")
+                    return@launch
+                }
 
-            val app = getApplication<Application>()
-            val check = withContext(Dispatchers.IO) {
-                compareArchive(
-                    info = ApkArchive.inspect(app, downloaded.file),
-                    appPackage = app.packageName,
-                    currentVersionCode = currentVersionCode(app),
-                    installedSigners = ApkArchive.installedSigners(app),
-                )
-            }
-            val message = when (check) {
-                ApkCheck.Ok -> null
-                ApkCheck.Unreadable -> "安装包无法读取，请重试"
-                ApkCheck.WrongPackage -> "这个安装包属于其他应用，无法安装"
-                is ApkCheck.TooOld -> "安装包版本低于当前版本"
-                ApkCheck.WrongSignature -> "安装包签名与当前应用不一致"
-            }
-            if (message != null) {
-                failDownload(message)
-                return@launch
-            }
+                val app = getApplication<Application>()
+                val check = withContext(Dispatchers.IO) {
+                    compareArchive(
+                        info = ApkArchive.inspect(app, downloaded.file),
+                        appPackage = app.packageName,
+                        currentVersionCode = currentVersionCode(app),
+                        installedSigners = ApkArchive.installedSigners(app),
+                    )
+                }
+                val message = when (check) {
+                    ApkCheck.Ok -> null
+                    ApkCheck.Unreadable -> "安装包无法读取，请重试"
+                    ApkCheck.WrongPackage -> "这个安装包属于其他应用，无法安装"
+                    is ApkCheck.TooOld -> "安装包版本低于当前版本"
+                    ApkCheck.WrongSignature -> "安装包签名与当前应用不一致"
+                }
+                if (message != null) {
+                    failDownload(message)
+                    return@launch
+                }
 
-            if (!UpdateInstaller.canInstall(app)) {
-                pendingInstall = downloaded.file
-                _state.update { it.copy(phase = UpdatePhase.NeedPermission, progress = null) }
-                return@launch
+                if (!UpdateInstaller.canInstall(app)) {
+                    pendingInstall = downloaded.file
+                    _state.update { it.copy(phase = UpdatePhase.NeedPermission, progress = null) }
+                    return@launch
+                }
+                startInstall(downloaded.file)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Throwable) {
+                failDownload("更新失败，请重试")
             }
-            startInstall(downloaded.file)
         }
     }
 
@@ -185,12 +223,19 @@ class UpdateViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** 用户从系统授权页返回后继续安装，不重新下载。 */
+    /** 用户离开应用再回来后继续安装，或从「正在安装」复位。 */
     fun resumeAfterPermission() {
-        val file = pendingInstall ?: return
-        if (_state.value.phase != UpdatePhase.NeedPermission) return
         val app = getApplication<Application>()
-        if (UpdateInstaller.canInstall(app)) startInstall(file)
+        when (resumeAction(_state.value.phase, UpdateInstaller.canInstall(app))) {
+            ResumeAction.ResumeInstall -> pendingInstall?.let { startInstall(it) }
+            ResumeAction.ResetInstalling -> {
+                cleanUpdatesDir(updatesDir)
+                _state.update {
+                    it.copy(phase = UpdatePhase.Available, progress = null, error = null)
+                }
+            }
+            ResumeAction.None -> Unit
+        }
     }
 
     fun retry() {

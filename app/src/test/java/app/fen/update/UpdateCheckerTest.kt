@@ -102,6 +102,33 @@ class UpdateCheckerTest {
     }
 
     @Test
+    fun `unexpected source failure becomes a reported error`() = runBlocking {
+        val source = object : ReleaseSource {
+            override suspend fun fetchLatest(): Result<UpdateRelease> =
+                throw IllegalStateException("boom")
+        }
+        val result = UpdateChecker(source, FakeStore(), "1.0.0") { 1_000L }.check(force = true)
+        assertTrue(result is UpdateCheck.Failed)
+        assertEquals("boom", (result as UpdateCheck.Failed).message)
+    }
+
+    @Test
+    fun `cachedNewer exposes the cached release for instant display`() = runBlocking {
+        val store = FakeStore()
+        UpdateChecker(FakeSource(release("1.1.0")), store, "1.0.0") { 1_000L }.check(force = true)
+        val checker = UpdateChecker(FakeSource(null), store, "1.0.0") { 1_000L }
+        assertEquals("1.1.0", checker.cachedNewer()?.version)
+    }
+
+    @Test
+    fun `cachedNewer ignores releases that are not newer`() = runBlocking {
+        val store = FakeStore()
+        UpdateChecker(FakeSource(release("1.0.0")), store, "1.0.0") { 1_000L }.check(force = true)
+        val checker = UpdateChecker(FakeSource(null), store, "1.0.0") { 1_000L }
+        assertNull(checker.cachedNewer())
+    }
+
+    @Test
     fun `http errors get distinct messages`() {
         assertEquals("GitHub 暂时限制了请求，请稍后再试", updateHttpMessage(403))
         assertEquals("GitHub 暂时限制了请求，请稍后再试", updateHttpMessage(429))

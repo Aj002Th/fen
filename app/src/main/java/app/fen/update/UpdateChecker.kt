@@ -1,6 +1,7 @@
 package app.fen.update
 
 import app.fen.data.AppPrefs
+import kotlinx.coroutines.CancellationException
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -56,6 +57,10 @@ class UpdateChecker(
         .takeIf { it.isNotBlank() }
         ?.let { ReleaseJson.parse(it) }
 
+    /** 缓存里比本地新的版本；用于打开弹层时先秒显结果。 */
+    fun cachedNewer(): UpdateRelease? =
+        cached()?.takeIf { UpdateVersion.isNewer(it.version, localVersion) }
+
     suspend fun check(force: Boolean): UpdateCheck {
         val now = clock()
         val cachedRelease = cached()
@@ -71,7 +76,13 @@ class UpdateChecker(
             }
         }
 
-        val result = source.fetchLatest()
+        val result = try {
+            source.fetchLatest()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            Result.failure(error)
+        }
         store.lastCheckAt = now
         return result.fold(
             onSuccess = { release ->
