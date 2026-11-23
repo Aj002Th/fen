@@ -429,7 +429,6 @@ private fun FenContent(viewModel: FenViewModel) {
                             onCheckUpdate = updateViewModel::openAndCheck,
                             onUnlockDev = {
                                 devUnlocked = true
-                                navController.popBackStack()
                             },
                         )
                     }

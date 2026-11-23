@@ -3,6 +3,7 @@
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -106,6 +107,11 @@ fun AboutScreen(
                             if (shouldUnlockDev(iconTaps)) {
                                 iconTaps = 0
                                 onUnlockDev()
+                                Toast.makeText(
+                                    context,
+                                    "已进入开发模式",
+                                    Toast.LENGTH_SHORT,
+                                ).show()
                             }
                         },
                     contentAlignment = Alignment.Center,
