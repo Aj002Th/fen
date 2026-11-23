@@ -83,6 +83,7 @@ import app.fen.ui.screens.StatsScreen
 import app.fen.ui.theme.Fen
 import app.fen.ui.theme.FenMotion
 import app.fen.ui.theme.FenTheme
+import app.fen.update.UpdateViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -155,6 +156,8 @@ private fun FenContent(viewModel: FenViewModel) {
     val importState by viewModel.importState.collectAsStateWithLifecycle()
     val batches by viewModel.importBatches.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
+    val updateViewModel: UpdateViewModel = viewModel()
+    val updateState by updateViewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -181,6 +184,10 @@ private fun FenContent(viewModel: FenViewModel) {
 
     LaunchedEffect(showAdd) {
         if (showAdd) addOffset.animateTo(0f, fenFloat)
+    }
+
+    LaunchedEffect(Unit) {
+        updateViewModel.checkOnStart()
     }
 
     LaunchedEffect(message) {
@@ -292,6 +299,16 @@ private fun FenContent(viewModel: FenViewModel) {
                             onOpenImport = { navController.navigate("import") },
                             onOpenExport = { navController.navigate("export") },
                             onOpenBackup = { navController.navigate("backup") },
+                            updateState = updateState,
+                            isDevBuild = updateViewModel.isDevBuild,
+                            onCheckUpdate = updateViewModel::openAndCheck,
+                            onCloseUpdate = updateViewModel::closeSheet,
+                            onDownloadUpdate = updateViewModel::downloadAndInstall,
+                            onCancelUpdate = updateViewModel::cancelDownload,
+                            onRetryUpdate = updateViewModel::retry,
+                            onOpenInstallPermission = updateViewModel::openInstallPermission,
+                            onResumeUpdatePermission = updateViewModel::resumeAfterPermission,
+                            onRecheckUpdate = updateViewModel::openAndCheck,
                             showDebug = BuildConfig.DEBUG,
                             onSeedDemo = {
                                 scope.launch(Dispatchers.IO) { viewModel.seedDemoData(400) }
