@@ -48,6 +48,10 @@ fun updateRowSubtitle(state: UpdateUiState): String = when (state.phase) {
     else -> "当前版本 ${state.currentVersion}"
 }
 
+/** 设置页与关于页的红点：只在已发现可下载的新版本时亮。 */
+fun hasAvailableUpdate(state: UpdateUiState): Boolean =
+    state.phase == UpdatePhase.Available
+
 /** 用户离开应用再回来后该做什么。 */
 enum class ResumeAction {
     ResumeInstall,
