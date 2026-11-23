@@ -46,10 +46,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import app.fen.BuildConfig
 import app.fen.ui.components.CircleAction
+import app.fen.ui.components.DotBadge
 import app.fen.ui.components.IconBadge
 import app.fen.ui.components.RowDivider
 import app.fen.ui.components.SectionLabel
 import app.fen.ui.theme.Fen
+import app.fen.update.UpdateVersion
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,17 +64,16 @@ fun SettingsScreen(
     onOpenImport: () -> Unit,
     onOpenExport: () -> Unit,
     onOpenBackup: () -> Unit,
+    devUnlocked: Boolean,
+    hasUpdate: Boolean,
+    onOpenAbout: () -> Unit,
     showDebug: Boolean = false,
     onSeedDemo: () -> Unit = {},
     onClearData: () -> Unit = {},
 ) {
     var showThemeDialog by remember { mutableStateOf(false) }
-    var showAbout by remember { mutableStateOf(false) }
     var showSeedConfirm by remember { mutableStateOf(false) }
     var showClearConfirm by remember { mutableStateOf(false) }
-    // 开发选项默认隐藏：在「关于」弹窗里连点标题 10 次才出现；进程退出后重置
-    var devUnlocked by remember { mutableStateOf(false) }
-    var aboutTaps by remember { mutableStateOf(0) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -209,13 +210,11 @@ fun SettingsScreen(
             ) {
                 SettingItem(
                     title = "Fen",
-                    subtitle = "版本 ${BuildConfig.VERSION_NAME} · " + if (BuildConfig.FEN_VARIANT == "prod") "开源" else "开发版",
+                    subtitle = "版本 ${UpdateVersion.normalize(BuildConfig.VERSION_NAME)}",
                     icon = Icons.Outlined.Info,
                     tint = Color(0xFFF2583E),
-                    onClick = {
-                        aboutTaps = 0
-                        showAbout = true
-                    },
+                    onClick = onOpenAbout,
+                    trailingDot = hasUpdate,
                 )
             }
         }
@@ -293,34 +292,6 @@ fun SettingsScreen(
         }
     }
 
-    if (showAbout) {
-        AlertDialog(
-            onDismissRequest = { showAbout = false },
-            title = {
-                Text(
-                    text = "Fen · 分",
-                    modifier = Modifier.clickable {
-                        aboutTaps += 1
-                        if (aboutTaps >= 10) {
-                            devUnlocked = true
-                            aboutTaps = 0
-                            showAbout = false
-                        }
-                    },
-                )
-            },
-            text = {
-                Text(
-                    "一个开源、克制的 Android 记账应用。\n" +
-                        "数据只保存在本机，没有账号、没有网络请求。\n\n" +
-                        "版本 ${BuildConfig.VERSION_NAME}"
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { showAbout = false }) { Text("好的") }
-            },
-        )
-    }
     if (showSeedConfirm) {
         AlertDialog(
             onDismissRequest = { showSeedConfirm = false },
@@ -363,6 +334,7 @@ private fun SettingItem(
     icon: ImageVector,
     tint: Color,
     onClick: () -> Unit,
+    trailingDot: Boolean = false,
 ) {
     Row(
         modifier = Modifier
@@ -380,6 +352,10 @@ private fun SettingItem(
                 style = MaterialTheme.typography.bodyMedium,
                 color = Fen.colors.inkSoft,
             )
+        }
+        if (trailingDot) {
+            DotBadge()
+            Spacer(Modifier.size(8.dp))
         }
         Icon(
             Icons.Rounded.ChevronRight,
