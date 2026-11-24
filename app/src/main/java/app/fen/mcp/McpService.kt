@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.net.wifi.WifiManager
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -20,6 +21,7 @@ import app.fen.R
 class McpService : Service() {
 
     private var wifiLock: WifiManager.WifiLock? = null
+    private var wakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -34,6 +36,7 @@ class McpService : Service() {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
         )
         acquireWifiLock()
+        acquireWakeLock()
         (application as FenApp).mcp.startServer()
         return START_STICKY
     }
@@ -41,6 +44,7 @@ class McpService : Service() {
     override fun onDestroy() {
         (application as FenApp).mcp.stopServer()
         releaseWifiLock()
+        releaseWakeLock()
         super.onDestroy()
     }
 
@@ -63,7 +67,10 @@ class McpService : Service() {
         val open = PendingIntent.getActivity(
             this,
             0,
-            Intent(this, MainActivity::class.java),
+            Intent(this, MainActivity::class.java).apply {
+                putExtra(MainActivity.EXTRA_OPEN_MCP, true)
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val running = (application as FenApp).mcp.state.value
@@ -93,6 +100,20 @@ class McpService : Service() {
     private fun releaseWifiLock() {
         wifiLock?.let { runCatching { if (it.isHeld) it.release() } }
         wifiLock = null
+    }
+
+    private fun acquireWakeLock() {
+        if (wakeLock != null) return
+        val manager = applicationContext.getSystemService(PowerManager::class.java) ?: return
+        wakeLock = manager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "fen:mcp").apply {
+            setReferenceCounted(false)
+            runCatching { acquire() }
+        }
+    }
+
+    private fun releaseWakeLock() {
+        wakeLock?.let { runCatching { if (it.isHeld) it.release() } }
+        wakeLock = null
     }
 
     companion object {

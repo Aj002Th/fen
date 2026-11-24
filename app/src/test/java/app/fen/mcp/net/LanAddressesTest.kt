@@ -21,21 +21,42 @@ class LanAddressesTest {
     }
 
     @Test
-    fun prefersWifiAndDeduplicates() {
+    fun prefersWifiAndExcludesVpnAndCellular() {
         val result = selectLanAddresses(
             listOf(
-                LanCandidate("rmnet0", "10.1.2.3", false),
+                LanCandidate("rmnet_data4", "10.22.62.94", false),
+                LanCandidate("tun0", "172.19.0.1", false),
                 LanCandidate("wlan0", "192.168.1.2", true),
                 LanCandidate("wlan0", "192.168.1.2", true),
                 LanCandidate("lo", "127.0.0.1", false),
             )
         )
 
-        assertEquals(listOf("192.168.1.2", "10.1.2.3"), result)
+        assertEquals(listOf("192.168.1.2"), result)
     }
 
     @Test
-    fun emptyWhenNoPrivateAddress() {
-        assertEquals(emptyList<String>(), selectLanAddresses(listOf(LanCandidate("lo", "127.0.0.1", false))))
+    fun fallsBackToEthernetWhenNoWifi() {
+        val result = selectLanAddresses(
+            listOf(
+                LanCandidate("eth0", "10.0.2.16", false),
+                LanCandidate("tun0", "172.19.0.1", false),
+            )
+        )
+
+        assertEquals(listOf("10.0.2.16"), result)
+    }
+
+    @Test
+    fun emptyWhenNoLanAddress() {
+        assertEquals(
+            emptyList<String>(),
+            selectLanAddresses(
+                listOf(
+                    LanCandidate("lo", "127.0.0.1", false),
+                    LanCandidate("tun0", "172.19.0.1", false),
+                )
+            ),
+        )
     }
 }

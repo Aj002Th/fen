@@ -1,6 +1,5 @@
-package app.fen.mcp
+﻿package app.fen.mcp
 
-import android.util.Log
 import app.fen.mcp.auth.TokenAuth
 import app.fen.mcp.net.RateLimiter
 import app.fen.mcp.net.Rejection
@@ -54,9 +53,9 @@ class McpServer(
     fun start() {
         val server = embeddedServer(CIO, host = host, port = port) {
             routing {
-                post("/mcp") { Log.i("FenMcp", "POST /mcp"); handlePost(call) }
-                get("/mcp") { Log.i("FenMcp", "GET /mcp"); call.respond(HttpStatusCode.MethodNotAllowed) }
-                delete("/mcp") { Log.i("FenMcp", "DELETE /mcp"); handleDelete(call) }
+                post("/mcp") { handlePost(call) }
+                get("/mcp") { call.respond(HttpStatusCode.MethodNotAllowed) }
+                delete("/mcp") { handleDelete(call) }
             }
         }
         stopServer = { server.stop(0, 1_000) }
@@ -72,7 +71,7 @@ class McpServer(
         try {
             handlePostUnsafe(call)
         } catch (e: Exception) {
-            Log.e("FenMcp", "request failed", e)
+
             runCatching {
                 call.respondText(
                     rpcError(null, RpcCode.INTERNAL, "Internal error").toString(),
@@ -86,7 +85,7 @@ class McpServer(
     private suspend fun handlePostUnsafe(call: ApplicationCall) {
         val headers = call.toRequestHeaders()
         val clientIp = call.request.local.remoteAddress
-        Log.i("FenMcp", "request from $clientIp host=${headers.host}")
+
 
         validateHeaders(headers, allowedHosts())?.let { rejection ->
             onRejected(headers, clientIp, rejection.status, rejection.message)
@@ -203,7 +202,7 @@ class McpServer(
             meta = parseModernMeta(rpc.params),
             sessionId = headers.sessionId,
         )
-        Log.i("FenMcp", "dispatch ${rpc.method}")
+
         val outcome = try {
             handler.handle(rpc, context)
         } catch (e: Exception) {

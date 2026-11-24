@@ -36,6 +36,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -77,7 +78,11 @@ private val tabs = listOf(
 )
 
 @Composable
-fun FenRoot(viewModel: FenViewModel = viewModel()) {
+fun FenRoot(
+    openMcpRequest: Boolean = false,
+    onMcpOpened: () -> Unit = {},
+    viewModel: FenViewModel = viewModel(),
+) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val darkTheme = when (themeMode) {
         1 -> false
@@ -85,12 +90,16 @@ fun FenRoot(viewModel: FenViewModel = viewModel()) {
         else -> isSystemInDarkTheme()
     }
     FenTheme(darkTheme = darkTheme) {
-        FenContent(viewModel)
+        FenContent(viewModel, openMcpRequest, onMcpOpened)
     }
 }
 
 @Composable
-private fun FenContent(viewModel: FenViewModel) {
+private fun FenContent(
+    viewModel: FenViewModel,
+    openMcpRequest: Boolean,
+    onMcpOpened: () -> Unit,
+) {
     val snapshot by viewModel.snapshot.collectAsStateWithLifecycle()
     val month by viewModel.month.collectAsStateWithLifecycle()
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
@@ -104,6 +113,13 @@ private fun FenContent(viewModel: FenViewModel) {
     var showAdd by remember { mutableStateOf(false) }
     var editingTx by remember { mutableStateOf<Tx?>(null) }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(openMcpRequest) {
+        if (openMcpRequest) {
+            navController.navigate("mcp") { launchSingleTop = true }
+            onMcpOpened()
+        }
+    }
 
     BackHandler(enabled = showAdd) { showAdd = false }
 

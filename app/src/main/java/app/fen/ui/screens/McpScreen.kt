@@ -525,7 +525,7 @@ private fun OptionDialog(
 private fun statusText(state: McpServerState): String = when (state) {
     McpServerState.Stopped -> "未开启"
     McpServerState.Starting -> "启动中…"
-    is McpServerState.Running -> "运行中 · ${state.addresses.size} 个地址"
+    is McpServerState.Running -> "运行中"
     is McpServerState.Error -> "启动失败：${state.message}"
 }
 

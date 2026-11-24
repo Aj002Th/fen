@@ -155,7 +155,7 @@ class McpController(
                 server = instance
                 _state.value = McpServerState.Running(
                     port = port,
-                    addresses = currentAddresses(),
+                    addresses = listOfNotNull(currentAddress()),
                     writeUntil = config.writeUntil,
                 )
                 scheduleExpiry()
@@ -320,6 +320,8 @@ class McpController(
     private fun currentAddresses(): List<String> =
         selectLanAddresses(currentLanCandidates())
 
+    private fun currentAddress(): String? = currentAddresses().firstOrNull()
+
     private fun allowedHosts(port: Int): Set<String> =
         buildSet {
             add("127.0.0.1:$port")
@@ -342,8 +344,8 @@ class McpController(
     }
 
     private fun updateAddresses() {
-        val addresses = currentAddresses()
-        updateRunning { it.copy(addresses = addresses) }
+        val address = currentAddress()
+        updateRunning { it.copy(addresses = listOfNotNull(address)) }
     }
 
     private fun post(port: Int, body: String, modern: Boolean): Pair<Boolean, String?> {

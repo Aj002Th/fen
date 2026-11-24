@@ -6,23 +6,32 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.mutableStateOf
 import app.fen.ui.FenRoot
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private val openMcp = mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        openMcp.value = intent?.getBooleanExtra(EXTRA_OPEN_MCP, false) == true
         handleDebugIntent(intent)
         setContent {
-            FenRoot()
+            FenRoot(
+                openMcpRequest = openMcp.value,
+                onMcpOpened = { openMcp.value = false },
+            )
         }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
+        openMcp.value = intent.getBooleanExtra(EXTRA_OPEN_MCP, false)
         handleDebugIntent(intent)
     }
 
@@ -65,5 +74,9 @@ class MainActivity : ComponentActivity() {
                 Log.i("FenMcp", "selfTest=$result")
             }
         }
+    }
+
+    companion object {
+        const val EXTRA_OPEN_MCP = "open_mcp"
     }
 }
