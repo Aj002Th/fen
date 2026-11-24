@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class McpViewModel(app: Application) : AndroidViewModel(app) {
 
@@ -31,6 +32,10 @@ class McpViewModel(app: Application) : AndroidViewModel(app) {
     fun setWriteDuration(durationMs: Long?) = controller.setWriteDuration(durationMs)
     fun resetToken() = controller.resetToken()
     fun token(): String = controller.token()
+    fun port(): Int = controller.port()
+    suspend fun lanAddresses(): List<String> = withContext(Dispatchers.IO) {
+        controller.lanAddresses()
+    }
     fun toolDescriptors(writeEnabled: Boolean): List<ToolDescriptor> =
         controller.toolDescriptors(writeEnabled)
 

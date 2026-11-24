@@ -82,18 +82,26 @@ fun McpScreen(
     var showLimit by remember { mutableStateOf(false) }
     var showFaq by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<SelfTestResult?>(null) }
+    var selfTesting by remember { mutableStateOf(false) }
+    var lanAddresses by remember { mutableStateOf(emptyList<String>()) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
 
     LaunchedEffect(Unit) {
         viewModel.refreshCalls()
         while (true) {
             now = System.currentTimeMillis()
-            delay(1_000)
+            lanAddresses = viewModel.lanAddresses()
+            delay(3_000)
         }
     }
 
     val running = state as? McpServerState.Running
-    val address = running?.let { r -> r.addresses.firstOrNull()?.let { "$it:${r.port}" } }
+    val port = running?.port ?: viewModel.port()
+    val address = if (localOnly) {
+        null
+    } else {
+        (running?.addresses?.firstOrNull() ?: lanAddresses.firstOrNull())?.let { "$it:$port" }
+    }
     val writeUntil = running?.writeUntil
     val writeEnabled = writeUntil != null && writeUntil > now
     val maskedToken = "Bearer ${mask(token)}"
@@ -163,35 +171,24 @@ fun McpScreen(
 
         SectionLabel("2. 添加到 AI 客户端", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
         SectionCard {
-            Row(
-                Modifier.fillMaxWidth().clickable {
-                    copy(context, setup)
-                    Toast.makeText(context, "已复制配置，粘贴给 AI", Toast.LENGTH_SHORT).show()
-                },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("客户端", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                Text("让 AI 帮我配置", style = MaterialTheme.typography.bodyMedium, color = Fen.colors.link)
-                Icon(
-                    Icons.Rounded.ChevronRight,
-                    contentDescription = null,
-                    tint = Fen.colors.inkFaint,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
             Text(
                 "复制后发给 AI 助手，让它帮你配置",
                 style = MaterialTheme.typography.bodySmall,
                 color = Fen.colors.inkSoft,
-                modifier = Modifier.padding(top = 4.dp),
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 12.dp)) {
-                WideButton("复制配置", Modifier.weight(1f)) { copy(context, setup) }
-                WideButton("分享到电脑", Modifier.weight(1f)) { share(context, "Fen MCP 配置", setup) }
+                WideButton("复制配置", Modifier.weight(1f), enabled = address != null) { copy(context, setup) }
+                WideButton("分享到电脑", Modifier.weight(1f), enabled = address != null) {
+                    share(context, "Fen MCP 配置", setup)
+                }
             }
             InfoRow(
                 label = "地址",
-                value = address?.let { "http://$it/mcp" } ?: "连接 WiFi 后可用",
+                value = when {
+                    localOnly -> "仅本机可访问"
+                    address != null -> "http://$address/mcp"
+                    else -> "连接 WiFi 后可用"
+                },
                 action = "复制",
                 onAction = { if (address != null) copy(context, "http://$address/mcp") },
             )
@@ -221,11 +218,19 @@ fun McpScreen(
         SectionLabel("4. 测试", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
         SectionCard {
             WideButton(
-                text = "本机自测",
+                text = if (selfTesting) "测试中…" else "本机自测",
                 modifier = Modifier.fillMaxWidth(),
-                enabled = running != null,
+                enabled = running != null && !selfTesting,
             ) {
-                scope.launch { testResult = viewModel.selfTest() }
+                selfTesting = true
+                scope.launch {
+                    try {
+                        testResult = viewModel.selfTest()
+                        viewModel.refreshCalls()
+                    } finally {
+                        selfTesting = false
+                    }
+                }
             }
             testResult?.let { result ->
                 Text(

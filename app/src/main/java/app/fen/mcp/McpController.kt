@@ -191,6 +191,10 @@ class McpController(
 
     fun token(): String = config.token
 
+    fun port(): Int = config.port
+
+    fun lanAddresses(): List<String> = currentAddresses()
+
     fun writeUntil(): Long? = config.writeUntil
 
     fun autoStartEnabled(): Boolean = config.autoStart
@@ -346,6 +350,8 @@ class McpController(
         val connection = URL("http://127.0.0.1:$port/mcp").openConnection() as HttpURLConnection
         return try {
             connection.requestMethod = "POST"
+            connection.connectTimeout = 3_000
+            connection.readTimeout = 5_000
             connection.doOutput = true
             connection.setRequestProperty("Content-Type", "application/json")
             connection.setRequestProperty("Accept", "application/json, text/event-stream")
