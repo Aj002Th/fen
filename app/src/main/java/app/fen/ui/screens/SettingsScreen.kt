@@ -20,6 +20,7 @@ import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Upload
@@ -67,6 +68,7 @@ fun SettingsScreen(
     devUnlocked: Boolean,
     hasUpdate: Boolean,
     onOpenAbout: () -> Unit,
+    onOpenImageImport: () -> Unit = {},
     showDebug: Boolean = false,
     onSeedDemo: () -> Unit = {},
     onClearData: () -> Unit = {},
@@ -109,6 +111,14 @@ fun SettingsScreen(
                         icon = Icons.Outlined.Category,
                         tint = Color(0xFFF2A93E),
                         onClick = onOpenCategories,
+                    )
+                    RowDivider(startInset = 64.dp)
+                    SettingItem(
+                        title = "图片导入",
+                        subtitle = "支持一次选择多张账单截图",
+                        icon = Icons.Outlined.PhotoLibrary,
+                        tint = Color(0xFF3E8BF2),
+                        onClick = onOpenImageImport,
                     )
                 }
             }

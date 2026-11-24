@@ -1,7 +1,11 @@
 package app.fen.ui
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
@@ -39,11 +43,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.PieChart
 import androidx.compose.material.icons.outlined.ReceiptLong
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -68,7 +75,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import app.fen.BuildConfig
+import app.fen.FenApp
+import app.fen.autobook.capture.BatchItem
+import app.fen.autobook.capture.BatchSelection
+import app.fen.autobook.capture.ImageImportState
+import app.fen.autobook.classify.DuplicateDetector
+import app.fen.autobook.model.ParsedBill
+import app.fen.autobook.ui.BatchConfirmSheet
 import app.fen.data.Tx
+import app.fen.data.TxType
 import app.fen.ui.screens.AddTransactionScreen
 import app.fen.ui.screens.AboutScreen
 import app.fen.ui.screens.BackupScreen
@@ -92,6 +107,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
+
+private data class DraftSave(
+    val type: TxType,
+    val amountMinor: Long,
+    val categoryId: String?,
+    val note: String,
+    val occurredAt: Long,
+)
 
 private fun tabIndex(entry: NavBackStackEntry?): Int? = when (entry?.destination?.route) {
     "bills" -> 0
@@ -168,9 +191,105 @@ private fun FenContent(viewModel: FenViewModel) {
     val showBottomBar = currentRoute == null || RootTabs.isRoot(currentRoute)
     var showAdd by remember { mutableStateOf(false) }
     var editingTx by remember { mutableStateOf<Tx?>(null) }
+    var draftBill by remember { mutableStateOf<ParsedBill?>(null) }
+    var draftOpenedAt by remember { mutableStateOf(0L) }
+    var batchItems by remember { mutableStateOf<List<BatchItem>>(emptyList()) }
+    var batchSelected by remember { mutableStateOf<Set<Int>>(emptySet()) }
+    var batchEditIndex by remember { mutableStateOf<Int?>(null) }
+    var pendingDraftSave by remember { mutableStateOf<DraftSave?>(null) }
+    var showDuplicateDialog by remember { mutableStateOf(false) }
     var devUnlocked by remember { mutableStateOf(false) }
     val addOffset = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
+    val smartImport = remember(context) { (context.applicationContext as FenApp).imageImport }
+    val smartImportState by smartImport.state.collectAsStateWithLifecycle()
+    val imagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(9)
+    ) { uris ->
+        if (uris.size == 1) {
+            smartImport.submit(uris.first())
+        } else if (uris.size > 1) {
+            smartImport.submitAll(uris)
+        }
+    }
+
+    LaunchedEffect(smartImportState) {
+        when (val current = smartImportState) {
+            is ImageImportState.Error -> {
+                android.util.Log.w("SmartImport", "state error=${current.message}")
+                Toast.makeText(context, current.message, Toast.LENGTH_SHORT).show()
+                smartImport.consume()
+            }
+
+            is ImageImportState.Ready -> {
+                android.util.Log.d(
+                    "SmartImport",
+                    "ready amount=${current.bill.amountMinor} merchant=${current.bill.merchant}",
+                )
+                batchItems = emptyList()
+                batchSelected = emptySet()
+                batchEditIndex = null
+                draftBill = current.bill
+                draftOpenedAt = System.currentTimeMillis()
+                smartImport.consume()
+            }
+
+            is ImageImportState.ReadyBatch -> {
+                draftBill = null
+                batchItems = current.items
+                batchSelected = BatchSelection.initialSelection(
+                    current.items,
+                    snapshot.transactions,
+                )
+                batchEditIndex = null
+            }
+
+            else -> Unit
+        }
+    }
+
+    fun saveDraft(save: DraftSave, andContinue: Boolean = false) {
+        viewModel.addTransactionAt(
+            type = save.type,
+            amountMinor = save.amountMinor,
+            categoryId = save.categoryId,
+            note = save.note,
+            occurredAtMillis = save.occurredAt,
+        )
+        if (save.categoryId != null) {
+            viewModel.rememberMerchant(save.note, save.type, save.categoryId)
+        }
+        pendingDraftSave = null
+        showDuplicateDialog = false
+        // 「再记一笔」保留当前确认页继续录，与手工记账一致；正常保存才关闭。
+        if (!andContinue) {
+            scope.launch {
+                addOffset.animateTo(1f, fenFloat)
+                draftBill = null
+            }
+        }
+    }
+
+    fun dismissDraft() {
+        scope.launch {
+            addOffset.animateTo(1f, fenFloat)
+            draftBill = null
+        }
+    }
+
+    fun dismissBatchEditor() {
+        scope.launch {
+            addOffset.animateTo(1f, fenFloat)
+            batchEditIndex = null
+        }
+    }
+
+    fun closeBatch() {
+        smartImport.consume()
+        batchItems = emptyList()
+        batchSelected = emptySet()
+        batchEditIndex = null
+    }
 
     suspend fun dismissAdd() {
         addOffset.animateTo(1f, fenFloat)
@@ -186,8 +305,23 @@ private fun FenContent(viewModel: FenViewModel) {
         }
     }
 
-    LaunchedEffect(showAdd) {
-        if (showAdd) addOffset.animateTo(0f, fenFloat)
+    BackHandler(enabled = draftBill != null) {
+        val age = System.currentTimeMillis() - draftOpenedAt
+        android.util.Log.d("SmartImport", "back draftAge=$age")
+        // 相册/分享返回时可能补发一次 BACK，刚打开时忽略，避免把 draft 立刻清掉。
+        if (age >= 800) {
+            dismissDraft()
+        }
+    }
+
+    BackHandler(enabled = batchEditIndex != null) {
+        dismissBatchEditor()
+    }
+
+    LaunchedEffect(showAdd, draftBill, batchEditIndex) {
+        if (showAdd || draftBill != null || batchEditIndex != null) {
+            addOffset.animateTo(0f, fenFloat)
+        }
     }
 
     LaunchedEffect(Unit) {
@@ -303,6 +437,11 @@ private fun FenContent(viewModel: FenViewModel) {
                             onOpenImport = { navController.navigate("import") },
                             onOpenExport = { navController.navigate("export") },
                             onOpenBackup = { navController.navigate("backup") },
+                            onOpenImageImport = {
+                                imagePicker.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            },
                             devUnlocked = devUnlocked,
                             hasUpdate = hasAvailableUpdate(updateState),
                             onOpenAbout = { navController.navigate("about") },
@@ -436,43 +575,188 @@ private fun FenContent(viewModel: FenViewModel) {
             }
         }
 
-        if (showAdd || addOffset.value < 1f) {
+        val batchEdit = batchEditIndex?.let { index ->
+            batchItems.getOrNull(index)?.bill?.let { bill -> index to bill }
+        }
+        val editingBatchBill = batchEdit?.second
+        if (showAdd || draftBill != null || editingBatchBill != null || addOffset.value < 1f) {
             AddTransactionScreen(
                 snapshot = snapshot,
                 initial = editingTx,
+                draft = draftBill ?: editingBatchBill,
+                allowContinue = editingBatchBill == null,
+                showManageCategories = editingBatchBill == null,
                 suggestionPenalties = penalties,
                 onPenalizeSuggestion = viewModel::penalizeSuggestion,
                 modifier = Modifier.graphicsLayer {
                     translationY = addOffset.value * size.height
                 },
-                onClose = { scope.launch { dismissAdd() } },
+                onClose = {
+                    when {
+                        editingBatchBill != null -> dismissBatchEditor()
+                        draftBill != null -> dismissDraft()
+                        else -> scope.launch { dismissAdd() }
+                    }
+                },
                 onManageCategories = {
                     scope.launch {
                         dismissAdd()
+                        draftBill = null
+                        batchEditIndex = null
                         navController.navigate("categories")
                     }
                 },
                 onSave = { type, amountMinor, categoryId, note, dateTime, andContinue ->
-                    val editing = editingTx
-                    if (editing == null) {
-                        viewModel.addTransaction(type, amountMinor, categoryId, note, dateTime)
-                    } else {
-                        viewModel.updateTransaction(
-                            editing.copy(
-                                type = type,
-                                amount = amountMinor,
-                                categoryId = categoryId,
-                                note = note.trim(),
-                                occurredAt = dateTime
-                                    .atZone(java.time.ZoneId.systemDefault())
-                                    .toInstant()
-                                    .toEpochMilli(),
-                            )
+                    if (batchEdit != null) {
+                        val (index, bill) = batchEdit
+                        val occurredAt = dateTime
+                            .atZone(java.time.ZoneId.systemDefault())
+                            .toInstant()
+                            .toEpochMilli()
+                        val updated = bill.copy(
+                            type = type,
+                            amountMinor = amountMinor,
+                            categoryId = categoryId,
+                            merchant = note.trim(),
+                            occurredAt = occurredAt,
                         )
+                        val next = batchItems.toMutableList()
+                        next[index] = BatchItem(updated, null)
+                        batchItems = next
+                        dismissBatchEditor()
+                    } else if (draftBill != null) {
+                        val occurredAt = dateTime
+                            .atZone(java.time.ZoneId.systemDefault())
+                            .toInstant()
+                            .toEpochMilli()
+                        val candidate = draftBill!!.copy(
+                            type = type,
+                            amountMinor = amountMinor,
+                            categoryId = categoryId,
+                            merchant = note.trim(),
+                            occurredAt = occurredAt,
+                        )
+                        val save = DraftSave(
+                            type = type,
+                            amountMinor = amountMinor,
+                            categoryId = categoryId,
+                            note = note.trim(),
+                            occurredAt = occurredAt,
+                        )
+                        if (DuplicateDetector.find(candidate, snapshot.transactions) != null) {
+                            pendingDraftSave = save
+                            showDuplicateDialog = true
+                        } else {
+                            saveDraft(save, andContinue)
+                        }
+                    } else {
+                        val editing = editingTx
+                        if (editing == null) {
+                            viewModel.addTransaction(type, amountMinor, categoryId, note, dateTime)
+                        } else {
+                            viewModel.updateTransaction(
+                                editing.copy(
+                                    type = type,
+                                    amount = amountMinor,
+                                    categoryId = categoryId,
+                                    note = note.trim(),
+                                    occurredAt = dateTime
+                                        .atZone(java.time.ZoneId.systemDefault())
+                                        .toInstant()
+                                        .toEpochMilli(),
+                                )
+                            )
+                        }
+                        if (!andContinue) scope.launch { dismissAdd() }
                     }
-                    if (!andContinue) scope.launch { dismissAdd() }
                 },
             )
+        }
+
+        if (showDuplicateDialog && pendingDraftSave != null) {
+            AlertDialog(
+                onDismissRequest = {
+                    showDuplicateDialog = false
+                    pendingDraftSave = null
+                },
+                title = { Text("可能重复") },
+                text = { Text("已有一笔金额和时间相近的记录，仍要保存吗？") },
+                confirmButton = {
+                    TextButton(
+                        onClick = { pendingDraftSave?.let { saveDraft(it) } }
+                    ) { Text("继续保存") }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            showDuplicateDialog = false
+                            pendingDraftSave = null
+                        }
+                    ) { Text("取消") }
+                },
+            )
+        }
+
+        val readyBatch = smartImportState as? ImageImportState.ReadyBatch
+        if (readyBatch != null && batchEditIndex == null && batchItems.isNotEmpty()) {
+            BatchConfirmSheet(
+                items = batchItems,
+                categories = snapshot.categories,
+                existing = snapshot.transactions,
+                selected = batchSelected,
+                onSelectedChange = { batchSelected = it },
+                onEdit = { index ->
+                    batchSelected = batchSelected + index
+                    batchEditIndex = index
+                },
+                onSaveAll = { bills ->
+                    bills.forEach { bill ->
+                        val type = bill.type ?: TxType.EXPENSE
+                        val categoryId = bill.categoryId ?: return@forEach
+                        viewModel.addTransactionAt(
+                            type = type,
+                            amountMinor = bill.amountMinor,
+                            categoryId = categoryId,
+                            note = bill.merchant,
+                            occurredAtMillis = bill.occurredAt,
+                        )
+                        viewModel.rememberMerchant(bill.merchant, type, categoryId)
+                    }
+                    closeBatch()
+                },
+                onDismiss = { closeBatch() },
+            )
+        }
+
+        val loading = smartImportState as? ImageImportState.Loading
+        if (loading != null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.25f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Surface(shape = RoundedCornerShape(18.dp), color = Fen.colors.surface) {
+                    Row(
+                        modifier = Modifier.padding(20.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(22.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = if (loading.total > 0) {
+                                "识别中 ${loading.completed}/${loading.total}"
+                            } else {
+                                "识别中…"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                }
+            }
         }
 
         if (updateState.sheetVisible) {

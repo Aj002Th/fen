@@ -58,6 +58,17 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
         )
         db.execSQL("CREATE INDEX idx_tx_occurred ON tx(occurred_at)")
         db.execSQL("CREATE INDEX idx_tx_batch ON tx(import_batch)")
+        db.execSQL(
+            """
+            CREATE TABLE auto_map(
+                merchant_key TEXT NOT NULL,
+                type TEXT NOT NULL,
+                category_id TEXT NOT NULL,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY(merchant_key, type)
+            )
+            """.trimIndent()
+        )
         seed(db)
     }
 
@@ -104,24 +115,9 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
             db.execSQL("DROP TABLE category")
             db.execSQL("ALTER TABLE category_new RENAME TO category")
         }
-        if (oldVersion < 6) {
-            db.execSQL("ALTER TABLE tx ADD COLUMN import_batch TEXT")
-            db.execSQL(
-                """
-                CREATE TABLE IF NOT EXISTS import_batch(
-                    id TEXT PRIMARY KEY,
-                    source TEXT NOT NULL,
-                    label TEXT NOT NULL DEFAULT '',
-                    created_at INTEGER NOT NULL,
-                    rows INTEGER NOT NULL
-                )
-                """.trimIndent()
-            )
-            db.execSQL("CREATE INDEX IF NOT EXISTS idx_tx_batch ON tx(import_batch)")
-        }
-        if (oldVersion < 7) {
-            db.execSQL("ALTER TABLE import_batch ADD COLUMN file_hash TEXT")
-        }
+        // v6 在 master 上是导入批次；本分支曾把 v6 用作 auto_map，
+        // 因此这里按「缺什么补什么」幂等迁移，避免版本号撞车。
+        ensureImportBatchSchema(db)
         if (oldVersion < 8) {
             // 「未分类」成为真实分类；NULL / 已删除分类的流水一并归进去
             for (type in TxType.entries) {
@@ -138,6 +134,56 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
         if (oldVersion < 9) {
             addBuiltinCategories(db)
         }
+        if (oldVersion < 10) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS auto_map(
+                    merchant_key TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    category_id TEXT NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    PRIMARY KEY(merchant_key, type)
+                )
+                """.trimIndent()
+            )
+        }
+    }
+
+    private fun ensureImportBatchSchema(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS import_batch(
+                id TEXT PRIMARY KEY,
+                source TEXT NOT NULL,
+                label TEXT NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL,
+                rows INTEGER NOT NULL,
+                file_hash TEXT
+            )
+            """.trimIndent()
+        )
+        addColumnIfMissing(db, "tx", "import_batch", "TEXT")
+        addColumnIfMissing(db, "import_batch", "file_hash", "TEXT")
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_tx_batch ON tx(import_batch)")
+    }
+
+    private fun addColumnIfMissing(
+        db: SQLiteDatabase,
+        table: String,
+        column: String,
+        type: String,
+    ) {
+        val exists = db.rawQuery("PRAGMA table_info($table)", null).use { cursor ->
+            var found = false
+            while (cursor.moveToNext()) {
+                if (cursor.getString(cursor.getColumnIndexOrThrow("name")) == column) {
+                    found = true
+                    break
+                }
+            }
+            found
+        }
+        if (!exists) db.execSQL("ALTER TABLE $table ADD COLUMN $column $type")
     }
 
     /** 补上 v9 新增的转账 / 退款。缺哪个补哪个，已有的不改。 */
@@ -294,6 +340,59 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
         readableDatabase.rawQuery("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM category", null).use {
             return if (it.moveToFirst()) it.getInt(0) else 0
         }
+    }
+
+    fun upsertAutoMap(merchantKey: String, type: String, categoryId: String) {
+        writableDatabase.insertWithOnConflict(
+            "auto_map",
+            null,
+            ContentValues().apply {
+                put("merchant_key", merchantKey)
+                put("type", type)
+                put("category_id", categoryId)
+                put("updated_at", System.currentTimeMillis())
+            },
+            SQLiteDatabase.CONFLICT_REPLACE,
+        )
+    }
+
+    fun findAutoMap(merchantKey: String, type: String): String? =
+        readableDatabase.query(
+            "auto_map",
+            arrayOf("category_id"),
+            "merchant_key = ? AND type = ?",
+            arrayOf(merchantKey, type),
+            null, null, null,
+        ).use { c -> if (c.moveToFirst()) c.getString(0) else null }
+
+    fun deleteAutoMapForCategory(categoryId: String) {
+        writableDatabase.delete("auto_map", "category_id = ?", arrayOf(categoryId))
+    }
+
+    fun updateAutoMapCategory(fromId: String, toId: String) {
+        writableDatabase.update(
+            "auto_map",
+            ContentValues().apply {
+                put("category_id", toId)
+                put("updated_at", System.currentTimeMillis())
+            },
+            "category_id = ?",
+            arrayOf(fromId),
+        )
+    }
+
+    fun allAutoMaps(): Map<String, String> {
+        val result = LinkedHashMap<String, String>()
+        readableDatabase.query(
+            "auto_map",
+            arrayOf("merchant_key", "type", "category_id"),
+            null, null, null, null, null,
+        ).use { c ->
+            while (c.moveToNext()) {
+                result[c.getString(0) + "|" + c.getString(1)] = c.getString(2)
+            }
+        }
+        return result
     }
 
     /**
@@ -556,7 +655,7 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
     }
 
     private companion object {
-        const val DB_VERSION = 9
+        const val DB_VERSION = 10
     }
 }
 

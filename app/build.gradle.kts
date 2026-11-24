@@ -206,6 +206,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.navigation.compose)
+    implementation(libs.mlkit.text.recognition.chinese)
     testImplementation(libs.junit)
     debugImplementation(libs.compose.ui.tooling)
     testImplementation(libs.junit)

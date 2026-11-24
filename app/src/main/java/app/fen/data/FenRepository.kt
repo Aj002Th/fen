@@ -1,5 +1,6 @@
 package app.fen.data
 
+import app.fen.autobook.classify.AutoMapStore
 import app.fen.data.exchange.ImportPlan
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -10,7 +11,10 @@ import java.util.UUID
  * 目前数据量很小，整库加载进内存 + 写后刷新即可。
  * 等账单量级上来后再换成增量查询。
  */
-class FenRepository(private val db: FenDb) {
+class FenRepository(
+    private val db: FenDb,
+    private val autoMap: AutoMapStore,
+) {
 
     private val _snapshot = MutableStateFlow(load())
     val snapshot: StateFlow<Snapshot> = _snapshot.asStateFlow()
@@ -80,6 +84,7 @@ class FenRepository(private val db: FenDb) {
     }
 
     fun deleteCategory(id: String) {
+        autoMap.deleteForCategory(id)
         db.deleteCategory(id)
         refresh()
     }
@@ -87,12 +92,14 @@ class FenRepository(private val db: FenDb) {
     /** 转移流水并删除分类 */
     fun mergeCategory(fromId: String, intoId: String) {
         db.reassignCategory(fromId, intoId)
+        autoMap.updateCategory(fromId, intoId)
         db.deleteCategory(fromId)
         refresh()
     }
 
     /** 删除分类以及它名下的所有流水 */
     fun deleteCategoryWithTransactions(id: String) {
+        autoMap.deleteForCategory(id)
         db.deleteCategoryWithTransactions(id)
         refresh()
     }
