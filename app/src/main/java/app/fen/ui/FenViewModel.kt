@@ -15,8 +15,11 @@ import app.fen.data.StatsMode
 import app.fen.data.StatsSection
 import app.fen.data.Tx
 import app.fen.data.TxType
+import app.fen.data.exchange.CsvShare
+import app.fen.data.exchange.ExportFilter
 import app.fen.data.exchange.FenCsv
 import app.fen.data.exchange.FenTemplate
+import app.fen.data.exchange.filterForExport
 import app.fen.data.exchange.FileDecode
 import app.fen.data.exchange.ImportOutcome
 import app.fen.data.exchange.ImportParseException
@@ -409,18 +412,29 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    fun saveTemplate(uri: Uri) {
-        viewModelScope.launch(Dispatchers.IO) {
-            runCatching {
-                getApplication<Application>().contentResolver.openOutputStream(uri)?.use {
-                    it.write(FenTemplate.content().toByteArray(Charsets.UTF_8))
-                } ?: error("无法写入文件")
-            }.onSuccess {
-                _message.value = "模板已保存"
-            }.onFailure {
-                _message.value = "保存失败：${it.message}"
-            }
+    /** 把导入模板写成文件并拉起系统分享。返回是否成功拉起。 */
+    fun shareTemplate(context: android.content.Context): Boolean {
+        val ok = CsvShare.share(context, FenTemplate.fileName(), FenTemplate.content())
+        _message.value = if (ok) null else "没有可以分享的应用"
+        return ok
+    }
+
+    /**
+     * 按条件筛明细，写成 CSV 并拉起系统分享。
+     * 没有符合条件的记录时不分享，返回 false。
+     */
+    fun shareCsv(context: android.content.Context, filter: ExportFilter): Boolean {
+        val snap = snapshot.value
+        val matched = snap.transactions.filterForExport(filter)
+        if (matched.isEmpty()) {
+            _message.value = "没有符合条件的记录"
+            return false
         }
+        val text = FenCsv.encode(snap.categories, matched)
+        val name = "fen-${LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmm"))}.csv"
+        val ok = CsvShare.share(context, name, text)
+        _message.value = if (ok) null else "没有可以分享的应用"
+        return ok
     }
 
     fun cancelImport() {
@@ -572,22 +586,6 @@ class FenViewModel(app: Application) : AndroidViewModel(app) {
                 } ?: error("无法写入文件")
             }.onSuccess {
                 _message.value = "备份已导出"
-            }.onFailure {
-                _message.value = "导出失败：${it.message}"
-            }
-        }
-    }
-
-    fun exportCsv(uri: Uri) {
-        viewModelScope.launch(Dispatchers.IO) {
-            runCatching {
-                val snap = snapshot.value
-                val text = FenCsv.encode(snap.categories, snap.transactions)
-                getApplication<Application>().contentResolver.openOutputStream(uri)?.use {
-                    it.write(text.toByteArray(Charsets.UTF_8))
-                } ?: error("无法写入文件")
-            }.onSuccess {
-                _message.value = "CSV 已导出"
             }.onFailure {
                 _message.value = "导出失败：${it.message}"
             }

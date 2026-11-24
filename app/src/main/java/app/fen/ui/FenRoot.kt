@@ -501,9 +501,9 @@ private fun FenContent(viewModel: FenViewModel) {
                 composable("export") {
                     FenPage {
                         ExportScreen(
+                            snapshot = snapshot,
                             onBack = { navController.popBackStack() },
-                            onExportCsv = viewModel::exportCsv,
-                            onSaveTemplate = viewModel::saveTemplate,
+                            onShare = viewModel::shareCsv,
                         )
                     }
                 }
@@ -526,7 +526,7 @@ private fun FenContent(viewModel: FenViewModel) {
                             categories = snapshot.categories,
                             batchCount = batches.size,
                             onPickFile = viewModel::pickImportFile,
-                            onSaveTemplate = viewModel::saveTemplate,
+                            onShareTemplate = viewModel::shareTemplate,
                             onSetSource = viewModel::setImportSource,
                             onStartParse = viewModel::startParse,
                             onExit = {
