@@ -85,6 +85,7 @@ import app.fen.autobook.ui.BatchConfirmSheet
 import app.fen.data.Tx
 import app.fen.data.TxType
 import app.fen.ui.screens.AddTransactionScreen
+import app.fen.ui.screens.AboutScreen
 import app.fen.ui.screens.BackupScreen
 import app.fen.ui.screens.BillsScreen
 import app.fen.ui.screens.CategoryManagerScreen
@@ -95,9 +96,12 @@ import app.fen.ui.screens.SearchScreen
 import app.fen.ui.screens.SettingsScreen
 import app.fen.ui.screens.StatsBoardSettingsScreen
 import app.fen.ui.screens.StatsScreen
+import app.fen.ui.screens.UpdateSheet
 import app.fen.ui.theme.Fen
 import app.fen.ui.theme.FenMotion
 import app.fen.ui.theme.FenTheme
+import app.fen.update.UpdateViewModel
+import app.fen.update.hasAvailableUpdate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -178,6 +182,8 @@ private fun FenContent(viewModel: FenViewModel) {
     val importState by viewModel.importState.collectAsStateWithLifecycle()
     val batches by viewModel.importBatches.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
+    val updateViewModel: UpdateViewModel = viewModel()
+    val updateState by updateViewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
@@ -192,6 +198,7 @@ private fun FenContent(viewModel: FenViewModel) {
     var batchEditIndex by remember { mutableStateOf<Int?>(null) }
     var pendingDraftSave by remember { mutableStateOf<DraftSave?>(null) }
     var showDuplicateDialog by remember { mutableStateOf(false) }
+    var devUnlocked by remember { mutableStateOf(false) }
     val addOffset = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
     val smartImport = remember(context) { (context.applicationContext as FenApp).imageImport }
@@ -317,6 +324,10 @@ private fun FenContent(viewModel: FenViewModel) {
         }
     }
 
+    LaunchedEffect(Unit) {
+        updateViewModel.checkOnStart()
+    }
+
     LaunchedEffect(message) {
         message?.let {
             Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
@@ -431,6 +442,9 @@ private fun FenContent(viewModel: FenViewModel) {
                                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                                 )
                             },
+                            devUnlocked = devUnlocked,
+                            hasUpdate = hasAvailableUpdate(updateState),
+                            onOpenAbout = { navController.navigate("about") },
                             showDebug = BuildConfig.DEBUG,
                             onSeedDemo = {
                                 scope.launch(Dispatchers.IO) { viewModel.seedDemoData(400) }
@@ -542,6 +556,19 @@ private fun FenContent(viewModel: FenViewModel) {
                             batches = batches,
                             onBack = { navController.popBackStack() },
                             onDelete = viewModel::deleteImportBatch,
+                        )
+                    }
+                }
+                composable("about") {
+                    FenPage {
+                        AboutScreen(
+                            versionName = BuildConfig.VERSION_NAME,
+                            updateState = updateState,
+                            onBack = { navController.popBackStack() },
+                            onCheckUpdate = updateViewModel::openAndCheck,
+                            onUnlockDev = {
+                                devUnlocked = true
+                            },
                         )
                     }
                 }
@@ -730,6 +757,20 @@ private fun FenContent(viewModel: FenViewModel) {
                     }
                 }
             }
+        }
+
+        if (updateState.sheetVisible) {
+            UpdateSheet(
+                state = updateState,
+                isDevBuild = updateViewModel.isDevBuild,
+                onDismiss = updateViewModel::closeSheet,
+                onDownload = updateViewModel::downloadAndInstall,
+                onCancel = updateViewModel::cancelDownload,
+                onRetry = updateViewModel::retry,
+                onOpenPermission = updateViewModel::openInstallPermission,
+                onResumeAfterPermission = updateViewModel::resumeAfterPermission,
+                onRecheck = updateViewModel::openAndCheck,
+            )
         }
     }
 }

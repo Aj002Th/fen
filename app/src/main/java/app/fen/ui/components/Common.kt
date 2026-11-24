@@ -39,7 +39,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -160,6 +163,47 @@ fun RowDivider(modifier: Modifier = Modifier, startInset: Dp = 66.dp) {
             .height(1.dp)
             .background(Fen.colors.divider)
     )
+}
+
+/** 8dp 小红点，用于「有新版本」。 */
+@Composable
+fun DotBadge(
+    modifier: Modifier = Modifier,
+    size: Dp = 8.dp,
+    contentDescription: String = "有新版本",
+) {
+    Box(
+        modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(Fen.colors.expense)
+            .semantics { this.contentDescription = contentDescription }
+    )
+}
+
+/** 用 drawable/painter 的圆底图标，用于品牌图标这类没有 ImageVector 的场景。 */
+@Composable
+fun ImageBadge(
+    painter: Painter,
+    color: Color,
+    modifier: Modifier = Modifier,
+    size: Dp = 42.dp,
+    iconSize: Dp = 20.dp,
+) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(color),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painter,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.size(iconSize),
+        )
+    }
 }
 
 /* ---------------------------------- 页头 ---------------------------------- */

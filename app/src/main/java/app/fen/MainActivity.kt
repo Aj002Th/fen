@@ -68,6 +68,10 @@ class MainActivity : ComponentActivity() {
                 CoroutineScope(Dispatchers.IO).launch { repository.seedDemoData(count, days) }
             }
             "/clear" -> CoroutineScope(Dispatchers.IO).launch { repository.clearTransactions() }
+            "/update-source" -> {
+                (application as FenApp).prefs.updateSourceOverride =
+                    uri.getQueryParameter("json").orEmpty()
+            }
         }
     }
 }
