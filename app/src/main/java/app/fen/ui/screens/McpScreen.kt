@@ -384,6 +384,8 @@ fun McpScreen(
                     Text("数据不对：AI 应先调用 get_overview；统计口径和 App 一致，未分类会单独列出。")
                     Spacer(Modifier.size(8.dp))
                     Text("写入失败：确认“允许 AI 记账”已开启，且分类 id 来自 list_categories。")
+                    Spacer(Modifier.size(8.dp))
+                    Text("息屏后连不上：HyperOS 可能冻结后台。到系统设置把 Fen·feat-mcp 的省电策略设为“无限制”，并允许后台运行。")
                 }
             },
             confirmButton = { TextButton(onClick = { showFaq = false }) { Text("知道了") } },
