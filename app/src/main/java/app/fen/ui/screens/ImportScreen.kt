@@ -1,5 +1,6 @@
 package app.fen.ui.screens
 
+import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -69,6 +70,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -76,7 +78,6 @@ import app.fen.data.Category
 import app.fen.data.TxType
 import app.fen.data.exchange.CategoryMapping
 import app.fen.data.exchange.CategorySuggest
-import app.fen.data.exchange.FenTemplate
 import app.fen.data.exchange.ImportPlanner
 import app.fen.data.exchange.ImportSource
 import app.fen.data.exchange.MappingKind
@@ -103,7 +104,7 @@ fun ImportScreen(
     categories: List<Category>,
     batchCount: Int,
     onPickFile: (Uri) -> Unit,
-    onSaveTemplate: (Uri) -> Unit,
+    onShareTemplate: (Context) -> Unit,
     onSetSource: (ImportSource) -> Unit,
     onStartParse: () -> Unit,
     onExit: () -> Unit,
@@ -125,12 +126,10 @@ fun ImportScreen(
     var sourcePicker by remember { mutableStateOf(false) }
     var showHelp by remember { mutableStateOf(false) }
 
+    val context = LocalContext.current
     val filePicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri -> uri?.let(onPickFile) }
-    val templateSaver = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("text/csv")
-    ) { uri -> uri?.let(onSaveTemplate) }
 
     fun back() {
         when {
@@ -181,7 +180,7 @@ fun ImportScreen(
                 state = state,
                 batchCount = batchCount,
                 onPickFile = { filePicker.launch(arrayOf("*/*")) },
-                onDownloadTemplate = { templateSaver.launch(FenTemplate.fileName()) },
+                onDownloadTemplate = { onShareTemplate(context) },
                 onPickSource = { sourcePicker = true },
                 onParse = onStartParse,
                 onOpenHistory = onOpenHistory,

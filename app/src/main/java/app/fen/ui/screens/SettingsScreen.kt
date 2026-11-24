@@ -187,7 +187,7 @@ fun SettingsScreen(
             ) {
                 SettingItem(
                     title = "导出",
-                    subtitle = "CSV 表格与导入模板",
+                    subtitle = "按条件筛选后分享 CSV",
                     icon = Icons.Outlined.Upload,
                     tint = Color(0xFF3E8BF2),
                     onClick = onOpenExport,
