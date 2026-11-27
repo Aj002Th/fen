@@ -539,7 +539,14 @@ private fun mask(token: String): String =
 private fun copy(context: Context, label: String, text: String) {
     val manager = context.getSystemService(ClipboardManager::class.java)
     manager.setPrimaryClip(ClipData.newPlainText(label, text))
-    Toast.makeText(context, "已复制：$label", Toast.LENGTH_SHORT).show()
+    val actual = runCatching {
+        manager.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString()
+    }.getOrNull()
+    if (actual != null && actual != text) {
+        Toast.makeText(context, "复制未生效：剪贴板仍为其他内容，请重试", Toast.LENGTH_LONG).show()
+    } else {
+        Toast.makeText(context, "已复制：$label", Toast.LENGTH_SHORT).show()
+    }
 }
 
 private fun share(context: Context, title: String, text: String) {
