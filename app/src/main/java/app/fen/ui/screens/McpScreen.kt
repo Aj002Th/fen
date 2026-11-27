@@ -27,14 +27,19 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,6 +50,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -333,8 +340,9 @@ fun McpScreen(
     }
 
     if (showIdle) {
-        OptionDialog(
+        OptionSheet(
             title = "闲置自动关闭",
+            subtitle = "无调用时自动停止服务",
             options = listOf(15 to "15 分钟", 30 to "30 分钟", 60 to "60 分钟", 0 to "不自动关闭"),
             selected = idleMinutes,
             onSelect = {
@@ -347,8 +355,9 @@ fun McpScreen(
     }
 
     if (showLimit) {
-        OptionDialog(
+        OptionSheet(
             title = "单次查询上限",
+            subtitle = "单次最多返回的账单条数",
             options = listOf(50 to "50 条", 100 to "100 条", 200 to "200 条"),
             selected = queryLimit,
             onSelect = {
@@ -361,29 +370,7 @@ fun McpScreen(
     }
 
     if (showFaq) {
-        AlertDialog(
-            onDismissRequest = { showFaq = false },
-            title = { Text("常见问题") },
-            text = {
-                Column {
-                    Text("连接失败：确认电脑和手机在同一 WiFi；关闭手机 VPN 或允许局域网；确认地址和端口与手机上显示一致。")
-                    Spacer(Modifier.size(8.dp))
-                    Text("401：token 被重置或复制不完整，重新复制 Authorization。")
-                    Spacer(Modifier.size(8.dp))
-                    Text("数据不对：AI 应先调用 get_overview；统计口径和 App 一致，未分类会单独列出。")
-                    Spacer(Modifier.size(8.dp))
-                    Text("写入失败：确认“允许 AI 记账”已开启，且分类 id 来自 list_categories。")
-                    Spacer(Modifier.size(8.dp))
-                    Text("息屏后连不上：HyperOS 可能冻结后台。到系统设置把 Fen·feat-mcp 的省电策略设为“无限制”，并允许后台运行。")
-                }
-            },
-            confirmButton = { TextButton(onClick = { showFaq = false }) { Text("知道了") } },
-            dismissButton = {
-                TextButton(onClick = { copy(context, "接口说明", docs) }) {
-                    Text("复制接口说明")
-                }
-            },
-        )
+        FaqSheet(docs = docs, onDismiss = { showFaq = false })
     }
 }
 
@@ -485,37 +472,128 @@ private fun PreferenceValue(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun OptionDialog(
+private fun OptionSheet(
     title: String,
+    subtitle: String,
     options: List<Pair<Int, String>>,
     selected: Int,
     onSelect: (Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column {
-                options.forEach { (value, label) ->
-                    Row(
-                        Modifier.fillMaxWidth().clickable { onSelect(value) }.padding(vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            label,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = if (selected == value) Fen.colors.ink else Fen.colors.inkSoft,
-                            modifier = Modifier.weight(1f),
+        sheetState = sheetState,
+        containerColor = Fen.colors.surface,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        dragHandle = { BottomSheetDefaults.DragHandle(color = Fen.colors.inkFaint) },
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.size(6.dp))
+            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = Fen.colors.inkSoft)
+            Spacer(Modifier.size(16.dp))
+            options.forEach { (value, label) ->
+                val active = value == selected
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(if (active) Fen.colors.surfaceMuted else Color.Transparent)
+                        .clickable { onSelect(value) }
+                        .padding(horizontal = 14.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (active) Fen.colors.ink else Fen.colors.inkSoft,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (active) {
+                        Icon(
+                            Icons.Rounded.Check,
+                            contentDescription = null,
+                            tint = Fen.colors.ink,
+                            modifier = Modifier.size(18.dp),
                         )
-                        if (selected == value) Text("✓", color = Fen.colors.ink)
                     }
                 }
+                Spacer(Modifier.size(4.dp))
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
-    )
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("取消", color = Fen.colors.inkSoft)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FaqSheet(
+    docs: String,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Fen.colors.surface,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        dragHandle = { BottomSheetDefaults.DragHandle(color = Fen.colors.inkFaint) },
+    ) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            Text("常见问题", style = MaterialTheme.typography.headlineSmall)
+            Spacer(Modifier.size(16.dp))
+            FaqItem(
+                "连接失败",
+                "确认电脑和手机在同一 WiFi；关闭手机 VPN 或允许局域网；确认地址和端口与手机上显示一致。",
+            )
+            FaqItem("401", "token 被重置或复制不完整，重新复制 Authorization。")
+            FaqItem(
+                "数据不对",
+                "AI 应先调用 get_overview；统计口径和 App 一致，未分类会单独列出。",
+            )
+            FaqItem(
+                "写入失败",
+                "确认“允许 AI 记账”已开启，且分类 id 来自 list_categories。",
+            )
+            FaqItem(
+                "息屏后连不上",
+                "HyperOS 可能冻结后台。到系统设置把 Fen·feat-mcp 的省电策略设为“无限制”，并允许后台运行。",
+            )
+            Spacer(Modifier.size(8.dp))
+            WideButton("复制接口说明", Modifier.fillMaxWidth()) {
+                copy(context, "接口说明", docs)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FaqItem(title: String, body: String) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+        Text(title, style = MaterialTheme.typography.titleSmall)
+        Spacer(Modifier.size(4.dp))
+        Text(body, style = MaterialTheme.typography.bodySmall, color = Fen.colors.inkSoft)
+    }
 }
 
 private fun statusText(state: McpServerState): String = when (state) {
