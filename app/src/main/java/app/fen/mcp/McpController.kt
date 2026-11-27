@@ -117,7 +117,7 @@ class McpController(
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_LOCAL_NETWORK) !=
             PackageManager.PERMISSION_GRANTED
         ) {
-            _state.value = McpServerState.Error("需要授予“本地网络 / 附近设备”权限，电脑才能连接")
+            _state.value = McpServerState.Error("需要本地网络权限")
             return
         }
         _state.value = McpServerState.Starting

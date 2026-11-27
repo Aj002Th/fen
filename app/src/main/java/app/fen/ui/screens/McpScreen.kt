@@ -167,7 +167,7 @@ fun McpScreen(
                 Column(Modifier.weight(1f)) {
                     Text("本地 MCP 服务", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        statusText(state),
+                        if (!localNetworkGranted && state is McpServerState.Error) "未开启" else statusText(state),
                         style = MaterialTheme.typography.bodyMedium,
                         color = Fen.colors.inkSoft,
                     )
@@ -179,16 +179,10 @@ fun McpScreen(
                     },
                 )
             }
-            (state as? McpServerState.Error)?.let {
-                Text(it.message, style = MaterialTheme.typography.bodySmall, color = Fen.colors.expense)
-            }
             if (Build.VERSION.SDK_INT >= 37 && !localOnly && !localNetworkGranted) {
-                Text(
-                    "需要授予“附近设备 / 本地网络”权限，电脑才能连接",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Fen.colors.expense,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
+                TextButton(onClick = { startWithPermission() }) {
+                    Text("授予本地网络权限", color = Fen.colors.link)
+                }
             }
         }
 
@@ -616,7 +610,7 @@ private fun statusText(state: McpServerState): String = when (state) {
     McpServerState.Stopped -> "未开启"
     McpServerState.Starting -> "启动中…"
     is McpServerState.Running -> "运行中"
-    is McpServerState.Error -> "启动失败：${state.message}"
+    is McpServerState.Error -> state.message
 }
 
 private fun mask(token: String): String =
