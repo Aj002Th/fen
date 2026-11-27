@@ -177,7 +177,9 @@ fun McpScreen(
                 color = Fen.colors.inkSoft,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 12.dp)) {
-                WideButton("复制配置", Modifier.weight(1f), enabled = address != null) { copy(context, setup) }
+                WideButton("复制配置", Modifier.weight(1f), enabled = address != null) {
+                    copy(context, "AI 配置", setup)
+                }
                 WideButton("分享到电脑", Modifier.weight(1f), enabled = address != null) {
                     share(context, "Fen MCP 配置", setup)
                 }
@@ -190,13 +192,13 @@ fun McpScreen(
                     else -> "连接 WiFi 后可用"
                 },
                 action = "复制",
-                onAction = { if (address != null) copy(context, "http://$address/mcp") },
+                onAction = { if (address != null) copy(context, "MCP 地址", "http://$address/mcp") },
             )
             InfoRow(
                 label = "Authorization",
                 value = maskedToken,
                 action = "复制",
-                onAction = { copy(context, "Bearer $token") },
+                onAction = { copy(context, "Authorization", "Bearer $token") },
                 secondaryAction = "重置",
                 onSecondary = { showReset = true },
             )
@@ -210,8 +212,8 @@ fun McpScreen(
                 color = Fen.colors.inkSoft,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 12.dp)) {
-                WideButton("复制", Modifier.weight(1f)) { copy(context, docs) }
-                WideButton("分享", Modifier.weight(1f)) { share(context, "Fen MCP 接口说明", docs) }
+                WideButton("复制说明", Modifier.weight(1f)) { copy(context, "接口说明", docs) }
+                WideButton("分享说明", Modifier.weight(1f)) { share(context, "Fen MCP 接口说明", docs) }
             }
         }
 
@@ -534,10 +536,10 @@ private fun statusText(state: McpServerState): String = when (state) {
 private fun mask(token: String): String =
     if (token.length <= 10) "••••••" else "${token.take(4)}••••••${token.takeLast(4)}"
 
-private fun copy(context: Context, text: String) {
+private fun copy(context: Context, label: String, text: String) {
     val manager = context.getSystemService(ClipboardManager::class.java)
-    manager.setPrimaryClip(ClipData.newPlainText("Fen MCP", text))
-    Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
+    manager.setPrimaryClip(ClipData.newPlainText(label, text))
+    Toast.makeText(context, "已复制：$label", Toast.LENGTH_SHORT).show()
 }
 
 private fun share(context: Context, title: String, text: String) {
