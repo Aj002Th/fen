@@ -92,6 +92,8 @@ import app.fen.ui.screens.CategoryManagerScreen
 import app.fen.ui.screens.ExportScreen
 import app.fen.ui.screens.ImportHistoryScreen
 import app.fen.ui.screens.ImportScreen
+import app.fen.ui.screens.McpLogScreen
+import app.fen.ui.screens.McpScreen
 import app.fen.ui.screens.SearchScreen
 import app.fen.ui.screens.SettingsScreen
 import app.fen.ui.screens.StatsBoardSettingsScreen
@@ -150,7 +152,11 @@ private val tabs = listOf(
 )
 
 @Composable
-fun FenRoot(viewModel: FenViewModel = viewModel()) {
+fun FenRoot(
+    openMcpRequest: Boolean = false,
+    onMcpOpened: () -> Unit = {},
+    viewModel: FenViewModel = viewModel(),
+) {
     val themeMode by viewModel.themeMode.collectAsStateWithLifecycle()
     val darkTheme = when (themeMode) {
         1 -> false
@@ -158,12 +164,16 @@ fun FenRoot(viewModel: FenViewModel = viewModel()) {
         else -> isSystemInDarkTheme()
     }
     FenTheme(darkTheme = darkTheme) {
-        FenContent(viewModel)
+        FenContent(viewModel, openMcpRequest, onMcpOpened)
     }
 }
 
 @Composable
-private fun FenContent(viewModel: FenViewModel) {
+private fun FenContent(
+    viewModel: FenViewModel,
+    openMcpRequest: Boolean,
+    onMcpOpened: () -> Unit,
+) {
     val fenSlide = tween<IntOffset>(FenMotion.navSlideMillis, easing = FastOutSlowInEasing)
     val fenFadeIn = tween<Float>(FenMotion.navFadeInMillis, easing = FastOutSlowInEasing)
     val fenFadeOut = tween<Float>(FenMotion.navFadeOutMillis, easing = FastOutSlowInEasing)
@@ -189,6 +199,13 @@ private fun FenContent(viewModel: FenViewModel) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val showBottomBar = currentRoute == null || RootTabs.isRoot(currentRoute)
+
+    LaunchedEffect(openMcpRequest) {
+        if (openMcpRequest) {
+            navController.navigate("mcp") { launchSingleTop = true }
+            onMcpOpened()
+        }
+    }
     var showAdd by remember { mutableStateOf(false) }
     var editingTx by remember { mutableStateOf<Tx?>(null) }
     var draftBill by remember { mutableStateOf<ParsedBill?>(null) }
@@ -433,6 +450,7 @@ private fun FenContent(viewModel: FenViewModel) {
                             onThemeModeChange = viewModel::setThemeMode,
                             onBack = { navController.popBackStack() },
                             onOpenCategories = { navController.navigate("categories") },
+                            onOpenMcp = { navController.navigate("mcp") },
                             onOpenStatsBoard = { navController.navigate("stats-board") },
                             onOpenImport = { navController.navigate("import") },
                             onOpenExport = { navController.navigate("export") },
@@ -556,6 +574,23 @@ private fun FenContent(viewModel: FenViewModel) {
                             batches = batches,
                             onBack = { navController.popBackStack() },
                             onDelete = viewModel::deleteImportBatch,
+                        )
+                    }
+                }
+                composable("mcp") {
+                    FenPage {
+                        McpScreen(
+                            viewModel = viewModel(),
+                            onBack = { navController.popBackStack() },
+                            onOpenLog = { navController.navigate("mcp/log") },
+                        )
+                    }
+                }
+                composable("mcp/log") {
+                    FenPage {
+                        McpLogScreen(
+                            viewModel = viewModel(),
+                            onBack = { navController.popBackStack() },
                         )
                     }
                 }

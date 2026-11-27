@@ -20,6 +20,7 @@ import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Link
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Restore
 import androidx.compose.material.icons.outlined.Tune
@@ -61,6 +62,7 @@ fun SettingsScreen(
     onThemeModeChange: (Int) -> Unit,
     onBack: () -> Unit,
     onOpenCategories: () -> Unit,
+    onOpenMcp: () -> Unit = {},
     onOpenStatsBoard: () -> Unit,
     onOpenImport: () -> Unit,
     onOpenExport: () -> Unit,
@@ -207,6 +209,23 @@ fun SettingsScreen(
                     icon = Icons.Outlined.Restore,
                     tint = Color(0xFF8B6CF2),
                     onClick = onOpenBackup,
+                )
+            }
+        }
+
+        item { SectionLabel("扩展", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp)) }
+        item {
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                color = Fen.colors.surface,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                SettingItem(
+                    title = "本地 MCP",
+                    subtitle = "让 AI 在你的局域网里读写账本",
+                    icon = Icons.Outlined.Link,
+                    tint = Color(0xFF2F6BFF),
+                    onClick = onOpenMcp,
                 )
             }
         }

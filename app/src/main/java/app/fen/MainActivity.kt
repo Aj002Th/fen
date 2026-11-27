@@ -3,9 +3,11 @@ package app.fen
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.mutableStateOf
 import app.fen.autobook.capture.ImportIntentGate
 import app.fen.autobook.capture.IntentImageReader
 import app.fen.ui.FenRoot
@@ -14,21 +16,28 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private val openMcp = mutableStateOf(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        openMcp.value = intent?.getBooleanExtra(EXTRA_OPEN_MCP, false) == true
         if (savedInstanceState == null) {
             handleDebugIntent(intent)
         }
         handleImportIntent(intent, restored = savedInstanceState != null)
         setContent {
-            FenRoot()
+            FenRoot(
+                openMcpRequest = openMcp.value,
+                onMcpOpened = { openMcp.value = false },
+            )
         }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        openMcp.value = intent.getBooleanExtra(EXTRA_OPEN_MCP, false)
         handleDebugIntent(intent)
         handleImportIntent(intent, restored = false)
     }
@@ -68,10 +77,35 @@ class MainActivity : ComponentActivity() {
                 CoroutineScope(Dispatchers.IO).launch { repository.seedDemoData(count, days) }
             }
             "/clear" -> CoroutineScope(Dispatchers.IO).launch { repository.clearTransactions() }
+            "/mcp/start" -> (application as FenApp).mcp.start()
+            "/mcp/stop" -> (application as FenApp).mcp.stop()
+            "/mcp/write" -> {
+                val minutes = uri.getQueryParameter("minutes")?.toLongOrNull()
+                (application as FenApp).mcp.setWriteDuration(
+                    if (minutes == null || minutes <= 0) null else minutes * 60_000
+                )
+            }
+            "/mcp/undo" -> {
+                val batch = uri.getQueryParameter("batch")
+                Log.i("FenMcp", "undo requested batch=$batch")
+                if (batch != null) {
+                    CoroutineScope(Dispatchers.IO).launch {
+                        Log.i("FenMcp", "undo result=${(application as FenApp).mcp.undo(batch)}")
+                    }
+                }
+            }
+            "/mcp/test" -> CoroutineScope(Dispatchers.IO).launch {
+                val result = (application as FenApp).mcp.selfTest()
+                Log.i("FenMcp", "selfTest=$result")
+            }
             "/update-source" -> {
                 (application as FenApp).prefs.updateSourceOverride =
                     uri.getQueryParameter("json").orEmpty()
             }
         }
+    }
+
+    companion object {
+        const val EXTRA_OPEN_MCP = "open_mcp"
     }
 }

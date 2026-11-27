@@ -24,6 +24,7 @@ import app.fen.autobook.source.recognizers.WechatRecognizer
 import app.fen.data.AppPrefs
 import app.fen.data.FenDb
 import app.fen.data.FenRepository
+import app.fen.mcp.McpController
 
 class FenApp : Application() {
 
@@ -37,6 +38,9 @@ class FenApp : Application() {
         private set
 
     lateinit var imageImport: ImageImportController
+        private set
+
+    lateinit var mcp: McpController
         private set
 
     override fun onCreate() {
@@ -90,5 +94,6 @@ class FenApp : Application() {
             ),
             categories = { repository.snapshot.value.categories },
         )
+        mcp = McpController(this, repository, repository)
     }
 }

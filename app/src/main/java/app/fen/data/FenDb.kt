@@ -6,13 +6,18 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import app.fen.data.exchange.UNCATEGORIZED_NAME
+import app.fen.data.ledger.BatchItem
+import app.fen.data.ledger.BatchMeta
+import app.fen.data.ledger.BatchSummary
+import app.fen.data.ledger.IdempotencyRecord
 import java.util.UUID
 
 /**
  * 极简本地存储：手写 SQLite，避免在 AGP 9 / Kotlin 2.4 上引入注解处理器。
  * 金额统一使用「分」为单位的 Long，避免浮点误差。
  */
-class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VERSION) {
+class FenDb(context: Context, name: String = "fen.db") :
+    SQLiteOpenHelper(context, name, null, DB_VERSION) {
 
     override fun onConfigure(db: SQLiteDatabase) {
         db.setForeignKeyConstraintsEnabled(true)
@@ -69,6 +74,7 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
             )
             """.trimIndent()
         )
+        createMcpTables(db)
         seed(db)
     }
 
@@ -147,6 +153,48 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
                 """.trimIndent()
             )
         }
+        if (oldVersion < 11) {
+            createMcpTables(db)
+        }
+    }
+
+    private fun createMcpTables(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS mcp_batch(
+              id TEXT PRIMARY KEY,
+              tool TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              undone_at INTEGER,
+              client_name TEXT,
+              args_summary TEXT,
+              idempotency_key TEXT
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS mcp_batch_item(
+              batch_id TEXT NOT NULL,
+              tx_id TEXT NOT NULL,
+              before_json TEXT,
+              after_json TEXT,
+              PRIMARY KEY(batch_id, tx_id)
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS mcp_idempotency(
+              key TEXT PRIMARY KEY,
+              tool TEXT NOT NULL,
+              args_hash TEXT NOT NULL,
+              response_json TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              invalidated_at INTEGER
+            )
+            """.trimIndent()
+        )
     }
 
     private fun ensureImportBatchSchema(db: SQLiteDatabase) {
@@ -274,6 +322,143 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
 
     fun deleteTx(id: String) {
         writableDatabase.delete("tx", "id = ?", arrayOf(id))
+    }
+
+    fun txById(id: String): Tx? = readableDatabase.query(
+        "tx",
+        arrayOf("id", "type", "amount", "category_id", "note", "occurred_at", "import_batch"),
+        "id = ?",
+        arrayOf(id),
+        null,
+        null,
+        null,
+    ).use { cursor -> if (cursor.moveToFirst()) cursor.toTx() else null }
+
+    fun idempotency(key: String): IdempotencyRecord? = readableDatabase.query(
+        "mcp_idempotency",
+        arrayOf("key", "tool", "args_hash", "response_json", "created_at", "invalidated_at"),
+        "key = ?",
+        arrayOf(key),
+        null,
+        null,
+        null,
+    ).use { cursor ->
+        if (!cursor.moveToFirst()) return@use null
+        IdempotencyRecord(
+            key = cursor.getString(0),
+            tool = cursor.getString(1),
+            argsHash = cursor.getString(2),
+            responseJson = cursor.getString(3),
+            createdAt = cursor.getLong(4),
+            invalidatedAt = if (cursor.isNull(5)) null else cursor.getLong(5),
+        )
+    }
+
+    fun insertIdempotency(meta: BatchMeta, createdAt: Long) {
+        writableDatabase.insertOrThrow(
+            "mcp_idempotency",
+            null,
+            ContentValues().apply {
+                put("key", meta.idempotencyKey)
+                put("tool", meta.tool)
+                put("args_hash", meta.argsHash)
+                put("response_json", meta.responseJson)
+                put("created_at", createdAt)
+            },
+        )
+    }
+
+    fun invalidateIdempotency(key: String, at: Long) {
+        writableDatabase.update(
+            "mcp_idempotency",
+            ContentValues().apply { put("invalidated_at", at) },
+            "key = ?",
+            arrayOf(key),
+        )
+    }
+
+    fun insertMcpBatch(meta: BatchMeta, createdAt: Long) {
+        writableDatabase.insertOrThrow(
+            "mcp_batch",
+            null,
+            ContentValues().apply {
+                put("id", meta.batchId)
+                put("tool", meta.tool)
+                put("created_at", createdAt)
+                put("client_name", meta.clientName)
+                put("idempotency_key", meta.idempotencyKey)
+            },
+        )
+    }
+
+    fun insertMcpBatchItem(
+        batchId: String,
+        txId: String,
+        beforeJson: String?,
+        afterJson: String?,
+    ) {
+        writableDatabase.insertOrThrow(
+            "mcp_batch_item",
+            null,
+            ContentValues().apply {
+                put("batch_id", batchId)
+                put("tx_id", txId)
+                put("before_json", beforeJson)
+                put("after_json", afterJson)
+            },
+        )
+    }
+
+    fun mcpBatch(id: String): BatchSummary? = readableDatabase.rawQuery(
+        """
+        SELECT b.id, b.tool, b.created_at, b.undone_at, b.client_name,
+               (SELECT COUNT(*) FROM mcp_batch_item i WHERE i.batch_id = b.id),
+               b.idempotency_key
+        FROM mcp_batch b WHERE b.id = ?
+        """.trimIndent(),
+        arrayOf(id),
+    ).use { cursor ->
+        if (!cursor.moveToFirst()) return@use null
+        BatchSummary(
+            id = cursor.getString(0),
+            tool = cursor.getString(1),
+            createdAt = cursor.getLong(2),
+            undoneAt = if (cursor.isNull(3)) null else cursor.getLong(3),
+            clientName = if (cursor.isNull(4)) null else cursor.getString(4),
+            itemCount = cursor.getInt(5),
+            idempotencyKey = if (cursor.isNull(6)) null else cursor.getString(6),
+        )
+    }
+
+    fun mcpBatchItems(batchId: String): List<BatchItem> = readableDatabase.query(
+        "mcp_batch_item",
+        arrayOf("tx_id", "before_json", "after_json"),
+        "batch_id = ?",
+        arrayOf(batchId),
+        null,
+        null,
+        "tx_id",
+    ).use { cursor ->
+        buildList {
+            while (cursor.moveToNext()) {
+                add(
+                    BatchItem(
+                        txId = cursor.getString(0),
+                        beforeJson = if (cursor.isNull(1)) null else cursor.getString(1),
+                        afterJson = if (cursor.isNull(2)) null else cursor.getString(2),
+                    )
+                )
+            }
+        }
+    }
+
+    fun markBatchUndone(id: String, at: Long) {
+        writableDatabase.update(
+            "mcp_batch",
+            ContentValues().apply { put("undone_at", at) },
+            "id = ? AND undone_at IS NULL",
+            arrayOf(id),
+        )
     }
 
     fun insertCategory(category: Category) {
@@ -655,7 +840,7 @@ class FenDb(context: Context) : SQLiteOpenHelper(context, "fen.db", null, DB_VER
     }
 
     private companion object {
-        const val DB_VERSION = 10
+        const val DB_VERSION = 11
     }
 }
 
