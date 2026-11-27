@@ -165,12 +165,6 @@ fun McpScreen(
                     },
                 )
             }
-            Text(
-                "电脑需与手机连接同一 WiFi",
-                style = MaterialTheme.typography.bodySmall,
-                color = Fen.colors.inkSoft,
-                modifier = Modifier.padding(top = 8.dp),
-            )
             (state as? McpServerState.Error)?.let {
                 Text(it.message, style = MaterialTheme.typography.bodySmall, color = Fen.colors.expense)
             }
