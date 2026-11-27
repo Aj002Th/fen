@@ -204,20 +204,7 @@ fun McpScreen(
             )
         }
 
-        SectionLabel("3. 发送接口说明（可选）", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
-        SectionCard {
-            Text(
-                "AI 不会调用或查错数据时，发给它参考",
-                style = MaterialTheme.typography.bodySmall,
-                color = Fen.colors.inkSoft,
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 12.dp)) {
-                WideButton("复制说明", Modifier.weight(1f)) { copy(context, "接口说明", docs) }
-                WideButton("分享说明", Modifier.weight(1f)) { share(context, "Fen MCP 接口说明", docs) }
-            }
-        }
-
-        SectionLabel("4. 测试", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
+        SectionLabel("3. 测试", modifier = Modifier.padding(top = 20.dp, bottom = 8.dp))
         SectionCard {
             WideButton(
                 text = if (selfTesting) "测试中…" else "本机自测",
@@ -391,6 +378,11 @@ fun McpScreen(
                 }
             },
             confirmButton = { TextButton(onClick = { showFaq = false }) { Text("知道了") } },
+            dismissButton = {
+                TextButton(onClick = { copy(context, "接口说明", docs) }) {
+                    Text("复制接口说明")
+                }
+            },
         )
     }
 }
