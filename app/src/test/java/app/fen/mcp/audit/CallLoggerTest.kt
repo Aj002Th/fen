@@ -77,6 +77,20 @@ class CallLoggerTest {
     }
 
     @Test
+    fun recordsNestedToolErrorCode() = runTest {
+        logger.around(context(), call()) {
+            RpcOutcome.Json(
+                """{"jsonrpc":"2.0","id":1,"result":{"content":[{"type":"text","text":"{\"code\":\"VALIDATION\",\"message\":\"bad amount\"}"}],"isError":true}}"""
+            )
+        }
+
+        val record = records.single()
+        assertFalse(record.ok)
+        assertEquals("VALIDATION", record.errorCode)
+        assertEquals("bad amount", record.errorMessage)
+    }
+
+    @Test
     fun fallbackWhenStoreFails() = runTest {
         val failed = mutableListOf<CallRecord>()
         val broken = CallLogger(

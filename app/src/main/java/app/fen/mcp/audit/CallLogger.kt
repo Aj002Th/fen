@@ -53,6 +53,7 @@ class CallLogger(
             null
         }
         val args = call.params.toString()
+        val toolError = body?.takeIf { !ok }?.let { extractToolError(it) }
         val record = CallRecord(
             tsMs = started,
             clientIp = context.clientIp,
@@ -65,8 +66,10 @@ class CallLogger(
             argsSummary = args.take(if (tool == null) 1024 else 4096),
             ok = ok,
             httpStatus = status,
-            errorCode = body?.let { CODE.find(it)?.groupValues?.getOrNull(1) } ?: if (failure != null) "INTERNAL" else null,
-            errorMessage = failure?.message ?: body?.takeIf { !ok }?.take(512),
+            errorCode = toolError?.first
+                ?: body?.let { CODE.find(it)?.groupValues?.getOrNull(1) }
+                ?: if (failure != null) "INTERNAL" else null,
+            errorMessage = failure?.message ?: toolError?.second ?: body?.takeIf { !ok }?.take(512),
             durationMs = clock() - started,
             requestId = call.id?.toString(),
             batchId = body?.let { extractBatchId(it) },
@@ -89,6 +92,17 @@ class CallLogger(
             ?.get("text")?.jsonPrimitive?.content
             ?: return@runCatching null
         Json.parseToJsonElement(text).jsonObject["batch_id"]?.jsonPrimitive?.content
+    }.getOrNull()
+
+    private fun extractToolError(body: String): Pair<String?, String?>? = runCatching {
+        val root = Json.parseToJsonElement(body).jsonObject
+        val text = root["result"]?.jsonObject
+            ?.get("content")?.jsonArray
+            ?.firstOrNull()?.jsonObject
+            ?.get("text")?.jsonPrimitive?.content
+            ?: return@runCatching null
+        val error = Json.parseToJsonElement(text).jsonObject
+        (error["code"]?.jsonPrimitive?.content) to (error["message"]?.jsonPrimitive?.content)
     }.getOrNull()
 
     private companion object {
