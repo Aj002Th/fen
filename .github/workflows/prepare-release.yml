@@ -1,0 +1,113 @@
+name: Prepare Release
+
+# 手动触发：自动递增 version.properties，创建 release/x.y.z 分支并开 PR。
+# PR 合并后由 release.yml 构建、打 tag、发布 GitHub Release。
+# 适合大版本或需要人工确认版本号/Release Notes 的场景。
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "版本递增方式"
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+concurrency:
+  group: prepare-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare:
+    name: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Warn if releases are disabled
+        if: vars.RELEASES_ENABLED != 'true'
+        run: echo "::warning::RELEASES_ENABLED 未设为 true，合并这个 PR 后不会自动发布。"
+
+      - name: Compute version
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path("version.properties")
+          text = path.read_text(encoding="utf-8")
+          name = re.search(r"^versionName=(.+)$", text, re.MULTILINE).group(1).strip()
+          code = int(re.search(r"^versionCode=(\d+)$", text, re.MULTILINE).group(1))
+          match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", name)
+          if not match:
+              raise SystemExit(f"versionName 不是 x.y.z: {name}")
+
+          major, minor, patch = (int(part) for part in match.groups())
+          bump = os.environ["BUMP"]
+          if bump == "major":
+              major, minor, patch = major + 1, 0, 0
+          elif bump == "minor":
+              minor, patch = minor + 1, 0
+          elif bump == "patch":
+              patch += 1
+          else:
+              raise SystemExit(f"未知的 bump: {bump}")
+
+          new_name = f"{major}.{minor}.{patch}"
+          new_code = code + 1
+          text = re.sub(r"^versionName=.*$", f"versionName={new_name}", text, flags=re.MULTILINE)
+          text = re.sub(r"^versionCode=.*$", f"versionCode={new_code}", text, flags=re.MULTILINE)
+          path.write_text(text, encoding="utf-8")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"version={new_name}\n")
+              out.write(f"code={new_code}\n")
+          print(f"next version: {new_name} ({new_code})")
+          PY
+
+      - name: Create branch and PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          CODE: ${{ steps.version.outputs.code }}
+        run: |
+          set -euo pipefail
+          branch="release/$VERSION"
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            echo "::error::远端已存在分支 $branch"
+            exit 1
+          fi
+          if git rev-parse --verify --quiet "refs/tags/v$VERSION" >/dev/null; then
+            echo "::error::tag v$VERSION 已存在"
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git add version.properties
+          git commit -m "release: $VERSION"
+          git push origin "$branch"
+
+          gh pr create \
+            --base master \
+            --head "$branch" \
+            --title "release: $VERSION" \
+            --body "自动创建的 release PR。
+
+          - versionName: $VERSION
+          - versionCode: $CODE
+
+          合并后 Release workflow 会构建签名 APK、创建 tag v$VERSION 并发布 GitHub Release。"

@@ -1,0 +1,4 @@
+# Keep entry-point line endings stable across platforms.
+gradlew text eol=lf
+*.sh text eol=lf
+*.py text eol=lf

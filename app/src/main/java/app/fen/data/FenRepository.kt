@@ -1,5 +1,7 @@
 package app.fen.data
 
+import app.fen.autobook.classify.AutoMapStore
+import app.fen.data.exchange.ImportPlan
 import app.fen.data.ledger.AddCommit
 import app.fen.data.ledger.BatchSummary
 import app.fen.data.ledger.CommitResult
@@ -24,17 +26,25 @@ import java.util.UUID
  * MCP 的写入、撤销前像和幂等结果都在 fen.db 的同一个事务里提交，
  * 由 [writeLock] 和 UI 写入串行化。
  */
-class FenRepository(private val db: FenDb) : LedgerReader, LedgerWriter {
+class FenRepository(
+    private val db: FenDb,
+    private val autoMap: AutoMapStore,
+) : LedgerReader, LedgerWriter {
 
     private val writeLock = Any()
     private val _snapshot = MutableStateFlow(load())
     val snapshot: StateFlow<Snapshot> = _snapshot.asStateFlow()
 
+    override fun readSnapshot(): Snapshot = snapshot.value
+
     fun refresh() {
         _snapshot.value = load()
     }
 
-    override fun readSnapshot(): Snapshot = snapshot.value
+    private fun load(): Snapshot = Snapshot(
+        categories = db.categories(),
+        transactions = db.transactions(),
+    )
 
     fun addTransaction(
         type: TxType,
@@ -95,8 +105,17 @@ class FenRepository(private val db: FenDb) : LedgerReader, LedgerWriter {
         }
     }
 
+    /** 记账页读的就是这个顺序，写完立刻生效。 */
+    fun reorderCategories(type: TxType, orderedIds: List<String>) {
+        synchronized(writeLock) {
+            db.reorderCategories(type, orderedIds)
+            refresh()
+        }
+    }
+
     fun deleteCategory(id: String) {
         synchronized(writeLock) {
+            autoMap.deleteForCategory(id)
             db.deleteCategory(id)
             refresh()
         }
@@ -106,6 +125,7 @@ class FenRepository(private val db: FenDb) : LedgerReader, LedgerWriter {
     fun mergeCategory(fromId: String, intoId: String) {
         synchronized(writeLock) {
             db.reassignCategory(fromId, intoId)
+            autoMap.updateCategory(fromId, intoId)
             db.deleteCategory(fromId)
             refresh()
         }
@@ -114,6 +134,7 @@ class FenRepository(private val db: FenDb) : LedgerReader, LedgerWriter {
     /** 删除分类以及它名下的所有流水 */
     fun deleteCategoryWithTransactions(id: String) {
         synchronized(writeLock) {
+            autoMap.deleteForCategory(id)
             db.deleteCategoryWithTransactions(id)
             refresh()
         }
@@ -121,10 +142,45 @@ class FenRepository(private val db: FenDb) : LedgerReader, LedgerWriter {
 
     fun transactionCount(categoryId: String): Int = db.countTransactions(categoryId)
 
-    /** 开发/验收用：生成演示数据 */
-    fun seedDemoData(count: Int = 400) {
+    fun nextCategoryOrder(): Int = db.nextCategoryOrder()
+
+    /** 写入一次导入（分类 + 流水 + 批次），单事务完成。 */
+    fun applyImport(plan: ImportPlan, batch: ImportBatch) {
+        if (plan.transactions.isEmpty()) return
         synchronized(writeLock) {
-            db.seedDemoData(count)
+            db.insertImport(plan.newCategories, plan.transactions, batch)
+            refresh()
+        }
+    }
+
+    /** 恢复 Fen JSON 备份：整体替换（覆盖）现有分类与流水。 */
+    fun restoreBackup(backup: FenBackup) {
+        synchronized(writeLock) {
+            db.replaceAll(backup.categories, backup.transactions)
+            refresh()
+        }
+    }
+
+    fun hasImportHash(hash: String): Boolean = db.hasImportHash(hash)
+
+    fun ensureUncategorized(type: TxType): String = synchronized(writeLock) {
+        db.ensureUncategorized(type)
+    }
+
+    /** 撤销一次导入：删除该批次写入的流水与批次记录（保留导入时新建的空分类）。 */
+    fun deleteImportBatch(id: String) {
+        synchronized(writeLock) {
+            db.deleteImportBatch(id)
+            refresh()
+        }
+    }
+
+    fun importBatches(): List<ImportBatch> = db.importBatches()
+
+    /** 开发/验收用：生成演示数据 */
+    fun seedDemoData(count: Int = 400, daysBack: Int = 180) {
+        synchronized(writeLock) {
+            db.seedDemoData(count, daysBack)
             refresh()
         }
     }
@@ -136,6 +192,8 @@ class FenRepository(private val db: FenDb) : LedgerReader, LedgerWriter {
             refresh()
         }
     }
+
+    // ---------- MCP 写入 ----------
 
     override fun idempotency(key: String): IdempotencyRecord? = db.idempotency(key)
 
@@ -280,11 +338,6 @@ class FenRepository(private val db: FenDb) : LedgerReader, LedgerWriter {
             }
         }
     }
-
-    private fun load(): Snapshot = Snapshot(
-        categories = db.categories(),
-        transactions = db.transactions(),
-    )
 
     private companion object {
         const val UNDO_WINDOW_MS = 24L * 60 * 60 * 1000

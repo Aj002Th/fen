@@ -11,13 +11,17 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -59,6 +63,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import app.fen.autobook.model.ParsedBill
 import app.fen.data.Category
 import app.fen.data.Snapshot
 import app.fen.data.Tx
@@ -78,13 +83,17 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun AddTransactionScreen(
     snapshot: Snapshot,
     initial: Tx? = null,
+    draft: ParsedBill? = null,
+    allowContinue: Boolean = true,
+    showManageCategories: Boolean = true,
     suggestionPenalties: Map<String, Int> = emptyMap(),
     onPenalizeSuggestion: (String) -> Unit = {},
+    modifier: Modifier = Modifier,
     onClose: () -> Unit,
     onManageCategories: () -> Unit,
     onSave: (
@@ -96,17 +105,24 @@ fun AddTransactionScreen(
         andContinue: Boolean,
     ) -> Unit,
 ) {
-    val initialCategory = remember(snapshot.categories, initial) {
-        initial?.categoryId?.let { id -> snapshot.categories.firstOrNull { it.id == id } }
+    val baseType = initial?.type ?: draft?.type ?: TxType.EXPENSE
+    val baseAmount = initial?.amount ?: draft?.amountMinor ?: 0L
+    val baseNote = initial?.note ?: draft?.merchant ?: ""
+    val baseTime = initial?.occurredAt ?: draft?.occurredAt
+    val baseCategoryId = initial?.categoryId ?: draft?.categoryId
+    val initialCategory = remember(snapshot.categories, initial, draft) {
+        baseCategoryId?.let { id -> snapshot.categories.firstOrNull { it.id == id } }
     }
-    var type by remember(initial) { mutableStateOf(initial?.type ?: TxType.EXPENSE) }
-    var amountText by remember(initial) { mutableStateOf(initial?.amount?.toAmountInput() ?: "") }
-    var amountTouched by remember(initial) { mutableStateOf(false) }
-    var note by remember(initial) { mutableStateOf(initial?.note ?: "") }
-    var dateTime by remember(initial) {
-        mutableStateOf(initial?.occurredAt?.toLocalDateTime() ?: LocalDateTime.now())
+    var type by remember(initial, draft) { mutableStateOf(baseType) }
+    var amountText by remember(initial, draft) {
+        mutableStateOf(if (baseAmount > 0) baseAmount.toAmountInput() else "")
     }
-    var categoryId by remember(initial) { mutableStateOf(initialCategory?.id) }
+    var amountTouched by remember(initial, draft) { mutableStateOf(false) }
+    var note by remember(initial, draft) { mutableStateOf(baseNote) }
+    var dateTime by remember(initial, draft) {
+        mutableStateOf(baseTime?.toLocalDateTime() ?: LocalDateTime.now())
+    }
+    var categoryId by remember(initial, draft) { mutableStateOf(initialCategory?.id) }
     var showPicker by remember { mutableStateOf(false) }
     var noteFocused by remember { mutableStateOf(false) }
     var hint by remember { mutableStateOf<String?>(null) }
@@ -115,14 +131,33 @@ fun AddTransactionScreen(
     val categories = remember(snapshot.categories, type) {
         snapshot.categories.filter { it.type == type }.sortedBy { it.sortOrder }
     }
+    // 与手工记账完全一致：分类为空时默认选中第一个，保证「完成」始终可用。
     val selectedCategoryId = categories.firstOrNull { it.id == categoryId }?.id
         ?: categories.firstOrNull()?.id
-    val suggestions = remember(snapshot.transactions, snapshot.categories, type, suggestionPenalties) {
+    val suggestions = remember(
+        snapshot.transactions,
+        snapshot.categories,
+        type,
+        suggestionPenalties,
+    ) {
         buildSuggestions(snapshot, type, suggestionPenalties)
     }
     val gridState = rememberLazyGridState()
     val focusManager = LocalFocusManager.current
     val view = LocalView.current
+    val imeVisible = WindowInsets.isImeVisible
+    var imeWasVisible by remember { mutableStateOf(false) }
+
+    // 用户按返回键收起系统键盘时，备注框可能仍持有焦点；清掉焦点让数字键盘回来。
+    LaunchedEffect(imeVisible) {
+        if (imeVisible) {
+            imeWasVisible = true
+        } else if (imeWasVisible) {
+            imeWasVisible = false
+            focusManager.clearFocus()
+            noteFocused = false
+        }
+    }
 
     LaunchedEffect(hint) {
         if (hint != null) {
@@ -141,6 +176,12 @@ fun AddTransactionScreen(
 
     val amountMinor = parseAmountToMinor(amountText)
     val canSave = amountMinor > 0 && selectedCategoryId != null
+
+    // 点金额、分类、日期等区域时收起系统键盘，恢复自带数字键盘。
+    fun dismissNoteFocus() {
+        if (noteFocused) noteFocused = false
+        focusManager.clearFocus()
+    }
 
     fun key(input: String) {
         if (!amountTouched) {
@@ -170,7 +211,7 @@ fun AddTransactionScreen(
         }
     }
 
-    Surface(color = Fen.colors.bg, modifier = Modifier.fillMaxSize()) {
+    Surface(color = Fen.colors.bg, modifier = modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize()) {
         Column(
             Modifier
@@ -195,6 +236,7 @@ fun AddTransactionScreen(
                 options = listOf("支出", "收入"),
                 selected = if (type == TxType.EXPENSE) 0 else 1,
                 onSelect = { index ->
+                    dismissNoteFocus()
                     val next = if (index == 0) TxType.EXPENSE else TxType.INCOME
                     if (next != type) {
                         type = next
@@ -220,18 +262,33 @@ fun AddTransactionScreen(
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(0.dp, Alignment.CenterVertically),
                 ) {
+                    val count = categories.size + if (showManageCategories) 1 else 0
                     items(
-                        count = categories.size + 1,
-                        key = { index -> if (index == categories.size) "manage" else categories[index].id },
+                        count = count,
+                        key = { index ->
+                            if (showManageCategories && index == categories.size) {
+                                "manage"
+                            } else {
+                                categories[index].id
+                            }
+                        },
                     ) { index ->
-                        if (index == categories.size) {
-                            ManageCategoriesTile(onClick = onManageCategories)
+                        if (showManageCategories && index == categories.size) {
+                            ManageCategoriesTile(
+                                onClick = {
+                                    dismissNoteFocus()
+                                    onManageCategories()
+                                }
+                            )
                         } else {
                             val category = categories[index]
                             CategoryTile(
                                 category = category,
                                 selected = category.id == selectedCategoryId,
-                                onClick = { categoryId = category.id },
+                                onClick = {
+                                    dismissNoteFocus()
+                                    categoryId = category.id
+                                },
                             )
                         }
                     }
@@ -310,7 +367,13 @@ fun AddTransactionScreen(
             Surface(
                 shape = RoundedCornerShape(22.dp),
                 color = Fen.colors.surface,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) { dismissNoteFocus() }
+                    .padding(horizontal = 16.dp),
             ) {
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
                     Row(verticalAlignment = Alignment.Bottom) {
@@ -342,7 +405,13 @@ fun AddTransactionScreen(
                         modifier = Modifier.fillMaxWidth().height(32.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        DateTimeChip(dateTime = dateTime, onClick = { showPicker = true })
+                        DateTimeChip(
+                            dateTime = dateTime,
+                            onClick = {
+                                dismissNoteFocus()
+                                showPicker = true
+                            },
+                        )
                         Spacer(Modifier.width(10.dp))
                         BasicTextField(
                             value = note,
@@ -352,7 +421,7 @@ fun AddTransactionScreen(
                             cursorBrush = SolidColor(accent),
                             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                             keyboardActions = KeyboardActions(
-                                onDone = { focusManager.clearFocus() }
+                                onDone = { dismissNoteFocus() }
                             ),
                             modifier = Modifier
                                 .weight(1f)
@@ -374,22 +443,30 @@ fun AddTransactionScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            if (!noteFocused) {
-                AmountKeypad(
-                    onDigit = ::key,
-                    onDot = { key(".") },
-                    onBackspace = {
-                        amountTouched = true
-                        amountText = amountText.dropLast(1)
-                    },
-                    onRecord = { submit(andContinue = true) },
-                    onDone = { submit(andContinue = false) },
-                    canSave = canSave,
-                    accent = accent,
-                    showRecord = initial == null,
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                )
-                Spacer(Modifier.height(12.dp))
+            AnimatedVisibility(
+                visible = !noteFocused,
+                enter = androidx.compose.animation.fadeIn() +
+                    androidx.compose.animation.expandVertically(),
+                exit = androidx.compose.animation.fadeOut() +
+                    androidx.compose.animation.shrinkVertically(),
+            ) {
+                Column {
+                    AmountKeypad(
+                        onDigit = ::key,
+                        onDot = { key(".") },
+                        onBackspace = {
+                            amountTouched = true
+                            amountText = amountText.dropLast(1)
+                        },
+                        onRecord = { submit(andContinue = true) },
+                        onDone = { submit(andContinue = false) },
+                        canSave = canSave,
+                        accent = accent,
+                        showRecord = initial == null && allowContinue,
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
             }
         }
 

@@ -3,6 +3,7 @@ package app.fen.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -26,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.DragIndicator
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -39,23 +42,31 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.zIndex
 import app.fen.data.Category
 import app.fen.data.Snapshot
 import app.fen.data.TxType
 import app.fen.ui.components.CircleAction
 import app.fen.ui.components.IconBadge
-import app.fen.ui.components.RowDivider
 import app.fen.ui.components.SectionLabel
 import app.fen.ui.icons.CategoryIconKeys
 import app.fen.ui.icons.categoryIcon
@@ -68,6 +79,7 @@ fun CategoryManagerScreen(
     onBack: () -> Unit,
     onAdd: (name: String, type: TxType, icon: String, color: Long) -> Unit,
     onUpdate: (Category) -> Unit,
+    onReorder: (TxType, List<String>) -> Unit,
     onDelete: (Category) -> Unit,
     onMerge: (Category, Category) -> Unit,
     onDeleteWithTransactions: (Category) -> Unit,
@@ -78,6 +90,12 @@ fun CategoryManagerScreen(
     var showEditor by remember { mutableStateOf(false) }
     var mergeSource by remember { mutableStateOf<Category?>(null) }
     var mergeTarget by remember { mutableStateOf<Category?>(null) }
+    var draggedId by remember { mutableStateOf<String?>(null) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    var draft by remember { mutableStateOf<Map<TxType, List<String>>>(emptyMap()) }
+    val density = LocalDensity.current
+    val rowHeight = 60.dp
+    val rowHeightPx = with(density) { rowHeight.toPx() }
 
     fun openNew(type: TxType) {
         editorTarget = null
@@ -106,7 +124,11 @@ fun CategoryManagerScreen(
         }
 
         listOf(TxType.EXPENSE to "支出", TxType.INCOME to "收入").forEach { (type, title) ->
-            val items = snapshot.categories.filter { it.type == type }.sortedBy { it.sortOrder }
+            val stored = snapshot.categories.filter { it.type == type }.sortedBy { it.sortOrder }
+            val override = draft[type]
+            val byId = stored.associateBy { it.id }
+            val drafted = override?.mapNotNull { byId[it] }.orEmpty()
+            val items = if (drafted.size == stored.size) drafted else stored
             item {
                 SectionLabel(
                     text = "${title}分类",
@@ -128,17 +150,60 @@ fun CategoryManagerScreen(
                 ) {
                     Column(Modifier.padding(vertical = 4.dp)) {
                         items.forEachIndexed { index, category ->
-                            CategoryRow(
-                                category = category,
-                                onClick = {
-                                    editorTarget = category
-                                    editorType = category.type
-                                    showEditor = true
-                                },
-                            )
-                            if (index != items.lastIndex) RowDivider(startInset = 64.dp)
+                            key(category.id) {
+                                DraggableCategoryRow(
+                                    category = category,
+                                    index = index,
+                                    lastIndex = items.lastIndex,
+                                    dragging = draggedId == category.id,
+                                    dragOffset = if (draggedId == category.id) dragOffset else 0f,
+                                    rowHeight = rowHeight,
+                                    onClick = {
+                                        editorTarget = category
+                                        editorType = category.type
+                                        showEditor = true
+                                    },
+                                    onDragStart = {
+                                        draggedId = category.id
+                                        dragOffset = 0f
+                                    },
+                                    onDrag = { amount ->
+                                        dragOffset += amount
+                                        val currentIndex = items.indexOfFirst { it.id == category.id }
+                                        if (currentIndex < 0) return@DraggableCategoryRow
+                                        var movedToIndex = currentIndex
+                                        if (dragOffset > rowHeightPx / 2f && currentIndex < items.lastIndex) {
+                                            draft = draft + (type to items.move(currentIndex, currentIndex + 1).map { it.id })
+                                            dragOffset -= rowHeightPx
+                                            movedToIndex = currentIndex + 1
+                                        } else if (dragOffset < -rowHeightPx / 2f && currentIndex > 0) {
+                                            draft = draft + (type to items.move(currentIndex, currentIndex - 1).map { it.id })
+                                            dragOffset += rowHeightPx
+                                            movedToIndex = currentIndex - 1
+                                        }
+                                        if (movedToIndex <= 0 && dragOffset < 0f) dragOffset = 0f
+                                        if (movedToIndex >= items.lastIndex && dragOffset > 0f) dragOffset = 0f
+                                    },
+                                    onDragEnd = {
+                                        val order = draft[type]
+                                        if (order != null && order != stored.map { it.id }) {
+                                            onReorder(type, order)
+                                        }
+                                        draft = draft - type
+                                        draggedId = null
+                                        dragOffset = 0f
+                                    },
+                                )
+                            }
                         }
-                        if (items.isNotEmpty()) RowDivider(startInset = 0.dp)
+                        if (items.isNotEmpty()) {
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(1.dp)
+                                    .background(Fen.colors.divider),
+                            )
+                        }
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -358,33 +423,110 @@ fun CategoryManagerScreen(
     }
 }
 
+private fun <T> List<T>.move(from: Int, to: Int): List<T> {
+    if (from == to || from !in indices || to !in indices) return this
+    val next = toMutableList()
+    val item = next.removeAt(from)
+    next.add(to, item)
+    return next
+}
+
 @Composable
-private fun CategoryRow(category: Category, onClick: () -> Unit) {
-    Row(
+private fun DraggableCategoryRow(
+    category: Category,
+    index: Int,
+    lastIndex: Int,
+    dragging: Boolean,
+    dragOffset: Float,
+    rowHeight: Dp,
+    onClick: () -> Unit,
+    onDragStart: () -> Unit,
+    onDrag: (Float) -> Unit,
+    onDragEnd: () -> Unit,
+) {
+    val currentOnDragStart by rememberUpdatedState(onDragStart)
+    val currentOnDrag by rememberUpdatedState(onDrag)
+    val currentOnDragEnd by rememberUpdatedState(onDragEnd)
+
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .height(rowHeight)
+            .zIndex(if (dragging) 1f else 0f)
+            .graphicsLayer { translationY = dragOffset }
+            .then(
+                if (dragging) {
+                    Modifier
+                        .shadow(12.dp, RoundedCornerShape(12.dp))
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Fen.colors.surface)
+                        .border(1.dp, Fen.colors.divider, RoundedCornerShape(12.dp))
+                } else {
+                    Modifier
+                }
+            ),
     ) {
-        IconBadge(
-            icon = categoryIcon(category.icon),
-            color = Color(category.color),
-            size = 36.dp,
-            iconSize = 18.dp,
-        )
-        Spacer(Modifier.size(14.dp))
-        Text(
-            text = category.name,
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.weight(1f),
-        )
-        Icon(
-            Icons.Rounded.ChevronRight,
-            contentDescription = null,
-            tint = Fen.colors.inkFaint,
-            modifier = Modifier.size(18.dp),
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .clickable(onClick = onClick)
+                .padding(start = 6.dp, end = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .pointerInput(category.id) {
+                        detectDragGestures(
+                            onDragStart = { currentOnDragStart() },
+                            onDragEnd = { currentOnDragEnd() },
+                            onDragCancel = { currentOnDragEnd() },
+                            onDrag = { change, amount ->
+                                change.consume()
+                                currentOnDrag(amount.y)
+                            },
+                        )
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.DragIndicator,
+                    contentDescription = "拖动排序${category.name}",
+                    tint = if (dragging) Fen.colors.ink else Fen.colors.inkFaint,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            Spacer(Modifier.width(2.dp))
+            IconBadge(
+                icon = categoryIcon(category.icon),
+                color = Color(category.color),
+                size = 36.dp,
+                iconSize = 18.dp,
+            )
+            Spacer(Modifier.size(12.dp))
+            Text(
+                text = category.name,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+            )
+            Icon(
+                Icons.Rounded.ChevronRight,
+                contentDescription = null,
+                tint = Fen.colors.inkFaint,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        if (index < lastIndex) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 92.dp)
+                    .height(1.dp)
+                    .background(Fen.colors.divider),
+            )
+        }
     }
 }
 

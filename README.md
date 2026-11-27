@@ -2,150 +2,65 @@
 
 一个开源、克制的 Android 记账应用。
 
-> 灵感来自 iCost（仅借鉴功能结构与交互思路，不含其代码或素材），
-> 目标是砍掉嘈杂功能，把「记一笔」和「看明白钱去哪了」做到极致。
+没有账号，账单只保存在本机。唯一的联网是检查更新。
 
-当前状态：**可运行的早期原型**（v0.2.0，现代极简视觉重构）。已打通
-记账 → 明细 → 统计 的完整链路，并支持**单层可自定义分类**、搜索与月度汇总轮播。
+| 明细 | 记账 | 统计 | 搜索 |
+| :---: | :---: | :---: | :---: |
+| <img src="screenshots/bills.png" width="200" /> | <img src="screenshots/add.png" width="200" /> | <img src="screenshots/stats.png" width="200" /> | <img src="screenshots/search.png" width="200" /> |
 
-## 设计语言
+## 功能
 
-冷白底（`#F4F5F7`）+ 纯白卡片 + 近黑文字 + 语义双色（支出珊瑚红 / 收入墨绿）。
-金额使用超大粗体等宽数字（`tnum`），其余信息降级为浅灰小字；
-圆角统一 24dp，分类图标为开源线性图标（Material Outlined）+ 彩色圆底。
-
-
-## 技术栈
-
-| 项 | 选择 |
-|---|---|
-| 语言 / UI | Kotlin 2.4.21 + Jetpack Compose（Material 3） |
-| 构建 | AGP 9.4.1 / Gradle 9.8.2 / JDK 17 toolchain |
-| minSdk / targetSdk | 26 / 37 |
-| 数据 | 手写 SQLite（`FenDb`），金额统一以「分」为 `Long` |
-| 架构 | 单 Activity + Compose Navigation + 一个 `FenViewModel` |
-
-选择手写 SQLite 而不是 Room，是为了避开 AGP 9 + Kotlin 2.4 上 KSP 的版本耦合；
-等数据结构稳定后再评估迁移。
-
-## 版本与并行开发
-
-- **正式版**：`app.fen`，`.\gradlew.bat :app:assembleRelease`
-- **开发版**：`app.fen.dev.<分支>`，`assembleDebug` 自动生成，可与正式版同时安装
-- 开发版名称是 `Fen·<分支>`，图标底色按分支名生成，桌面上一眼区分
-- 新建并行工作区：`.\scripts\new-worktree.ps1 <名字>`
-- `scripts/install.py` / `scripts/acceptance.py` 会自动读取构建产物里的包名
-
-详细流程见本地文档 `docs/06-dev-workflow.md`（未入库）。
+- **记账**：支出 / 收入、单层自定义分类、精确到分钟的时间、备注、自定义数字键盘。
+- **明细**：按月查看，支出 / 收入 / 结余汇总卡，按天分组与日小计；点按编辑，长按删除。
+- **搜索**：按关键词、类型、时间、金额筛选，支持排序与结果汇总。
+- **统计**：周 / 月 / 年 / 全部 / 自定义范围；分类占比、分类排行、收支趋势、累计结余、收支对比、星期分布、账单汇总。看板内容与顺序可调整。
+- **分类**：自定义名称、图标与颜色；已有流水的分类不可删除。
+- **导入**：自动识别微信、支付宝、京东、美团、iCost、鲨鱼记账、一木记账、木木记账、钱迹、团团记账等账单，也支持通用 CSV / Excel；导入前可预览与调整分类，导入记录按批次管理。
+- **导出**：账单 CSV 与导入模板。
+- **备份**：完整 JSON 备份与恢复。
+- **更新**：应用内检查并安装新版本，来源为 GitHub Release。
+- **外观**：跟随系统 / 浅色 / 深色。
 
 ## 本地 MCP
 
-开发版内置本地 MCP 服务，让同一 WiFi 下的 AI 客户端（Claude Code / Cursor / Inspector）读写账本：
+内置本地 MCP 服务，让同一 WiFi 下的 AI 客户端读取账本，按需临时开放写入：
 
-- 打开 `Fen·<分支>` → 设置 → 本地 MCP，开启服务。
-- 复制对应客户端的配置；写入权限默认关闭，开启时可选择 5/15/30/60 分钟。
-- 所有调用写入本地审计库，可在「调用记录」里查看、导出和整批撤销。
-- 只监听局域网；不连接互联网。正式版默认端口 8067，开发版按包名自动分配。
+- 在「设置 → 本地 MCP」开启服务，页面上有可直接粘贴给 AI 客户端的配置。
+- 只读工具包括账单概览、明细、汇总与分类；写入默认关闭，开启时可选择 5/15/30/60 分钟。
+- 每次调用都会记入本地审计库，可在「调用记录」里查看、导出并整批撤销。
+- 只在局域网内监听，不经过云端；正式版默认端口 8067，开发版按包名自动分配。
 
-开发调试：
+## 隐私
 
-```powershell
-adb shell am start -a android.intent.action.VIEW -d "fen://debug/mcp/start" -p app.fen.dev.feat_mcp
-adb shell am start -a android.intent.action.VIEW -d "fen://debug/mcp/write?minutes=15" -p app.fen.dev.feat_mcp
-.\scripts\mcp-smoke.ps1 -BaseUrl http://<手机IP>:<端口> -Token <token>
+应用只申请检查更新所需的网络与安装权限，不上传任何数据。唯一的联网是启动时（最多每小时一次）或你点击检查更新时访问 GitHub Release；账单数据始终只保存在本机。账单与设置默认只写入应用私有目录；导出和备份文件由你自行选择保存位置。本地 MCP 只在你开启后、于同一局域网内提供访问。
+
+## 构建
+
+需要 JDK 17 或更高版本，以及 Android SDK（Platform 37）。
+
+```bash
+git clone https://github.com/Aj002Th/fen.git
+cd fen
+
+# macOS / Linux
+./gradlew :app:assembleDebug
+
+# Windows
+gradlew.bat :app:assembleDebug
 ```
 
-协议设计见本地文档 `docs/superpowers/specs/2026-11-22-local-mcp-design.md`。
+产物位于 `app/build/outputs/apk/debug/app-debug.apk`。目前尚未上架应用商店，构建后直接安装即可。
 
-## 构建与运行
+运行单元测试：
 
-本机 Android 环境的完整说明见 `C:\Android\ANDROID-ENV.md`。
-
-```powershell
-$env:JAVA_HOME = "C:\Program Files\Microsoft\jdk-21.0.13.102-hotspot"
-$env:ANDROID_HOME = "C:\Android\sdk"
-.\gradlew.bat :app:assembleDebug
-
-# 无头模拟器 + 安装 + 截图
-C:\Android\tools\device.ps1 boot
-C:\Android\tools\device.ps1 install -Package app.fen
-C:\Android\tools\device.ps1 shot
+```bash
+./gradlew :app:testDebugUnitTest
 ```
 
-## 验收数据（仅 debug）
+## 技术栈
 
-```powershell
-# 生成最近 6 个月约 400 条演示数据（会顺带创建咖啡/宠物/订阅/健身四个分类）
-adb shell am start -a android.intent.action.VIEW -d "fen://debug/seed?count=400" -p app.fen
-# 清空流水（保留分类）
-adb shell am start -a android.intent.action.VIEW -d "fen://debug/clear" -p app.fen
-```
-
-开发入口默认隐藏：设置 → 关于 → 连续点标题 10 次才会出现「开发」分组；
-App 完全退出后重新进入会恢复隐藏。
-
-## 代码结构
-
-```
-app/src/main/java/app/fen/
-├─ FenApp.kt                  Application，持有 Repository
-├─ MainActivity.kt            单 Activity 入口
-├─ data/
-│  ├─ Models.kt               Category / Tx / Snapshot
-│  ├─ FenDb.kt                SQLiteOpenHelper + 建表 + 种子数据
-│  ├─ FenRepository.kt        读写 + 快照刷新
-│  ├─ AppPrefs.kt             主题模式等轻量偏好
-│  └─ Analytics.kt            月度合计、分类占比、按天分组
-├─ ui/
-│  ├─ FenRoot.kt              NavHost + 底部导航 + 记账浮层
-│  ├─ FenViewModel.kt         单例状态（快照 + 当前月份）
-│  ├─ components/             AmountText / KeyPad / 通用小组件
-│  ├─ screens/                Bills / AddTransaction / Stats / Settings
-│  └─ theme/                  色板、字体、形状
-└─ util/Format.kt             金额与日期格式化
-```
-
-## 设计原则
-
-1. **金额是主角**：大号等宽数字，其余信息一律降级为浅灰小字。
-2. **一屏只做一件事**：明细页看账，统计页看结构，记账页只管输入。
-3. **零网络、零账号**：数据只在本机，开机即用。
-4. **可解释的默认值**：预置分类，第一次打开就能记账。
-
-## 已实现
-
-- 记账：支出 / 收入、**单层自定义分类**、**时间精确到分钟**、备注、自定义数字键盘（保存再记 / 完成）
-- 分类：分类管理页，新增 / 编辑名称、图标、颜色；有流水的分类禁止删除
-- 编辑：点击明细里的记录即可修改金额 / 分类 / 时间 / 备注
-- 主题：跟随系统 / 浅色 / 深色，设置页可切换
-- 明细：**三页汇总轮播**、按月切换、**按天卡片**、日小计、长按删除
-- 搜索：独立搜索页，关键词 + 类型/时间/金额筛选、排序、汇总、按天结果、搜索历史
-- 统计：按分类聚合的环形图、分类排行、近 7 天柱状图
-- 设置：右上角入口（所有页面可达），分类管理、深色模式与关于
-
-## Roadmap
-
-- [x] 支出 / 收入记账，**单层可自定义分类**、日期、备注、自定义键盘
-- [x] 按天卡片的明细、月度汇总轮播、独立搜索页（筛选/排序/汇总）
-- [x] 环形图 + 分类排行 + 近 7 天柱状图
-- [x] 现代极简视觉 + 线性图标体系
-- [x] 统一页头、右上角设置入口、页面转场
-- [x] 深色模式
-- [ ] 键盘四则运算、`记录` 连续记账的动效与反馈
-- [x] 编辑已有记录
-- [x] 分类管理与单层自定义分类
-- [ ] 滑动删除 + 撤销
-- [ ] 预算设置页
-- [ ] 日历视图
-- [ ] 导出 / 导入（CSV、JSON）、本地备份
-- [ ] 主题色自定义、字号设置
-- [ ] 单元测试（Analytics、金额解析）与截图回归
+Kotlin · Jetpack Compose · Material 3 · SQLite。minSdk 26，targetSdk 37。
 
 ## License
 
-待定（建议 Apache-2.0 或 MIT）。
-
-
-
-
-
+[Apache License 2.0](LICENSE)

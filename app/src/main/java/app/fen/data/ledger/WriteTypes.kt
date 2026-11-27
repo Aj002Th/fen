@@ -80,6 +80,7 @@ fun Tx.toLedgerJson(): String = buildJsonObject {
     put("categoryId", categoryId ?: "")
     put("note", note)
     put("occurredAt", occurredAt)
+    put("importBatch", importBatch ?: "")
 }.toString()
 
 fun txFromLedgerJson(raw: String): Tx {
@@ -91,5 +92,6 @@ fun txFromLedgerJson(raw: String): Tx {
         categoryId = json["categoryId"]!!.jsonPrimitive.content.takeIf { it.isNotEmpty() },
         note = json["note"]!!.jsonPrimitive.content,
         occurredAt = json["occurredAt"]!!.jsonPrimitive.content.toLong(),
+        importBatch = json["importBatch"]?.jsonPrimitive?.content?.takeIf { it.isNotEmpty() },
     )
 }
