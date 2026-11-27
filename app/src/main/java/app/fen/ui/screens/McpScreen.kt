@@ -111,22 +111,36 @@ fun McpScreen(
     }
     val writeUntil = running?.writeUntil
     val writeEnabled = writeUntil != null && writeUntil > now
+    val localNetworkGranted = Build.VERSION.SDK_INT < 37 ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_LOCAL_NETWORK) ==
+        PackageManager.PERMISSION_GRANTED
     val maskedToken = "Bearer ${mask(token)}"
     val setup = setupInstruction(address ?: "手机IP:端口", token)
     val docs = toolDocsMarkdown(viewModel.toolDescriptors(writeEnabled))
 
     val notificationPermission = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
+        ActivityResultContracts.RequestMultiplePermissions()
     ) { viewModel.start() }
 
     fun startWithPermission() {
-        if (Build.VERSION.SDK_INT >= 33 &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-        } else {
+        val missing = buildList {
+            if (Build.VERSION.SDK_INT >= 33 &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            if (Build.VERSION.SDK_INT >= 37 && !localOnly &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_LOCAL_NETWORK) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                add(Manifest.permission.ACCESS_LOCAL_NETWORK)
+            }
+        }
+        if (missing.isEmpty()) {
             viewModel.start()
+        } else {
+            notificationPermission.launch(missing.toTypedArray())
         }
     }
 
@@ -167,6 +181,14 @@ fun McpScreen(
             }
             (state as? McpServerState.Error)?.let {
                 Text(it.message, style = MaterialTheme.typography.bodySmall, color = Fen.colors.expense)
+            }
+            if (Build.VERSION.SDK_INT >= 37 && !localOnly && !localNetworkGranted) {
+                Text(
+                    "需要授予“附近设备 / 本地网络”权限，电脑才能连接",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Fen.colors.expense,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
             }
         }
 
@@ -558,7 +580,7 @@ private fun FaqSheet(
             Spacer(Modifier.size(16.dp))
             FaqItem(
                 "连接失败",
-                "确认电脑和手机在同一 WiFi；关闭手机 VPN 或允许局域网；确认地址和端口与手机上显示一致。",
+                "确认电脑和手机在同一 WiFi；授予应用“附近设备 / 本地网络”权限；关闭手机 VPN 或允许局域网；确认地址和端口与手机上显示一致。",
             )
             FaqItem("401", "token 被重置或复制不完整，重新复制 Authorization。")
             FaqItem(

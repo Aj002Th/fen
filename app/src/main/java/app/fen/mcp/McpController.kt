@@ -1,10 +1,14 @@
 package app.fen.mcp
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.Network
+import android.os.Build
 import android.util.Log
+import androidx.core.content.ContextCompat
 import app.fen.BuildConfig
 import app.fen.data.ledger.LedgerReader
 import app.fen.data.ledger.LedgerWriter
@@ -109,6 +113,13 @@ class McpController(
     fun startServer() {
         val current = _state.value
         if (current is McpServerState.Running || current is McpServerState.Starting) return
+        if (Build.VERSION.SDK_INT >= 37 && !config.localOnly &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_LOCAL_NETWORK) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            _state.value = McpServerState.Error("需要授予“本地网络 / 附近设备”权限，电脑才能连接")
+            return
+        }
         _state.value = McpServerState.Starting
         scope.launch {
             runCatching { auditDb.prune() }
