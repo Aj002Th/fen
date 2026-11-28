@@ -90,6 +90,20 @@ class ReadToolsTest {
     }
 
     @Test
+    fun listTransactionsAcceptsLargerLimits() = runTest {
+        listOf(500, 1000).forEach { limit ->
+            val result = call("list_transactions", buildJsonObject { put("limit", limit) })
+
+            assertTrue(result is ToolResult.Ok)
+        }
+
+        val tooLarge = call("list_transactions", buildJsonObject { put("limit", 1001) })
+
+        assertTrue(tooLarge is ToolResult.Error)
+        assertEquals("VALIDATION", (tooLarge as ToolResult.Error).code)
+    }
+
+    @Test
     fun listTransactionsRejectsBadCursor() = runTest {
         val result = call("list_transactions", buildJsonObject { put("cursor", "not-base64") })
 

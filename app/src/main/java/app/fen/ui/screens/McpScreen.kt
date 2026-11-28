@@ -84,9 +84,13 @@ fun McpScreen(
     var localOnly by remember { mutableStateOf(viewModel.localOnly()) }
     var idleMinutes by remember { mutableStateOf(viewModel.idleMinutes()) }
     var queryLimit by remember { mutableStateOf(viewModel.queryLimit()) }
+    var rateLimitPerMinute by remember { mutableStateOf(viewModel.rateLimitPerMinute()) }
+    var writeBatchLimit by remember { mutableStateOf(viewModel.writeBatchLimit()) }
     var showReset by remember { mutableStateOf(false) }
     var showIdle by remember { mutableStateOf(false) }
     var showLimit by remember { mutableStateOf(false) }
+    var showRateLimit by remember { mutableStateOf(false) }
+    var showWriteLimit by remember { mutableStateOf(false) }
     var showFaq by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<SelfTestResult?>(null) }
     var selfTesting by remember { mutableStateOf(false) }
@@ -269,8 +273,8 @@ fun McpScreen(
             }
         }
 
-        SectionLabel("偏好设置", modifier = Modifier.padding(top = 24.dp, bottom = 8.dp))
-        SectionCard {
+        SectionLabel("偏好设置", modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
+        PreferenceCard {
             PreferenceSwitch(
                 title = "软件重启后保持开启",
                 subtitle = "关闭时需每次手动开启",
@@ -309,9 +313,23 @@ fun McpScreen(
             RowDivider(startInset = 0.dp)
             PreferenceValue(
                 title = "单次查询上限",
-                subtitle = "单次最多返回的账单条数",
+                subtitle = "每次返回的条数",
                 value = "$queryLimit 条",
                 onClick = { showLimit = true },
+            )
+            RowDivider(startInset = 0.dp)
+            PreferenceValue(
+                title = "单次写入上限",
+                subtitle = "新增、修改或删除的条数",
+                value = "$writeBatchLimit 条",
+                onClick = { showWriteLimit = true },
+            )
+            RowDivider(startInset = 0.dp)
+            PreferenceValue(
+                title = "请求频率上限",
+                subtitle = "每个 IP 每分钟请求数",
+                value = "$rateLimitPerMinute 次/分钟",
+                onClick = { showRateLimit = true },
             )
             RowDivider(startInset = 0.dp)
             PreferenceValue(
@@ -321,13 +339,6 @@ fun McpScreen(
                 onClick = { showFaq = true },
             )
         }
-
-        Text(
-            "数据仅在本机处理，不会上传。请勿泄露令牌，避免在公共 WiFi 下使用。",
-            style = MaterialTheme.typography.bodySmall,
-            color = Fen.colors.inkSoft,
-            modifier = Modifier.padding(top = 16.dp),
-        )
     }
 
     if (showReset) {
@@ -367,8 +378,14 @@ fun McpScreen(
     if (showLimit) {
         OptionSheet(
             title = "单次查询上限",
-            subtitle = "单次最多返回的账单条数",
-            options = listOf(50 to "50 条", 100 to "100 条", 200 to "200 条"),
+            subtitle = "每次返回的条数",
+            options = listOf(
+                50 to "50 条",
+                100 to "100 条",
+                200 to "200 条",
+                500 to "500 条",
+                1000 to "1000 条",
+            ),
             selected = queryLimit,
             onSelect = {
                 queryLimit = it
@@ -376,6 +393,47 @@ fun McpScreen(
                 showLimit = false
             },
             onDismiss = { showLimit = false },
+        )
+    }
+
+    if (showWriteLimit) {
+        OptionSheet(
+            title = "单次写入上限",
+            subtitle = "新增、修改或删除的条数",
+            options = listOf(
+                10 to "10 条",
+                20 to "20 条",
+                30 to "30 条",
+                50 to "50 条",
+                100 to "100 条",
+            ),
+            selected = writeBatchLimit,
+            onSelect = {
+                writeBatchLimit = it
+                viewModel.setWriteBatchLimit(it)
+                showWriteLimit = false
+            },
+            onDismiss = { showWriteLimit = false },
+        )
+    }
+
+    if (showRateLimit) {
+        OptionSheet(
+            title = "请求频率上限",
+            subtitle = "每个 IP 每分钟请求数，修改后服务重启",
+            options = listOf(
+                60 to "60 次/分钟",
+                120 to "120 次/分钟",
+                300 to "300 次/分钟",
+                600 to "600 次/分钟",
+            ),
+            selected = rateLimitPerMinute,
+            onSelect = {
+                rateLimitPerMinute = it
+                viewModel.setRateLimitPerMinute(it)
+                showRateLimit = false
+            },
+            onDismiss = { showRateLimit = false },
         )
     }
 
@@ -392,6 +450,17 @@ private fun SectionCard(content: @Composable () -> Unit) {
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(16.dp)) { content() }
+    }
+}
+
+@Composable
+private fun PreferenceCard(content: @Composable () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(22.dp),
+        color = Fen.colors.surface,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(horizontal = 16.dp)) { content() }
     }
 }
 
@@ -575,6 +644,10 @@ private fun FaqSheet(
             FaqItem(
                 "连接失败",
                 "确认电脑和手机在同一 WiFi；授予应用“附近设备 / 本地网络”权限；关闭手机 VPN 或允许局域网；确认地址和端口与手机上显示一致。",
+            )
+            FaqItem(
+                "会上传吗",
+                "不会。服务只在局域网内监听，账单始终留在手机；请勿把 token 发给别人。",
             )
             FaqItem("401", "token 被重置或复制不完整，重新复制 Authorization。")
             FaqItem(

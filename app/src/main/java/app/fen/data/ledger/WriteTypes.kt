@@ -31,6 +31,10 @@ data class AddCommit(val items: List<Tx>, val meta: BatchMeta)
 
 data class UpdateCommit(val before: Tx, val after: Tx, val meta: BatchMeta)
 
+data class UpdateEntry(val before: Tx, val after: Tx)
+
+data class UpdateBatchCommit(val items: List<UpdateEntry>, val meta: BatchMeta)
+
 data class DeleteCommit(val before: List<Tx>, val meta: BatchMeta)
 
 data class CommitResult(val createdIds: List<String>, val replayed: Boolean = false)
@@ -68,6 +72,7 @@ interface LedgerWriter {
     fun idempotency(key: String): IdempotencyRecord?
     fun commitAdd(commit: AddCommit): CommitResult
     fun commitUpdate(commit: UpdateCommit): CommitResult
+    fun commitUpdates(commit: UpdateBatchCommit): CommitResult
     fun commitDelete(commit: DeleteCommit): CommitResult
     fun undoBatch(batchId: String): UndoResult
     fun batch(batchId: String): BatchSummary?

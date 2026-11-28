@@ -10,7 +10,9 @@ import app.fen.data.ledger.IdempotencyRecord
 import app.fen.data.ledger.LedgerReader
 import app.fen.data.ledger.LedgerWriter
 import app.fen.data.ledger.UndoResult
+import app.fen.data.ledger.UpdateBatchCommit
 import app.fen.data.ledger.UpdateCommit
+import app.fen.data.ledger.UpdateEntry
 import app.fen.data.ledger.WriteFailure
 import app.fen.data.ledger.toLedgerJson
 import app.fen.data.ledger.txFromLedgerJson
@@ -219,34 +221,46 @@ class FenRepository(
         CommitResult(commit.items.map { it.id })
     }
 
-    override fun commitUpdate(commit: UpdateCommit): CommitResult = synchronized(writeLock) {
+    override fun commitUpdate(commit: UpdateCommit): CommitResult =
+        commitUpdates(
+            UpdateBatchCommit(
+                items = listOf(UpdateEntry(commit.before, commit.after)),
+                meta = commit.meta,
+            )
+        )
+
+    override fun commitUpdates(commit: UpdateBatchCommit): CommitResult = synchronized(writeLock) {
         replayOrNull(commit.meta.idempotencyKey, commit.meta.tool, commit.meta.argsHash)?.let { return it }
 
         val now = System.currentTimeMillis()
         val database = db.writableDatabase
         database.beginTransaction()
         try {
-            val current = db.txById(commit.before.id)
-                ?: throw WriteFailure.WriteConflict("Transaction no longer exists")
-            if (current != commit.before) {
-                throw WriteFailure.WriteConflict("Transaction changed since it was read")
+            commit.items.forEach { entry ->
+                val current = db.txById(entry.before.id)
+                    ?: throw WriteFailure.WriteConflict("Transaction no longer exists: ${entry.before.id}")
+                if (current != entry.before) {
+                    throw WriteFailure.WriteConflict("Transaction changed since it was read: ${entry.before.id}")
+                }
             }
-            validateCategories(listOf(commit.after))
-            db.updateTx(commit.after)
+            validateCategories(commit.items.map { it.after })
+            commit.items.forEach { entry ->
+                db.updateTx(entry.after)
+                db.insertMcpBatchItem(
+                    commit.meta.batchId,
+                    entry.after.id,
+                    entry.before.toLedgerJson(),
+                    entry.after.toLedgerJson(),
+                )
+            }
             db.insertMcpBatch(commit.meta, now)
-            db.insertMcpBatchItem(
-                commit.meta.batchId,
-                commit.after.id,
-                commit.before.toLedgerJson(),
-                commit.after.toLedgerJson(),
-            )
             db.insertIdempotency(commit.meta, now)
             database.setTransactionSuccessful()
         } finally {
             database.endTransaction()
         }
         refresh()
-        CommitResult(listOf(commit.after.id))
+        CommitResult(commit.items.map { it.after.id })
     }
 
     override fun commitDelete(commit: DeleteCommit): CommitResult = synchronized(writeLock) {

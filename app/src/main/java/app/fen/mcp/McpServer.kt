@@ -45,9 +45,13 @@ class McpServer(
     private val host: String = "0.0.0.0",
     private val deleteSession: (String) -> Boolean = { false },
     private val onRejected: (RequestHeaders, String, Int, String) -> Unit = { _, _, _, _ -> },
+    rateLimitPerMinute: Int = 60,
 ) {
 
-    private val rateLimiter = RateLimiter(System::currentTimeMillis)
+    private val rateLimiter = RateLimiter(
+        clock = System::currentTimeMillis,
+        maxPerMinute = rateLimitPerMinute,
+    )
     private var stopServer: (() -> Unit)? = null
 
     fun start() {

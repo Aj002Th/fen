@@ -7,26 +7,29 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-class WriteTools(private val service: WriteService) {
+class WriteTools(
+    private val service: WriteService,
+    private val batchLimit: () -> Int = { 20 },
+) {
 
     fun descriptors(): List<ToolDescriptor> = listOf(
         ToolDescriptor(
             name = "add_transactions",
-            description = "批量新增流水（1–20 条）。amount 用元字符串；category_id 来自 list_categories；client_request_id 用于幂等重试。",
+            description = "批量新增流水（1–${batchLimit()} 条）。amount 用元字符串；category_id 来自 list_categories；client_request_id 用于幂等重试。",
             inputSchema = addSchema(),
             kind = ToolKind.WRITE,
             handler = { args -> service.add(args) },
         ),
         ToolDescriptor(
-            name = "update_transaction",
-            description = "修改一条流水。patch 至少一个字段；改 type 时必须同时给新类型的 category_id 或 null。",
-            inputSchema = updateSchema(),
+            name = "update_transactions",
+            description = "批量修改流水（1–${batchLimit()} 条）。每条给 id 和 patch；整批一个事务、一个撤销批次。",
+            inputSchema = updateManySchema(),
             kind = ToolKind.WRITE,
-            handler = { args -> service.update(args) },
+            handler = { args -> service.updateMany(args) },
         ),
         ToolDescriptor(
             name = "delete_transactions",
-            description = "删除 1–50 条流水。会记录批次，可在手机上整批撤销。",
+            description = "删除 1–${batchLimit()} 条流水。会记录批次，可在手机上整批撤销。",
             inputSchema = deleteSchema(),
             kind = ToolKind.WRITE,
             handler = { args -> service.delete(args) },
@@ -46,7 +49,7 @@ class WriteTools(private val service: WriteService) {
                     buildJsonObject {
                         put("type", "array")
                         put("minItems", 1)
-                        put("maxItems", 20)
+                        put("maxItems", batchLimit())
                         put(
                             "items",
                             buildJsonObject {
@@ -71,32 +74,55 @@ class WriteTools(private val service: WriteService) {
         )
     }
 
-    private fun updateSchema(): JsonObject = buildJsonObject {
+    private fun updateManySchema(): JsonObject = buildJsonObject {
         put("type", "object")
         put("additionalProperties", false)
-        put("required", JsonArray(listOf(JsonPrimitive("id"), JsonPrimitive("patch"), JsonPrimitive("client_request_id"))))
+        put("required", JsonArray(listOf(JsonPrimitive("client_request_id"), JsonPrimitive("updates"))))
         put(
             "properties",
             buildJsonObject {
-                put("id", stringProperty("流水 id"))
                 put("client_request_id", idProperty())
                 put(
-                    "patch",
+                    "updates",
                     buildJsonObject {
-                        put("type", "object")
-                        put("additionalProperties", false)
+                        put("type", "array")
+                        put("minItems", 1)
+                        put("maxItems", batchLimit())
                         put(
-                            "properties",
+                            "items",
                             buildJsonObject {
-                                put("type", enumProperty(listOf("expense", "income")))
-                                put("amount", amountProperty())
-                                put("category_id", nullableStringProperty())
-                                put("note", stringProperty("备注，最多 200 字", maxLength = 200))
-                                put("occurred_at", stringProperty("ISO-8601 带时区"))
+                                put("type", "object")
+                                put("additionalProperties", false)
+                                put(
+                                    "required",
+                                    JsonArray(listOf(JsonPrimitive("id"), JsonPrimitive("patch"))),
+                                )
+                                put(
+                                    "properties",
+                                    buildJsonObject {
+                                        put("id", stringProperty("流水 id"))
+                                        put("patch", patchSchema())
+                                    },
+                                )
                             },
                         )
                     },
                 )
+            },
+        )
+    }
+
+    private fun patchSchema(): JsonObject = buildJsonObject {
+        put("type", "object")
+        put("additionalProperties", false)
+        put(
+            "properties",
+            buildJsonObject {
+                put("type", enumProperty(listOf("expense", "income")))
+                put("amount", amountProperty())
+                put("category_id", nullableStringProperty())
+                put("note", stringProperty("备注，最多 200 字", maxLength = 200))
+                put("occurred_at", stringProperty("ISO-8601 带时区"))
             },
         )
     }
@@ -113,7 +139,7 @@ class WriteTools(private val service: WriteService) {
                     buildJsonObject {
                         put("type", "array")
                         put("minItems", 1)
-                        put("maxItems", 50)
+                        put("maxItems", batchLimit())
                         put("items", buildJsonObject { put("type", "string") })
                     },
                 )
