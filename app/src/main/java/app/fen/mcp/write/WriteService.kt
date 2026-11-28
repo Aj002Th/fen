@@ -7,7 +7,9 @@ import app.fen.data.ledger.BatchMeta
 import app.fen.data.ledger.DeleteCommit
 import app.fen.data.ledger.LedgerReader
 import app.fen.data.ledger.LedgerWriter
+import app.fen.data.ledger.UpdateBatchCommit
 import app.fen.data.ledger.UpdateCommit
+import app.fen.data.ledger.UpdateEntry
 import app.fen.data.ledger.WriteFailure
 import app.fen.mcp.tools.Money
 import app.fen.mcp.tools.ToolResult
@@ -33,6 +35,7 @@ class WriteService(
     private val writer: LedgerWriter,
     private val clock: () -> Long,
     private val newId: () -> String = { UUID.randomUUID().toString() },
+    private val batchLimit: () -> Int = { 20 },
 ) {
 
     fun add(args: JsonObject): ToolResult {
@@ -40,7 +43,9 @@ class WriteService(
         val transactions = args["transactions"] as? JsonArray
             ?: return validation("transactions must be an array")
         if (transactions.isEmpty()) return validation("transactions must not be empty")
-        if (transactions.size > 20) return limit("At most 20 transactions per batch")
+        if (transactions.size > batchLimit()) {
+            return limit("At most ${batchLimit()} transactions per batch")
+        }
 
         val hash = argsHash(args)
         replay("add_transactions", key, hash)?.let { return it }
@@ -127,12 +132,68 @@ class WriteService(
         }
     }
 
+    fun updateMany(args: JsonObject): ToolResult {
+        val key = requestKey(args) ?: return validation("client_request_id must be 8..64 characters")
+        val updates = args["updates"] as? JsonArray
+            ?: return validation("updates must be an array")
+        if (updates.isEmpty()) return validation("updates must not be empty")
+        if (updates.size > batchLimit()) {
+            return limit("At most ${batchLimit()} transactions per batch")
+        }
+
+        val hash = argsHash(args)
+        replay("update_transactions", key, hash)?.let { return it }
+
+        val snapshot = reader.readSnapshot()
+        val seen = HashSet<String>(updates.size)
+        val entries = ArrayList<UpdateEntry>(updates.size)
+        updates.forEachIndexed { index, element ->
+            val obj = element as? JsonObject ?: return validation("updates[$index] must be an object")
+            val id = obj.stringOrNull("id") ?: return validation("updates[$index].id is required")
+            val patch = obj["patch"] as? JsonObject
+                ?: return validation("updates[$index].patch must be an object")
+            if (patch.isEmpty()) return validation("updates[$index].patch must not be empty")
+            if (!seen.add(id)) return validation("duplicate transaction id: $id")
+            val current = snapshot.transactions.firstOrNull { it.id == id }
+                ?: return notFound("Transaction not found: $id")
+            val after = applyPatch(current, patch)
+                ?: return validation("Invalid patch at updates[$index]")
+            entries += UpdateEntry(current, after)
+        }
+        validateCategoryTypes(entries.map { it.after })?.let { return it }
+
+        val batchId = newId()
+        val response = buildJsonObject {
+            put("batch_id", batchId)
+            put("updated", buildJsonArray { entries.forEach { add(JsonPrimitive(it.after.id)) } })
+        }
+        val meta = BatchMeta(
+            batchId = batchId,
+            tool = "update_transactions",
+            idempotencyKey = key,
+            argsHash = hash,
+            clientName = null,
+            responseJson = response.toString(),
+        )
+        return commit {
+            val result = writer.commitUpdates(UpdateBatchCommit(entries, meta))
+            val body = if (result.replayed) {
+                (replayResponse(key) as? ToolResult.Ok)?.payload ?: response
+            } else {
+                response
+            }
+            ToolResult.Ok(body)
+        }
+    }
+
     fun delete(args: JsonObject): ToolResult {
         val key = requestKey(args) ?: return validation("client_request_id must be 8..64 characters")
         val ids = (args["ids"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
             ?: return validation("ids must be an array of strings")
         if (ids.isEmpty()) return validation("ids must not be empty")
-        if (ids.size > 50) return limit("At most 50 transactions per batch")
+        if (ids.size > batchLimit()) {
+            return limit("At most ${batchLimit()} transactions per batch")
+        }
 
         val hash = argsHash(args)
         replay("delete_transactions", key, hash)?.let { return it }

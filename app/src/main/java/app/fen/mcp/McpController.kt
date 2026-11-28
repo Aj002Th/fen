@@ -66,6 +66,7 @@ class McpController(
         reader = reader,
         writer = writer,
         clock = System::currentTimeMillis,
+        batchLimit = { config.writeBatchLimit },
     )
     private val registry = ToolRegistry(
         readTools = ReadTools(
@@ -74,7 +75,10 @@ class McpController(
             writeEnabled = { gate.isEnabled(config.writeUntil) },
             defaultLimit = { config.queryLimit },
         ),
-        writeTools = WriteTools(writeService),
+        writeTools = WriteTools(
+            service = writeService,
+            batchLimit = { config.writeBatchLimit },
+        ),
         writeEnabled = { gate.isEnabled(config.writeUntil) },
     )
     private val dispatcher = ProtocolDispatcher(
@@ -132,6 +136,7 @@ class McpController(
                     allowedHosts = { allowedHosts(port) },
                     host = if (config.localOnly) "127.0.0.1" else "0.0.0.0",
                     deleteSession = dispatcher::endSession,
+                    rateLimitPerMinute = config.rateLimitPerMinute,
                     onRejected = { headers, ip, status, message ->
                         scope.launch {
                             runCatching {
@@ -212,6 +217,8 @@ class McpController(
     fun localOnly(): Boolean = config.localOnly
     fun idleMinutes(): Int = config.idleMinutes
     fun queryLimit(): Int = config.queryLimit
+    fun rateLimitPerMinute(): Int = config.rateLimitPerMinute
+    fun writeBatchLimit(): Int = config.writeBatchLimit
 
     fun setAutoStart(value: Boolean) {
         config.autoStart = value
@@ -232,6 +239,18 @@ class McpController(
 
     fun setQueryLimit(value: Int) {
         config.queryLimit = value
+    }
+
+    fun setWriteBatchLimit(value: Int) {
+        config.writeBatchLimit = value
+    }
+
+    fun setRateLimitPerMinute(value: Int) {
+        config.rateLimitPerMinute = value
+        if (_state.value is McpServerState.Running) {
+            stopServer()
+            startServer()
+        }
     }
 
     fun toolDescriptors(writeEnabled: Boolean = gate.isEnabled(config.writeUntil)): List<ToolDescriptor> =

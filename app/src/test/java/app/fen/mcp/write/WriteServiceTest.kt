@@ -12,11 +12,14 @@ import app.fen.data.ledger.IdempotencyRecord
 import app.fen.data.ledger.LedgerReader
 import app.fen.data.ledger.LedgerWriter
 import app.fen.data.ledger.UndoResult
+import app.fen.data.ledger.UpdateBatchCommit
 import app.fen.data.ledger.UpdateCommit
+import app.fen.data.ledger.UpdateEntry
 import app.fen.mcp.tools.ToolResult
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -89,6 +92,113 @@ class WriteServiceTest {
         )
 
         assertEquals("LIMIT_EXCEEDED", (result as ToolResult.Error).code)
+    }
+
+    @Test
+    fun rejectsMoreThanConfiguredBatchLimit() {
+        val limited = WriteService(ledger, ledger, { now }, { "id-${++idSeq}" }, batchLimit = { 3 })
+        val txs = buildJsonArray {
+            repeat(4) {
+                add(buildJsonObject {
+                    put("type", "expense")
+                    put("amount", "1")
+                })
+            }
+        }
+        val addResult = limited.add(
+            buildJsonObject {
+                put("client_request_id", "request-limited")
+                put("transactions", txs)
+            }
+        )
+        assertEquals("LIMIT_EXCEEDED", (addResult as ToolResult.Error).code)
+
+        val deleteResult = limited.delete(
+            buildJsonObject {
+                put("client_request_id", "request-delete-limited")
+                put("ids", buildJsonArray { repeat(4) { add(JsonPrimitive("id-$it")) } })
+            }
+        )
+        assertEquals("LIMIT_EXCEEDED", (deleteResult as ToolResult.Error).code)
+
+        val updateResult = limited.updateMany(
+            buildJsonObject {
+                put("client_request_id", "request-update-limited")
+                put(
+                    "updates",
+                    buildJsonArray {
+                        repeat(4) {
+                            add(
+                                buildJsonObject {
+                                    put("id", "id-$it")
+                                    put("patch", buildJsonObject { put("amount", "1") })
+                                }
+                            )
+                        }
+                    },
+                )
+            }
+        )
+        assertEquals("LIMIT_EXCEEDED", (updateResult as ToolResult.Error).code)
+    }
+
+    @Test
+    fun updatesManyInOneBatch() {
+        ledger.txs += tx("a")
+        ledger.txs += tx("b")
+        val args = buildJsonObject {
+            put("client_request_id", "request-batch")
+            put(
+                "updates",
+                buildJsonArray {
+                    add(
+                        buildJsonObject {
+                            put("id", "a")
+                            put("patch", buildJsonObject { put("amount", "1.00") })
+                        }
+                    )
+                    add(
+                        buildJsonObject {
+                            put("id", "b")
+                            put("patch", buildJsonObject { put("amount", "2.00") })
+                        }
+                    )
+                },
+            )
+        }
+
+        val result = service.updateMany(args)
+
+        assertTrue(result is ToolResult.Ok)
+        val payload = (result as ToolResult.Ok).payload
+        assertEquals(2, payload["updated"]!!.jsonArray.size)
+        assertEquals(100L, ledger.txs.first { it.id == "a" }.amount)
+        assertEquals(200L, ledger.txs.first { it.id == "b" }.amount)
+    }
+
+    @Test
+    fun updateManyRejectsDuplicateIds() {
+        ledger.txs += tx("a")
+        val args = buildJsonObject {
+            put("client_request_id", "request-duplicate")
+            put(
+                "updates",
+                buildJsonArray {
+                    repeat(2) {
+                        add(
+                            buildJsonObject {
+                                put("id", "a")
+                                put("patch", buildJsonObject { put("amount", "1.00") })
+                            }
+                        )
+                    }
+                },
+            )
+        }
+
+        val result = service.updateMany(args)
+
+        assertEquals("VALIDATION", (result as ToolResult.Error).code)
     }
 
     @Test
@@ -225,6 +335,22 @@ class WriteServiceTest {
                 null,
             )
             return CommitResult(listOf(commit.after.id))
+        }
+
+        override fun commitUpdates(commit: UpdateBatchCommit): CommitResult {
+            commit.items.forEach { entry ->
+                val index = txs.indexOfFirst { it.id == entry.before.id }
+                if (index >= 0) txs[index] = entry.after
+            }
+            idem[commit.meta.idempotencyKey] = IdempotencyRecord(
+                commit.meta.idempotencyKey,
+                commit.meta.tool,
+                commit.meta.argsHash,
+                commit.meta.responseJson,
+                0,
+                null,
+            )
+            return CommitResult(commit.items.map { it.after.id })
         }
 
         override fun commitDelete(commit: DeleteCommit): CommitResult {

@@ -27,7 +27,15 @@ class McpConfig(private val context: Context) {
 
     var queryLimit: Int
         get() = prefs.getInt("query_limit", 100)
-        set(value) = prefs.edit().putInt("query_limit", value.coerceIn(1, 200)).apply()
+        set(value) = prefs.edit().putInt("query_limit", value.coerceIn(1, 1000)).apply()
+
+    var rateLimitPerMinute: Int
+        get() = prefs.getInt("rate_limit_per_minute", 60)
+        set(value) = prefs.edit().putInt("rate_limit_per_minute", value.coerceIn(30, 600)).apply()
+
+    var writeBatchLimit: Int
+        get() = prefs.getInt("write_batch_limit", 20)
+        set(value) = prefs.edit().putInt("write_batch_limit", value.coerceIn(1, 100)).apply()
 
     var port: Int
         get() = prefs.getInt("port", defaultPort())

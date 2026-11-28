@@ -43,11 +43,15 @@ class McpViewModel(app: Application) : AndroidViewModel(app) {
     fun localOnly(): Boolean = controller.localOnly()
     fun idleMinutes(): Int = controller.idleMinutes()
     fun queryLimit(): Int = controller.queryLimit()
+    fun rateLimitPerMinute(): Int = controller.rateLimitPerMinute()
+    fun writeBatchLimit(): Int = controller.writeBatchLimit()
 
     fun setAutoStart(value: Boolean) = controller.setAutoStart(value)
     fun setLocalOnly(value: Boolean) = controller.setLocalOnly(value)
     fun setIdleMinutes(value: Int) = controller.setIdleMinutes(value)
     fun setQueryLimit(value: Int) = controller.setQueryLimit(value)
+    fun setRateLimitPerMinute(value: Int) = controller.setRateLimitPerMinute(value)
+    fun setWriteBatchLimit(value: Int) = controller.setWriteBatchLimit(value)
 
     fun refreshCalls() {
         scope.launch { _calls.value = controller.recentCalls(100) }

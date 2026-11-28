@@ -79,6 +79,28 @@ class McpServerTest {
         assertEquals(403, status)
     }
 
+    @Test
+    fun rateLimitUsesConfiguredPerMinute() {
+        val altPort = ServerSocket(0).use { it.localPort }
+        val alt = McpServer(
+            port = altPort,
+            token = token,
+            handler = handler,
+            allowedHosts = { setOf("127.0.0.1:$altPort") },
+            host = "127.0.0.1",
+            rateLimitPerMinute = 1,
+        )
+        alt.start()
+        try {
+            waitForPort(altPort)
+
+            assertEquals(200, post(modernBody(), port = altPort).first)
+            assertEquals(429, post(modernBody(), port = altPort).first)
+        } finally {
+            alt.stop()
+        }
+    }
+
     private fun rawStatus(request: String): Int {
         Socket("127.0.0.1", port).use { socket ->
             socket.getOutputStream().write(request.toByteArray(Charsets.UTF_8))
@@ -134,6 +156,7 @@ class McpServerTest {
         origin: String? = null,
         mcpMethod: String? = "tools/list",
         accept: String = "application/json, text/event-stream",
+        port: Int = this.port,
     ): Triple<Int, String?, String?> {
         val connection = URL("http://127.0.0.1:$port/mcp").openConnection() as HttpURLConnection
         return try {
@@ -155,15 +178,15 @@ class McpServerTest {
         }
     }
 
-    private fun waitForPort() {
+    private fun waitForPort(target: Int = port) {
         val deadline = System.currentTimeMillis() + 3_000
         while (System.currentTimeMillis() < deadline) {
             try {
-                Socket("127.0.0.1", port).use { return }
+                Socket("127.0.0.1", target).use { return }
             } catch (_: Exception) {
                 Thread.sleep(25)
             }
         }
-        error("server did not start on port $port")
+        error("server did not start on port $target")
     }
 }

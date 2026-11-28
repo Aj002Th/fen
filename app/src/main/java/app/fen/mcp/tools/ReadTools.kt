@@ -139,7 +139,7 @@ class ReadTools(
             Money.parseYuanToMinor(it) ?: return ToolResult.Error("VALIDATION", "Invalid max_amount")
         }
         val limit = args.intOrNull("limit") ?: defaultLimit()
-        if (limit !in 1..200) return ToolResult.Error("VALIDATION", "limit must be 1..200")
+        if (limit !in 1..1000) return ToolResult.Error("VALIDATION", "limit must be 1..1000")
 
         val filter = TxFilter(
             fromMillis = fromMillis,
@@ -330,8 +330,8 @@ class ReadTools(
                     buildJsonObject {
                         put("type", "integer")
                         put("minimum", 1)
-                        put("maximum", 200)
-                        put("default", 100)
+                        put("maximum", 1000)
+                        put("default", defaultLimit())
                     },
                 )
                 put("cursor", stringProperty("上一页返回的 next_cursor"))
